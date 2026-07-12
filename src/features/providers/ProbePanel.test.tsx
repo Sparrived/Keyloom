@@ -23,7 +23,7 @@ describe("ProbePanel", () => {
             status: "ok",
             provider: "a.example.test",
             key: "key-a",
-            endpoint: "https://a.example.test/v1/chat/completions",
+            endpoint: "https://user:upstream-secret@a.example.test/v1/chat/completions?token=upstream-secret",
             models: ["model-a"],
             latency_ms: 123,
             error: null,
@@ -139,5 +139,31 @@ describe("ProbePanel", () => {
       results: [],
       error: null,
     });
+  });
+
+  it("cancels a probe when its start response arrives after unmount", async () => {
+    let resolveStart: ((value: unknown) => void) | undefined;
+    const startPromise = new Promise((resolve) => { resolveStart = resolve; });
+    invokeMock.mockImplementation(async (command) => {
+      if (command === "probe_amkr_keys") return startPromise;
+      if (command === "cancel_amkr_probe") return {
+        probe_id: "probe-late",
+        status: "cancelled",
+        provider: "a.example.test",
+        results: [],
+        error: null,
+      };
+      return undefined;
+    });
+
+    const { unmount } = render(<ProbePanel configPath={null} providerId="a.example.test" keys={["key-a"]} pools={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: "探测 Key key-a" }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("probe_amkr_keys", expect.anything()));
+    unmount();
+    resolveStart?.({ probe_id: "probe-late", status: "pending" });
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("cancel_amkr_probe", {
+      configPath: null,
+      probeId: "probe-late",
+    }));
   });
 });

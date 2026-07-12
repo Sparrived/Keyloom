@@ -403,7 +403,8 @@ button {
 }
 
 .unified-model-form > label,
-.unified-model-mode {
+.unified-model-mode,
+.unified-model-plan {
   display: grid;
   gap: 0.3rem;
   color: #6e6e73;
@@ -427,6 +428,39 @@ button {
   margin: 0;
   padding: 0;
   border: 0;
+}
+
+.unified-model-plan {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.6rem;
+  min-height: 2.25rem;
+  margin: 0;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid #d5d5da;
+  border-radius: 5px;
+}
+
+.unified-model-plan legend {
+  width: 100%;
+  padding: 0;
+}
+
+.unified-model-plan > label:not(.checkbox-label) {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.unified-model-plan select {
+  min-width: 9rem;
+  min-height: 2.25rem;
+  padding: 0.4rem 0.5rem;
+  color: #1d1d1f;
+  background: #fff;
+  border: 1px solid #b9b9c0;
+  border-radius: 5px;
+  font: inherit;
 }
 
 .unified-model-mode legend {
@@ -586,8 +620,8 @@ button {
   min-height: 2.25rem;
   padding: 0.4rem 0.65rem;
   color: #fff;
-  background: #007aff;
-  border: 1px solid #0067d6;
+  background: #0067d6;
+  border: 1px solid #0055b8;
   border-radius: 5px;
   cursor: pointer;
 }

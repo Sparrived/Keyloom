@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import {
   cancelAmkrProbe,
   getAmkrProbe,
@@ -35,7 +35,7 @@ function safeEndpoint(value: string) {
     url.password = "";
     return url.toString();
   } catch {
-    return value.replace(/\/\/[^/@\s]+@/, "//").split(/[?#]/, 1)[0];
+    return "端点地址不可用";
   }
 }
 
@@ -47,6 +47,7 @@ function statusTone(status: string) {
 }
 
 export function ProbePanel({ configPath, providerId, keys, pools }: ProbePanelProps) {
+  const headingId = useId();
   const [timeoutSeconds, setTimeoutSeconds] = useState("15");
   const [probe, setProbe] = useState<AmkrProbe | null>(null);
   const [busy, setBusy] = useState(false);
@@ -100,8 +101,6 @@ export function ProbePanel({ configPath, providerId, keys, pools }: ProbePanelPr
       }
     } catch (reason) {
       if (generationRef.current !== generation || pollVersionRef.current !== pollVersion || activeProbeRef.current !== probeId) return;
-      activeProbeRef.current = null;
-      setBusy(false);
       setCancelBusy(false);
       setError(errorMessage(reason));
       clearTimer();
@@ -127,7 +126,10 @@ export function ProbePanel({ configPath, providerId, keys, pools }: ProbePanelPr
       const started = kind === "keys"
         ? await probeAmkrKeys(providerId, selected, timeout, configPath)
         : await probeAmkrPools(providerId, selected, timeout, configPath);
-      if (generationRef.current !== generation) return;
+      if (generationRef.current !== generation) {
+        void cancelAmkrProbe(started.probe_id, configPath).catch(() => undefined);
+        return;
+      }
       activeProbeRef.current = started.probe_id;
       setProbe({
         probe_id: started.probe_id,
@@ -176,9 +178,9 @@ export function ProbePanel({ configPath, providerId, keys, pools }: ProbePanelPr
   const active = probe !== null && busy;
   const status = probe ? statusLabels[probe.status] ?? probe.status : "未运行";
 
-  return <section className="probe-panel" aria-labelledby={`probe-heading-${providerId}`}>
+  return <section className="probe-panel" aria-labelledby={headingId}>
     <div className="card-heading">
-      <h4 id={`probe-heading-${providerId}`}>可用性探测</h4>
+      <h4 id={headingId}>可用性探测</h4>
       <span className={`status-${statusTone(probe?.status ?? "idle")}`} role="status">{status}</span>
     </div>
     <div className="probe-controls">
@@ -193,8 +195,8 @@ export function ProbePanel({ configPath, providerId, keys, pools }: ProbePanelPr
         {active ? <button className="secondary-button" disabled={cancelBusy} type="button" onClick={() => void cancel()}>{cancelBusy ? "正在取消" : "取消探测"}</button> : null}
       </div>
     </div>
-    {error ? <p className="service-action-error">探测失败: {error}</p> : null}
-    {probe?.error ? <p className="service-action-error">探测任务失败: {probe.error}</p> : null}
+    {error ? <p className="service-action-error" role="alert">探测失败: {error}</p> : null}
+    {probe?.error ? <p className="service-action-error" role="alert">探测任务失败: {probe.error}</p> : null}
     {probe?.results.length ? <ul className="probe-results">
       {probe.results.map((result, index) => <li key={`${result.key}-${result.endpoint}-${index}`}>
         <div><strong>{result.key}</strong><span>{safeEndpoint(result.endpoint)}</span></div>
