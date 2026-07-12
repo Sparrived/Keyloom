@@ -35,6 +35,11 @@ function formatDuration(value: number) {
   return value >= 1_000 ? `${(value / 1_000).toFixed(1)}s` : `${value}ms`;
 }
 
+function normalizeConfigPath(path: string) {
+  const normalized = path.trim().replace(/\\/g, "/").replace(/\/+$/, "");
+  return /^[a-z]:\//i.test(normalized) ? normalized.toLowerCase() : normalized;
+}
+
 type AppProps = {
   now?: () => string;
 };
@@ -126,14 +131,19 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
     };
   }, [selectedConfigPath]);
 
+  const configMismatch = Boolean(
+    metadata?.config_path
+    && health?.config_path
+    && normalizeConfigPath(metadata.config_path) !== normalizeConfigPath(health.config_path),
+  );
   const serviceState = health?.status === "ok"
-    ? "服务运行中"
+    ? configMismatch ? "配置不一致" : "服务运行中"
     : healthError || discoveryError
       ? "服务未连接"
     : metadata
       ? "服务未运行"
       : "正在查找服务";
-  const serviceTone = health?.status === "ok" ? "good" : healthError || discoveryError ? "bad" : "muted";
+  const serviceTone = health?.status === "ok" ? configMismatch ? "warn" : "good" : healthError || discoveryError ? "bad" : "muted";
   const serviceRunning = health?.status === "ok";
   const unifiedTarget = health?.unified_model?.default?.primary;
   const unifiedModel = unifiedTarget?.model ?? "未设置";
@@ -267,7 +277,7 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
                 <div className="card-heading"><h3 id="unified-model-heading">统一模型</h3><button type="button" onClick={() => setActivePage("模型路由")}>切换</button></div>
                 <strong>{unifiedModel}</strong>
                 <p>{unifiedModelRouting}</p>
-                <span className={health?.status === "ok" ? "status-good" : "status-muted"}>{serviceState}</span>
+                <span className={`status-${serviceTone}`}>{serviceState}</span>
               </section>
               <section className="overview-card" aria-labelledby="metrics-heading">
                 <div className="card-heading"><h3 id="metrics-heading">数据总览</h3><span>最近 60 分钟</span></div>
@@ -313,7 +323,8 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
                 <button type="button" disabled={serviceAction !== null} onClick={() => requestServiceAction("uninstall_amkr")}>{serviceAction === "uninstall_amkr" ? "正在取消" : "取消注册"}</button>
               </div>
             </header>
-            {metadata ? <dl className="connection-summary"><div><dt>本机服务</dt><dd>{metadata.base_url}</dd></div><div><dt>配置文件</dt><dd>{metadata.config_path}</dd></div><div><dt>本地鉴权</dt><dd>{metadata.auth_enabled ? "已启用" : "未启用"}</dd></div></dl> : <p className="empty-state">正在查找本机 AMKR 配置。</p>}
+            {metadata ? <dl className="connection-summary"><div><dt>本机服务</dt><dd>{metadata.base_url}</dd></div><div><dt>选择配置</dt><dd>{metadata.config_path}</dd></div>{configMismatch ? <div><dt>运行配置</dt><dd>{health?.config_path}</dd></div> : null}<div><dt>本地鉴权</dt><dd>{metadata.auth_enabled ? "已启用" : "未启用"}</dd></div></dl> : <p className="empty-state">正在查找本机 AMKR 配置。</p>}
+            {configMismatch ? <p className="status-warn" role="alert">当前服务使用的配置与 Keyloom 选择的配置不一致。请重启服务以应用当前配置。</p> : null}
             {serviceActionNotice ? <p className="status-good">{serviceActionNotice}</p> : null}
             {serviceCommandOutput ? <pre className="service-command-output">{serviceCommandOutput}</pre> : null}
             {serviceActionError ? <p className="service-action-error">服务操作失败: {serviceActionError}</p> : null}

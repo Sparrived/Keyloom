@@ -52,6 +52,68 @@ describe("Keyloom application shell", () => {
     expect(screen.getByRole("button", { name: "重启服务" })).toBeInTheDocument();
   });
 
+  it("warns when the running service uses a different configuration", async () => {
+    invokeMock.mockReset();
+    invokeMock.mockImplementation(async (command) => {
+      if (command === "discover_amkr") return {
+        config_path: "C:/Users/test/AppData/Local/AutoModelKeyRouter/router-config.json",
+        base_url: "http://127.0.0.1:18900",
+        metrics_db_path: null,
+        log_file_path: null,
+        auth_enabled: true,
+      };
+      if (command === "get_amkr_health") return {
+        status: "ok",
+        local_auth_enabled: true,
+        config_path: "D:/amkr/other-config.json",
+      };
+      if (command === "get_amkr_metrics") return {
+        total: { requests: 0, total_tokens: 0, cached_token_rate: 0, avg_duration_ms: 0 },
+      };
+      return undefined;
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("status", { name: "服务状态" })).toHaveTextContent("配置不一致");
+    });
+    fireEvent.click(screen.getByRole("button", { name: "服务状态" }));
+
+    expect(screen.getByText("D:/amkr/other-config.json")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("当前服务使用的配置与 Keyloom 选择的配置不一致");
+    expect(screen.getByRole("button", { name: "重启服务" })).toBeEnabled();
+  });
+
+  it("treats equivalent Windows configuration paths as the same path", async () => {
+    invokeMock.mockReset();
+    invokeMock.mockImplementation(async (command) => {
+      if (command === "discover_amkr") return {
+        config_path: "C:/Users/Test/AMKR/router-config.json",
+        base_url: "http://127.0.0.1:18900",
+        metrics_db_path: null,
+        log_file_path: null,
+        auth_enabled: true,
+      };
+      if (command === "get_amkr_health") return {
+        status: "ok",
+        local_auth_enabled: true,
+        config_path: "c:\\users\\test\\amkr\\router-config.json",
+      };
+      if (command === "get_amkr_metrics") return {
+        total: { requests: 0, total_tokens: 0, cached_token_rate: 0, avg_duration_ms: 0 },
+      };
+      return undefined;
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("status", { name: "服务状态" })).toHaveTextContent("服务运行中");
+    });
+    expect(screen.queryByText("配置不一致")).not.toBeInTheDocument();
+  });
+
   it("discovers AMKR at startup and exposes its safe connection status", async () => {
     render(<App />);
 
