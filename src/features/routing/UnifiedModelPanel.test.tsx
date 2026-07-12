@@ -122,4 +122,37 @@ describe("UnifiedModelPanel", () => {
       image: null,
     }));
   });
+
+  it("saves an explicit fallback and image model mapping", async () => {
+    invokeMock.mockImplementation(async (command) => {
+      if (command === "get_amkr_models") return models;
+      if (command === "get_amkr_unified_model") return { unified_model: { default: { primary: { model: "model-a", key: null } } } };
+      if (command === "update_amkr_unified_model") return {
+        unified_model: {
+          default: {
+            primary: { model: "model-a", key: null },
+            fallback: { model: "model-b", key: null },
+          },
+          image: { primary: { model: "model-b", key: null } },
+        },
+      };
+      return undefined;
+    });
+    render(<UnifiedModelPanel configPath={null} />);
+    await screen.findByRole("radio", { name: "自动路由" });
+
+    fireEvent.click(screen.getByLabelText("启用回退目标"));
+    fireEvent.change(screen.getByLabelText("回退模型"), { target: { value: "model-b" } });
+    fireEvent.click(screen.getByLabelText("配置图像模型映射"));
+    fireEvent.change(screen.getByLabelText("图像模型"), { target: { value: "model-b" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存统一模型" }));
+
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_amkr_unified_model", {
+      configPath: null,
+      model: "model-a",
+      key: null,
+      fallback: { model: "model-b", key: null },
+      image: { primary: { model: "model-b", key: null } },
+    }));
+  });
 });

@@ -30,6 +30,12 @@ export function UnifiedModelPanel({ configPath, onChange, refreshToken = 0 }: Un
   const [selectedModel, setSelectedModel] = useState("");
   const [routingChoice, setRoutingChoice] = useState<RoutingChoice>("auto");
   const [selectedKey, setSelectedKey] = useState("");
+  const [fallbackEnabled, setFallbackEnabled] = useState(false);
+  const [fallbackModel, setFallbackModel] = useState("");
+  const [fallbackKey, setFallbackKey] = useState("");
+  const [imageEnabled, setImageEnabled] = useState(false);
+  const [imageModel, setImageModel] = useState("");
+  const [imageKey, setImageKey] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -54,6 +60,12 @@ export function UnifiedModelPanel({ configPath, onChange, refreshToken = 0 }: Un
         setSelectedModel(target?.model ?? nextModels[0]?.id ?? "");
         setRoutingChoice(target?.key ? "key" : "auto");
         setSelectedKey(target?.key ?? "");
+        setFallbackEnabled(Boolean(nextUnifiedModel?.default.fallback));
+        setFallbackModel(nextUnifiedModel?.default.fallback?.model ?? "");
+        setFallbackKey(nextUnifiedModel?.default.fallback?.key ?? "");
+        setImageEnabled(Boolean(nextUnifiedModel?.image));
+        setImageModel(nextUnifiedModel?.image?.primary.model ?? "");
+        setImageKey(nextUnifiedModel?.image?.primary.key ?? "");
       } catch (reason) {
         if (!cancelled) setError(errorMessage(reason));
       } finally {
@@ -66,8 +78,16 @@ export function UnifiedModelPanel({ configPath, onChange, refreshToken = 0 }: Un
 
   const selectedModelDetails = models.find((model) => model.id === selectedModel);
   const enabledKeys = selectedModelDetails?.keys.filter((key) => key.enabled) ?? [];
+  const fallbackModelDetails = models.find((model) => model.id === fallbackModel);
+  const fallbackKeys = fallbackModelDetails?.keys.filter((key) => key.enabled) ?? [];
+  const imageModelDetails = models.find((model) => model.id === imageModel);
+  const imageKeys = imageModelDetails?.keys.filter((key) => key.enabled) ?? [];
 
   const chooseModel = (model: string) => {
+    if (fallbackEnabled && fallbackModel === model && selectedModel && selectedModel !== model) {
+      setFallbackModel(selectedModel);
+      setFallbackKey(routingChoice === "key" ? selectedKey : "");
+    }
     setSelectedModel(model);
     const nextModel = models.find((item) => item.id === model);
     const nextEnabledKeys = nextModel?.keys.filter((key) => key.enabled) ?? [];
@@ -82,6 +102,22 @@ export function UnifiedModelPanel({ configPath, onChange, refreshToken = 0 }: Un
     if (choice === "key" && !selectedKey) setSelectedKey(enabledKeys[0]?.name ?? "");
   };
 
+  const toggleFallback = (enabled: boolean) => {
+    setFallbackEnabled(enabled);
+    if (enabled && !fallbackModel) {
+      setFallbackModel(models.find((model) => model.id !== selectedModel)?.id ?? "");
+      setFallbackKey("");
+    }
+  };
+
+  const toggleImage = (enabled: boolean) => {
+    setImageEnabled(enabled);
+    if (enabled && !imageModel) {
+      setImageModel(models[0]?.id ?? "");
+      setImageKey("");
+    }
+  };
+
   const save = async () => {
     if (!selectedModel) {
       setError("请先选择模型。");
@@ -92,13 +128,20 @@ export function UnifiedModelPanel({ configPath, onChange, refreshToken = 0 }: Un
       setError("当前模型没有可用的启用 Key。");
       return;
     }
+    if (fallbackEnabled && fallbackModel && fallbackModel === selectedModel) {
+      setError("回退模型不能与主模型相同。");
+      return;
+    }
     setSaving(true);
     setError(null);
     setNotice(null);
     try {
-      const fallback = unifiedModel?.default.fallback?.model === selectedModel
-        ? unifiedModel.default.primary
-        : unifiedModel?.default.fallback ?? null;
+      const fallback = fallbackEnabled && fallbackModel
+        ? { model: fallbackModel, key: fallbackKey || null }
+        : null;
+      const imageFallback = unifiedModel?.image?.fallback?.model === imageModel
+        ? null
+        : unifiedModel?.image?.fallback ?? null;
       const nextDraft: AmkrUnifiedModel = {
         default: {
           primary: { model: selectedModel, key },
@@ -106,6 +149,14 @@ export function UnifiedModelPanel({ configPath, onChange, refreshToken = 0 }: Un
         },
         image: unifiedModel?.image ?? null,
       };
+      if (imageEnabled && imageModel) {
+        const imagePlan = imageFallback
+          ? { primary: { model: imageModel, key: imageKey || null }, fallback: imageFallback }
+          : { primary: { model: imageModel, key: imageKey || null } };
+        nextDraft.image = imagePlan;
+      } else {
+        nextDraft.image = null;
+      }
       const response = await updateAmkrUnifiedModel(nextDraft, configPath);
       const nextUnifiedModel = response?.unified_model ?? null;
       setUnifiedModel(nextUnifiedModel);
@@ -115,6 +166,12 @@ export function UnifiedModelPanel({ configPath, onChange, refreshToken = 0 }: Un
         setRoutingChoice(target.key ? "key" : "auto");
         setSelectedKey(target.key ?? "");
       }
+      setFallbackEnabled(Boolean(nextUnifiedModel?.default.fallback));
+      setFallbackModel(nextUnifiedModel?.default.fallback?.model ?? "");
+      setFallbackKey(nextUnifiedModel?.default.fallback?.key ?? "");
+      setImageEnabled(Boolean(nextUnifiedModel?.image));
+      setImageModel(nextUnifiedModel?.image?.primary.model ?? "");
+      setImageKey(nextUnifiedModel?.image?.primary.key ?? "");
       setNotice("统一模型已更新。");
       onChange?.(nextUnifiedModel);
     } catch (reason) {
@@ -163,6 +220,32 @@ export function UnifiedModelPanel({ configPath, onChange, refreshToken = 0 }: Un
           {routingChoice === "key" ? <label>Key<select aria-label="Key" disabled={saving} value={selectedKey} onChange={(event) => setSelectedKey(event.target.value)}>
             {enabledKeys.map((key) => <option key={key.name} value={key.name}>{key.name}</option>)}
           </select></label> : null}
+          <fieldset className="unified-model-plan">
+            <legend>回退目标</legend>
+            <label className="checkbox-label"><input aria-label="启用回退目标" checked={fallbackEnabled} disabled={saving || models.length < 2} type="checkbox" onChange={(event) => toggleFallback(event.target.checked)} />启用回退目标</label>
+            {fallbackEnabled ? <>
+              <label>回退模型<select aria-label="回退模型" disabled={saving} value={fallbackModel} onChange={(event) => { setFallbackModel(event.target.value); setFallbackKey(""); }}>
+                {models.filter((model) => model.id !== selectedModel).map((model) => <option key={model.id} value={model.id}>{model.id}</option>)}
+              </select></label>
+              <label>回退 Key<select aria-label="回退 Key" disabled={saving || !fallbackModel} value={fallbackKey} onChange={(event) => setFallbackKey(event.target.value)}>
+                <option value="">自动路由</option>
+                {fallbackKeys.map((key) => <option key={key.name} value={key.name}>{key.name}</option>)}
+              </select></label>
+            </> : null}
+          </fieldset>
+          <fieldset className="unified-model-plan">
+            <legend>图像模型映射</legend>
+            <label className="checkbox-label"><input aria-label="配置图像模型映射" checked={imageEnabled} disabled={saving} type="checkbox" onChange={(event) => toggleImage(event.target.checked)} />配置图像模型映射</label>
+            {imageEnabled ? <>
+              <label>图像模型<select aria-label="图像模型" disabled={saving} value={imageModel} onChange={(event) => { setImageModel(event.target.value); setImageKey(""); }}>
+                {models.map((model) => <option key={model.id} value={model.id}>{model.id}</option>)}
+              </select></label>
+              <label>图像 Key<select aria-label="图像 Key" disabled={saving || !imageModel} value={imageKey} onChange={(event) => setImageKey(event.target.value)}>
+                <option value="">自动路由</option>
+                {imageKeys.map((key) => <option key={key.name} value={key.name}>{key.name}</option>)}
+              </select></label>
+            </> : null}
+          </fieldset>
           <div className="row-actions">
             <button type="submit" disabled={saving || !selectedModel}>{saving ? "正在保存" : "保存统一模型"}</button>
             <button className="danger-button" type="button" disabled={saving || !unifiedModel} onClick={() => void disable()}>停用统一模型</button>

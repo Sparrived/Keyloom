@@ -292,6 +292,9 @@ pub fn update_unified_model(
                 .clone()
                 .map(serde_json::Value::String)
                 .unwrap_or(serde_json::Value::Null);
+        } else {
+            payload["image_model"] = serde_json::Value::Null;
+            payload["image_key"] = serde_json::Value::Null;
         }
         payload
     };

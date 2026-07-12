@@ -184,6 +184,8 @@ fn reads_and_updates_the_unified_model_with_an_explicit_automatic_key() {
             if expected.starts_with("PUT") {
                 assert!(request.contains("\"model\":\"model-a\""));
                 assert!(request.contains("\"key\":null"));
+                assert!(request.contains("\"image_model\":null"));
+                assert!(request.contains("\"image_key\":null"));
             }
             write!(
                 stream,
