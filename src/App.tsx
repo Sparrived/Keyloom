@@ -37,6 +37,7 @@ type AppProps = {
 
 export default function App({ now = () => new Date().toISOString() }: AppProps) {
   const [activePage, setActivePage] = useState<NavigationItem>("概览");
+  const [selectedConfigPath, setSelectedConfigPath] = useState<string | null>(null);
   const [trendMetric, setTrendMetric] = useState<UsageMetric>("请求");
   const [metadata, setMetadata] = useState<AmkrMetadata | null>(null);
   const [health, setHealth] = useState<AmkrHealth | null>(null);
@@ -54,7 +55,7 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
 
     async function refreshHealth() {
       try {
-        const healthResult = await getAmkrHealth();
+        const healthResult = await getAmkrHealth(selectedConfigPath);
         if (!cancelled) {
           setHealth(healthResult);
           setHealthError(null);
@@ -69,7 +70,7 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
 
     async function refreshMetrics() {
       try {
-        const metricsResult = await getAmkrMetrics();
+        const metricsResult = await getAmkrMetrics(selectedConfigPath);
         if (!cancelled && metricsResult?.total) {
           setMetrics(metricsResult);
           setMetricHistory((history) => appendMetricSnapshot(history, metricsResult, now()));
@@ -83,7 +84,13 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
 
     async function discoverService() {
       try {
-        const result = await discoverAmkr();
+        if (!cancelled) {
+          setDiscoveryError(null);
+          setHealthError(null);
+          setMetrics(null);
+          setMetricHistory([]);
+        }
+        const result = await discoverAmkr(selectedConfigPath);
         if (!cancelled) {
           setMetadata(result);
         }
@@ -93,6 +100,8 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
         metricsPoll = window.setInterval(() => void refreshMetrics(), 15_000);
       } catch (error: unknown) {
         if (!cancelled) {
+          setMetadata(null);
+          setHealth(null);
           setDiscoveryError(error instanceof Error ? error.message : String(error));
         }
       }
@@ -109,7 +118,7 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
         window.clearInterval(metricsPoll);
       }
     };
-  }, []);
+  }, [selectedConfigPath]);
 
   const serviceState = health?.status === "ok"
     ? "服务运行中"
@@ -126,8 +135,8 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
     setServiceAction(action);
     setServiceActionError(null);
     try {
-      await controlAmkr(action);
-      setHealth(await getAmkrHealth());
+      await controlAmkr(action, selectedConfigPath);
+      setHealth(await getAmkrHealth(selectedConfigPath));
     } catch (error: unknown) {
       setServiceActionError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -236,9 +245,9 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
             {metadata ? <dl className="connection-summary"><div><dt>本机服务</dt><dd>{metadata.base_url}</dd></div><div><dt>配置文件</dt><dd>{metadata.config_path}</dd></div><div><dt>本地鉴权</dt><dd>{metadata.auth_enabled ? "已启用" : "未启用"}</dd></div></dl> : <p className="empty-state">正在查找本机 AMKR 配置。</p>}
             {serviceActionError ? <p className="service-action-error">服务操作失败: {serviceActionError}</p> : null}
           </section>
-        ) : activePage === "供应商" ? <ProvidersPage /> : activePage === "模型路由" ? <RoutingPage /> : activePage === "活动" ? <ActivityPage history={metricHistory} />
+        ) : activePage === "供应商" ? <ProvidersPage configPath={selectedConfigPath} /> : activePage === "模型路由" ? <RoutingPage configPath={selectedConfigPath} /> : activePage === "活动" ? <ActivityPage configPath={selectedConfigPath} history={metricHistory} />
           : activePage === "集成" ? <IntegrationsPage baseUrl={metadata?.base_url ?? null} authEnabled={metadata?.auth_enabled ?? false} />
-            : <SettingsPage metadata={metadata} />}
+            : <SettingsPage configPath={selectedConfigPath} metadata={metadata} onConfigPathChange={setSelectedConfigPath} />}
       </section>
     </main>
   );

@@ -136,6 +136,34 @@ describe("Keyloom application shell", () => {
     expect(screen.getByText("http://127.0.0.1:18900")).toBeInTheDocument();
   });
 
+  it("rediscovers AMKR from a manually selected config path", async () => {
+    invokeMock.mockReset();
+    invokeMock.mockImplementation(async (command, args) => {
+      const configPath = (args as { configPath?: string | null } | undefined)?.configPath;
+      if (command === "discover_amkr") {
+        return {
+          config_path: configPath ?? "C:/default/router-config.json",
+          base_url: configPath ? "http://127.0.0.1:19000" : "http://127.0.0.1:18900",
+          metrics_db_path: null,
+          log_file_path: null,
+          auth_enabled: true,
+        };
+      }
+      if (command === "get_amkr_health") return { status: "ok", local_auth_enabled: true };
+      if (command === "get_amkr_metrics") return { total: { requests: 0, total_tokens: 0, cached_token_rate: 0, avg_duration_ms: 0 } };
+      return undefined;
+    });
+
+    render(<App />);
+    await screen.findByText("http://127.0.0.1:18900");
+    fireEvent.click(screen.getByRole("button", { name: "设置" }));
+    fireEvent.change(screen.getByLabelText("配置路径"), { target: { value: "D:/amkr/custom.json" } });
+    fireEvent.click(screen.getByRole("button", { name: "使用配置" }));
+
+    expect(await screen.findByText("http://127.0.0.1:19000")).toBeInTheDocument();
+    expect(invokeMock).toHaveBeenCalledWith("discover_amkr", { configPath: "D:/amkr/custom.json" });
+  });
+
   it("selects a usage trend metric", async () => {
     render(<App />);
 

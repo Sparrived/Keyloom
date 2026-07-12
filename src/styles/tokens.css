@@ -429,10 +429,11 @@ button {
   font-size: 0.75rem;
 }
 
-.provider-create, .inline-form, .route-create { display: flex; flex-wrap: wrap; align-items: end; gap: 0.6rem; margin-top: 1rem; }
-.provider-create label, .inline-form label, .route-create label { display: grid; gap: 0.25rem; color: #6e6e73; font-size: 0.8125rem; }
-.provider-create input, .inline-form input, .route-create input, .route-create select { min-height: 2.25rem; min-width: 9rem; padding: 0.4rem 0.5rem; color: #1d1d1f; background: #fff; border: 1px solid #b9b9c0; border-radius: 5px; font: inherit; }
-.provider-create button, .inline-form button, .route-create button { min-height: 2.25rem; padding: 0.4rem 0.65rem; color: #fff; background: #007aff; border: 1px solid #0067d6; border-radius: 5px; cursor: pointer; }
+.provider-create, .inline-form, .route-create, .config-path-form { display: flex; flex-wrap: wrap; align-items: end; gap: 0.6rem; margin-top: 1rem; }
+.provider-create label, .inline-form label, .route-create label, .config-path-form label { display: grid; gap: 0.25rem; color: #6e6e73; font-size: 0.8125rem; }
+.provider-create input, .inline-form input, .route-create input, .route-create select, .config-path-form input { min-height: 2.25rem; min-width: 9rem; padding: 0.4rem 0.5rem; color: #1d1d1f; background: #fff; border: 1px solid #b9b9c0; border-radius: 5px; font: inherit; }
+.config-path-form input { min-width: min(32rem, 70vw); }
+.provider-create button, .inline-form button, .route-create button, .config-path-form button { min-height: 2.25rem; padding: 0.4rem 0.65rem; color: #fff; background: #007aff; border: 1px solid #0067d6; border-radius: 5px; cursor: pointer; }
 .checkbox-label { display: flex !important; align-items: center; min-height: 2.25rem; gap: 0.35rem; }
 .checkbox-label input { min-width: auto !important; min-height: auto !important; }
 .danger-button { padding: 0.35rem 0.55rem; color: #b42318; background: transparent; border: 1px solid #f1c0bc; border-radius: 5px; cursor: pointer; }
