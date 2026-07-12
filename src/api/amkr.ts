@@ -69,6 +69,7 @@ export type AmkrRoutesResponse = {
 };
 
 export type AmkrConfigTransfer = { config_revision: string; config: unknown };
+export type AmkrServiceAction = "start_amkr" | "stop_amkr" | "restart_amkr" | "install_user_amkr" | "uninstall_amkr" | "status_amkr";
 
 export function discoverAmkr(configPath: string | null = null) {
   return invoke<AmkrMetadata>("discover_amkr", { configPath });
@@ -122,7 +123,7 @@ export function exportAmkrConfig(configPath: string | null = null) { return invo
 export function importAmkrConfig(configRevision: string, config: unknown, configPath: string | null = null) { return invoke<AmkrConfigTransfer>("import_amkr_config", { configPath, configRevision, config }); }
 
 export function controlAmkr(
-  action: "start_amkr" | "stop_amkr" | "restart_amkr",
+  action: AmkrServiceAction,
   configPath: string | null = null,
 ) {
   return invoke(action, { configPath });

@@ -7,6 +7,7 @@ import {
   type AmkrHealth,
   type AmkrMetrics,
   type AmkrMetadata,
+  type AmkrServiceAction,
 } from "./api/amkr";
 import { UsageChart, type UsageMetric } from "./features/overview/UsageChart";
 import { appendMetricSnapshot, type MetricSnapshot } from "./features/overview/useMetricHistory";
@@ -45,8 +46,9 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
   const [metricHistory, setMetricHistory] = useState<MetricSnapshot[]>([]);
   const [discoveryError, setDiscoveryError] = useState<string | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
-  const [serviceAction, setServiceAction] = useState<"start_amkr" | "stop_amkr" | "restart_amkr" | null>(null);
+  const [serviceAction, setServiceAction] = useState<AmkrServiceAction | null>(null);
   const [serviceActionError, setServiceActionError] = useState<string | null>(null);
+  const [serviceActionNotice, setServiceActionNotice] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -131,12 +133,14 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
   const unifiedModel = health?.unified_model?.default?.primary?.model ?? "未设置";
   const latestSnapshot = metricHistory.at(-1);
 
-  async function runServiceAction(action: "start_amkr" | "stop_amkr" | "restart_amkr") {
+  async function runServiceAction(action: AmkrServiceAction) {
     setServiceAction(action);
     setServiceActionError(null);
+    setServiceActionNotice(null);
     try {
       await controlAmkr(action, selectedConfigPath);
       setHealth(await getAmkrHealth(selectedConfigPath));
+      setServiceActionNotice(action === "status_amkr" ? "任务状态已查询。" : "服务命令已执行。");
     } catch (error: unknown) {
       setServiceActionError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -240,9 +244,13 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
                 <button type="button" disabled={serviceAction !== null} onClick={() => void runServiceAction("start_amkr")}>{serviceAction === "start_amkr" ? "正在启动" : "启动服务"}</button>
                 <button type="button" disabled={serviceAction !== null} onClick={() => void runServiceAction("stop_amkr")}>{serviceAction === "stop_amkr" ? "正在停止" : "停止服务"}</button>
                 <button type="button" disabled={serviceAction !== null} onClick={() => void runServiceAction("restart_amkr")}>{serviceAction === "restart_amkr" ? "正在重启" : "重启服务"}</button>
+                <button type="button" disabled={serviceAction !== null} onClick={() => void runServiceAction("install_user_amkr")}>{serviceAction === "install_user_amkr" ? "正在注册" : "注册登录启动"}</button>
+                <button type="button" disabled={serviceAction !== null} onClick={() => void runServiceAction("status_amkr")}>{serviceAction === "status_amkr" ? "正在查询" : "查询任务"}</button>
+                <button type="button" disabled={serviceAction !== null} onClick={() => void runServiceAction("uninstall_amkr")}>{serviceAction === "uninstall_amkr" ? "正在取消" : "取消注册"}</button>
               </div>
             </header>
             {metadata ? <dl className="connection-summary"><div><dt>本机服务</dt><dd>{metadata.base_url}</dd></div><div><dt>配置文件</dt><dd>{metadata.config_path}</dd></div><div><dt>本地鉴权</dt><dd>{metadata.auth_enabled ? "已启用" : "未启用"}</dd></div></dl> : <p className="empty-state">正在查找本机 AMKR 配置。</p>}
+            {serviceActionNotice ? <p className="status-good">{serviceActionNotice}</p> : null}
             {serviceActionError ? <p className="service-action-error">服务操作失败: {serviceActionError}</p> : null}
           </section>
         ) : activePage === "供应商" ? <ProvidersPage configPath={selectedConfigPath} /> : activePage === "模型路由" ? <RoutingPage configPath={selectedConfigPath} /> : activePage === "活动" ? <ActivityPage configPath={selectedConfigPath} history={metricHistory} />

@@ -108,6 +108,27 @@ fn restart_amkr(
     run_amkr_service_action(keyloom_core::windows_service::ServiceAction::Restart, config_path)
 }
 
+#[tauri::command]
+fn install_user_amkr(
+    config_path: Option<String>,
+) -> Result<Vec<keyloom_core::windows_service::TaskCommandResult>, String> {
+    run_amkr_service_action(keyloom_core::windows_service::ServiceAction::InstallUser, config_path)
+}
+
+#[tauri::command]
+fn uninstall_amkr(
+    config_path: Option<String>,
+) -> Result<Vec<keyloom_core::windows_service::TaskCommandResult>, String> {
+    run_amkr_service_action(keyloom_core::windows_service::ServiceAction::Uninstall, config_path)
+}
+
+#[tauri::command]
+fn status_amkr(
+    config_path: Option<String>,
+) -> Result<Vec<keyloom_core::windows_service::TaskCommandResult>, String> {
+    run_amkr_service_action(keyloom_core::windows_service::ServiceAction::Status, config_path)
+}
+
 fn show_main_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
@@ -190,7 +211,10 @@ fn main() {
             import_amkr_config,
             start_amkr,
             stop_amkr,
-            restart_amkr
+            restart_amkr,
+            install_user_amkr,
+            uninstall_amkr,
+            status_amkr
         ])
         .run(tauri::generate_context!())
         .expect("failed to run Keyloom");
