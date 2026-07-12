@@ -44,10 +44,11 @@ if ([string]$state.amkr_wheel_sha256 -cnotmatch '^[0-9a-f]{64}$') {
     throw 'Install state AMKR wheel SHA-256 is invalid.'
 }
 
-$smokeJson = (& $python -I -c 'import auto_model_key_router, fastapi, httpx, uvicorn, json, platform, pathlib, sys; print(json.dumps({"python_version": platform.python_version(), "amkr_version": auto_model_key_router.__version__, "executable": str(pathlib.Path(sys.executable).resolve())}))').Trim()
-if ($LASTEXITCODE -ne 0 -or -not $smokeJson) {
+$smokeOutput = & $python -I -c 'import auto_model_key_router, fastapi, httpx, uvicorn, json, platform, pathlib, sys; print(json.dumps(dict(python_version=platform.python_version(), amkr_version=auto_model_key_router.__version__, executable=str(pathlib.Path(sys.executable).resolve()))))'
+if ($LASTEXITCODE -ne 0 -or -not $smokeOutput) {
     throw 'Private runtime import smoke test failed.'
 }
+$smokeJson = ([string]$smokeOutput).Trim()
 $smoke = $smokeJson | ConvertFrom-Json
 if ($smoke.python_version -ne $state.python_version) {
     throw "Python version mismatch: state=$($state.python_version), runtime=$($smoke.python_version)."

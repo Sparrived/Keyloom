@@ -149,14 +149,16 @@ try {
 
     Invoke-Checked $BuildPython @('-m', 'venv', $buildEnvironment) 'Isolated build environment creation'
     $isolatedBuildPython = Join-Path $buildEnvironment 'Scripts\python.exe'
-    $buildVersion = (& $isolatedBuildPython -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")').Trim()
+    $buildVersionOutput = & $isolatedBuildPython -c 'import sys; print(sys.version_info.major, sys.version_info.minor, sep=chr(46))'
     if ($LASTEXITCODE -ne 0) {
         throw 'Unable to read the build Python version.'
     }
-    $embeddedVersion = (& $python -I -c 'import platform; print(platform.python_version())').Trim()
+    $buildVersion = ([string]$buildVersionOutput).Trim()
+    $embeddedVersionOutput = & $python -I -c 'import platform; print(platform.python_version())'
     if ($LASTEXITCODE -ne 0) {
         throw 'Unable to run the embedded Python interpreter.'
     }
+    $embeddedVersion = ([string]$embeddedVersionOutput).Trim()
     if (-not $embeddedVersion.StartsWith("$buildVersion.")) {
         throw "Build Python $buildVersion does not match embedded Python $embeddedVersion."
     }
@@ -170,10 +172,11 @@ try {
         $wheel
     ) 'Offline AMKR installation'
 
-    $smokeJson = (& $python -I -c 'import auto_model_key_router, fastapi, httpx, uvicorn, json, platform; print(json.dumps({"python_version": platform.python_version(), "amkr_version": auto_model_key_router.__version__}))').Trim()
-    if ($LASTEXITCODE -ne 0 -or -not $smokeJson) {
+    $smokeOutput = & $python -I -c 'import auto_model_key_router, fastapi, httpx, uvicorn, json, platform; print(json.dumps(dict(python_version=platform.python_version(), amkr_version=auto_model_key_router.__version__)))'
+    if ($LASTEXITCODE -ne 0 -or -not $smokeOutput) {
         throw 'The prepared runtime could not import AMKR and its core dependencies.'
     }
+    $smokeJson = ([string]$smokeOutput).Trim()
     $smoke = $smokeJson | ConvertFrom-Json
     if ($smoke.python_version -ne $embeddedVersion -or -not $smoke.amkr_version) {
         throw 'The prepared runtime returned inconsistent version metadata.'
