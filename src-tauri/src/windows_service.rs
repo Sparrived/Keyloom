@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use serde::Serialize;
@@ -23,9 +23,32 @@ pub struct TaskCommandResult {
     pub stderr: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ServiceProgram {
+    pub executable: PathBuf,
+    pub arguments: Vec<String>,
+}
+
+impl ServiceProgram {
+    pub fn executable(path: impl Into<PathBuf>) -> Self {
+        Self {
+            executable: path.into(),
+            arguments: Vec::new(),
+        }
+    }
+}
+
 pub fn task_commands(
     action: ServiceAction,
     executable: &Path,
+    config_path: &Path,
+) -> Vec<Vec<String>> {
+    task_commands_for_program(action, &ServiceProgram::executable(executable), config_path)
+}
+
+pub fn task_commands_for_program(
+    action: ServiceAction,
+    program: &ServiceProgram,
     config_path: &Path,
 ) -> Vec<Vec<String>> {
     let command = |arguments: &[&str]| arguments.iter().map(|value| (*value).to_owned()).collect();
@@ -34,7 +57,6 @@ pub fn task_commands(
         ServiceAction::InstallUser => vec![vec![
             "schtasks".to_owned(),
             "/Create".to_owned(),
-            "/F".to_owned(),
             "/SC".to_owned(),
             "ONLOGON".to_owned(),
             "/TN".to_owned(),
@@ -43,11 +65,7 @@ pub fn task_commands(
             "LIMITED".to_owned(),
             "/IT".to_owned(),
             "/TR".to_owned(),
-            format!(
-                "\"{}\" --config \"{}\" --serve-foreground",
-                executable.display(),
-                config_path.display()
-            ),
+            task_run_command(program, config_path),
         ]],
         ServiceAction::Uninstall => vec![
             command(&["schtasks", "/End", "/TN", WINDOWS_TASK_NAME]),
@@ -71,16 +89,50 @@ pub fn task_commands(
     }
 }
 
+fn task_run_command(program: &ServiceProgram, config_path: &Path) -> String {
+    let mut arguments = vec![format!("\"{}\"", program.executable.display())];
+    arguments.extend(program.arguments.iter().map(|argument| {
+        if argument.is_empty() || argument.chars().any(char::is_whitespace) {
+            format!("\"{argument}\"")
+        } else {
+            argument.to_owned()
+        }
+    }));
+    arguments.extend([
+        "--config".to_owned(),
+        format!("\"{}\"", config_path.display()),
+        "--serve-foreground".to_owned(),
+    ]);
+    arguments.join(" ")
+}
+
 pub fn execute_task_commands<F>(
     action: ServiceAction,
     executable: &Path,
+    config_path: &Path,
+    runner: F,
+) -> Result<Vec<TaskCommandResult>, String>
+where
+    F: FnMut(&[String]) -> Result<TaskCommandResult, String>,
+{
+    execute_task_commands_for_program(
+        action,
+        &ServiceProgram::executable(executable),
+        config_path,
+        runner,
+    )
+}
+
+pub fn execute_task_commands_for_program<F>(
+    action: ServiceAction,
+    program: &ServiceProgram,
     config_path: &Path,
     mut runner: F,
 ) -> Result<Vec<TaskCommandResult>, String>
 where
     F: FnMut(&[String]) -> Result<TaskCommandResult, String>,
 {
-    let results = task_commands(action, executable, config_path)
+    let results = task_commands_for_program(action, program, config_path)
         .into_iter()
         .map(|command| runner(&command))
         .collect::<Result<Vec<_>, _>>()?;
@@ -104,13 +156,20 @@ where
     Ok(results)
 }
 
-
 pub fn run_task_action(
     action: ServiceAction,
     executable: &Path,
     config_path: &Path,
 ) -> Result<Vec<TaskCommandResult>, String> {
-    execute_task_commands(action, executable, config_path, |command| {
+    run_task_action_for_program(action, &ServiceProgram::executable(executable), config_path)
+}
+
+pub fn run_task_action_for_program(
+    action: ServiceAction,
+    program: &ServiceProgram,
+    config_path: &Path,
+) -> Result<Vec<TaskCommandResult>, String> {
+    execute_task_commands_for_program(action, program, config_path, |command| {
         let (program, arguments) = command
             .split_first()
             .ok_or_else(|| "计划任务命令不能为空".to_owned())?;

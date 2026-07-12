@@ -322,7 +322,12 @@ pub fn run_amkr_service(
     let default_path = default_config_path();
     let instance = amkr::discover_from_paths(selected_path, &default_path)
         .map_err(|error| error.to_string())?;
-    windows_service::run_task_action(action, Path::new("amkr"), &instance.config_path)
+    let program = if action == windows_service::ServiceAction::InstallUser {
+        installer::private_runtime_service_program()?
+    } else {
+        windows_service::ServiceProgram::executable("amkr")
+    };
+    windows_service::run_task_action_for_program(action, &program, &instance.config_path)
 }
 
 #[cfg(test)]

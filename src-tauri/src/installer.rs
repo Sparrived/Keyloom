@@ -3,6 +3,8 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::windows_service::ServiceProgram;
+
 const INSTALL_STATE_SCHEMA_VERSION: u32 = 1;
 const INSTALL_STATE_OWNER: &str = "com.keyloom.app";
 
@@ -69,6 +71,28 @@ pub fn get_runtime_installation_status() -> RuntimeInstallationStatus {
             diagnostic: Some("无法确定本机 LOCALAPPDATA 目录".to_owned()),
         },
     }
+}
+
+pub fn private_runtime_service_program() -> Result<ServiceProgram, String> {
+    let paths =
+        default_install_paths().ok_or_else(|| "无法确定本机 LOCALAPPDATA 目录".to_owned())?;
+    private_runtime_service_program_from_paths(&paths.runtime_dir, &paths.state_path)
+}
+
+pub fn private_runtime_service_program_from_paths(
+    runtime_dir: &Path,
+    state_path: &Path,
+) -> Result<ServiceProgram, String> {
+    let status = detect_private_runtime(runtime_dir, state_path);
+    if !status.private_runtime_installed {
+        return Err(status
+            .diagnostic
+            .unwrap_or_else(|| "Keyloom 私有运行时尚未安装".to_owned()));
+    }
+    Ok(ServiceProgram {
+        executable: runtime_dir.join("pythonw.exe"),
+        arguments: vec!["-m".to_owned(), "auto_model_key_router.main".to_owned()],
+    })
 }
 
 pub fn detect_private_runtime(runtime_dir: &Path, state_path: &Path) -> RuntimeInstallationStatus {
@@ -142,7 +166,9 @@ pub fn detect_private_runtime(runtime_dir: &Path, state_path: &Path) -> RuntimeI
 mod tests {
     use std::fs;
 
-    use super::{detect_private_runtime, install_paths};
+    use super::{
+        detect_private_runtime, install_paths, private_runtime_service_program_from_paths,
+    };
 
     fn temp_root(name: &str) -> std::path::PathBuf {
         std::env::temp_dir().join(format!("keyloom-{name}-{}", std::process::id()))
@@ -308,6 +334,41 @@ mod tests {
         assert!(!status.private_runtime_installed);
         assert_eq!(status.diagnostic.as_deref(), Some("安装状态文件无效"));
         assert!(!serde_json::to_string(&status).unwrap().contains("secret"));
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn resolves_the_windowless_service_program_only_for_a_complete_runtime() {
+        let root = temp_root("runtime-service-program");
+        let runtime = root.join("runtime");
+        let state = root.join("install-state.json");
+        fs::create_dir_all(runtime.join("Lib/site-packages/auto_model_key_router")).unwrap();
+        fs::write(runtime.join("python.exe"), b"placeholder").unwrap();
+        fs::write(runtime.join("pythonw.exe"), b"placeholder").unwrap();
+        fs::write(
+            runtime.join("Lib/site-packages/auto_model_key_router/__init__.py"),
+            b"",
+        )
+        .unwrap();
+        fs::write(
+            &state,
+            format!(
+                r#"{{"schema_version":1,"owner":"com.keyloom.app","python_version":"3.12.10","amkr_version":"3.1.1","amkr_wheel_sha256":"{}"}}"#,
+                "a".repeat(64)
+            ),
+        )
+        .unwrap();
+
+        let program = private_runtime_service_program_from_paths(&runtime, &state).unwrap();
+
+        assert_eq!(program.executable, runtime.join("pythonw.exe"));
+        assert_eq!(program.arguments, ["-m", "auto_model_key_router.main"]);
+
+        fs::remove_file(runtime.join("pythonw.exe")).unwrap();
+        assert!(private_runtime_service_program_from_paths(&runtime, &state)
+            .unwrap_err()
+            .contains("私有运行时文件不完整"));
 
         fs::remove_dir_all(root).unwrap();
     }

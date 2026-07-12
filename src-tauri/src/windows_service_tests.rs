@@ -1,12 +1,15 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use crate::windows_service::{execute_task_commands, task_commands, TaskCommandResult, ServiceAction, WINDOWS_TASK_NAME};
+use crate::windows_service::{execute_task_commands, task_commands, task_commands_for_program, ServiceProgram, TaskCommandResult, ServiceAction, WINDOWS_TASK_NAME};
 
 #[test]
 fn creates_a_limited_current_user_login_task_without_uac() {
-    let commands = task_commands(
+    let commands = task_commands_for_program(
         ServiceAction::InstallUser,
-        Path::new("C:/Program Files/AMKR/amkr.exe"),
+        &ServiceProgram {
+            executable: PathBuf::from("C:/Users/test/AppData/Local/Programs/Keyloom/runtime/pythonw.exe"),
+            arguments: vec!["-m".to_owned(), "auto_model_key_router.main".to_owned()],
+        },
         Path::new("C:/Users/test/AppData/Local/AutoModelKeyRouter/router-config.json"),
     );
 
@@ -16,7 +19,6 @@ fn creates_a_limited_current_user_login_task_without_uac() {
         vec![
             "schtasks",
             "/Create",
-            "/F",
             "/SC",
             "ONLOGON",
             "/TN",
@@ -25,7 +27,7 @@ fn creates_a_limited_current_user_login_task_without_uac() {
             "LIMITED",
             "/IT",
             "/TR",
-            "\"C:/Program Files/AMKR/amkr.exe\" --config \"C:/Users/test/AppData/Local/AutoModelKeyRouter/router-config.json\" --serve-foreground",
+            "\"C:/Users/test/AppData/Local/Programs/Keyloom/runtime/pythonw.exe\" -m auto_model_key_router.main --config \"C:/Users/test/AppData/Local/AutoModelKeyRouter/router-config.json\" --serve-foreground",
         ]
         .into_iter()
         .map(String::from)
