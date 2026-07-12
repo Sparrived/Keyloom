@@ -3,7 +3,7 @@ use std::net::TcpListener;
 use std::thread;
 
 use super::client::{
-    create_provider, create_provider_key, delete_pool, delete_provider_key, delete_route,
+    create_provider, create_provider_key, create_route, delete_pool, delete_provider_key, delete_route,
     delete_unified_model, export_config, get_health, get_models, get_probe, get_providers,
     get_routes, get_unified_model, import_config, probe_keys, probe_pools, update_pool,
     update_model_reasoning_effort, update_provider, update_provider_key, update_route,
@@ -487,6 +487,53 @@ fn updates_model_reasoning_effort_with_an_encoded_model_id() {
 
     assert_eq!(response.id, "model/a");
     assert_eq!(response.reasoning_effort.as_deref(), Some("high"));
+    server.join().unwrap();
+}
+
+#[test]
+fn creates_a_route_with_all_targets() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let mut buffer = [0_u8; 4096];
+        let read = stream.read(&mut buffer).unwrap();
+        let request = String::from_utf8_lossy(&buffer[..read]);
+        assert!(request.starts_with("POST /api/routes HTTP/1.1"));
+        assert!(request.contains("\"config_revision\":\"revision-a\""));
+        assert!(request.contains("\"provider\":\"provider-a\""));
+        assert!(request.contains("\"provider\":\"provider-b\""));
+        assert!(request.contains("\"upstream_model\":\"upstream-b\""));
+        write!(stream, "HTTP/1.1 201 Created\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{{}}")
+            .unwrap();
+    });
+
+    create_route(
+        &AmkrConnection {
+            base_url: format!("http://{address}"),
+            local_api_key: Some("local-api-key".to_owned()),
+            metrics_db_path: None,
+            log_file_path: None,
+        },
+        "revision-a",
+        "model-b",
+        vec![
+            AmkrRouteTarget {
+                provider: "provider-a".to_owned(),
+                pool: "pool-a".to_owned(),
+                upstream_model: "upstream-a".to_owned(),
+            },
+            AmkrRouteTarget {
+                provider: "provider-b".to_owned(),
+                pool: "pool-b".to_owned(),
+                upstream_model: "upstream-b".to_owned(),
+            },
+        ],
+        vec![],
+        Some("round_robin".to_owned()),
+    )
+    .unwrap();
+
     server.join().unwrap();
 }
 

@@ -213,9 +213,9 @@ pub fn delete_amkr_pool(selected_path: Option<&Path>, config_revision: &str, pro
     amkr::client::delete_pool(&instance.connection, config_revision, provider_id, pool_name)
 }
 
-pub fn create_amkr_route(selected_path: Option<&Path>, config_revision: &str, id: &str, provider: &str, pool: &str, upstream_model: &str, aliases: Vec<String>, routing_mode: Option<String>) -> Result<(), String> {
+pub fn create_amkr_route(selected_path: Option<&Path>, config_revision: &str, id: &str, targets: Vec<amkr::client::AmkrRouteTarget>, aliases: Vec<String>, routing_mode: Option<String>) -> Result<(), String> {
     let instance = amkr::discover_from_paths(selected_path, &default_config_path()).map_err(|error| error.to_string())?;
-    amkr::client::create_route(&instance.connection, config_revision, id, provider, pool, upstream_model, aliases, routing_mode)
+    amkr::client::create_route(&instance.connection, config_revision, id, targets, aliases, routing_mode)
 }
 
 pub fn update_amkr_route(selected_path: Option<&Path>, config_revision: &str, route_id: &str, id: &str, targets: Vec<amkr::client::AmkrRouteTarget>, aliases: Vec<String>, routing_mode: Option<String>) -> Result<(), String> {

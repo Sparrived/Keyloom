@@ -5,6 +5,8 @@ import { UnifiedModelPanel } from "./UnifiedModelPanel";
 const csv = (value: string) => value.split(",").map((item) => item.trim()).filter(Boolean);
 const errorMessage = (reason: unknown) => reason instanceof Error ? reason.message : String(reason);
 const isConflict = (message: string) => message.includes("HTTP 409");
+const emptyTarget = (): AmkrRouteTarget => ({ provider: "", pool: "", upstream_model: "" });
+const hasCompleteTargets = (targets: AmkrRouteTarget[]) => targets.length > 0 && targets.every((target) => target.provider.trim() && target.pool.trim() && target.upstream_model.trim());
 
 type RouteDraft = {
   originalId: string;
@@ -17,7 +19,7 @@ type RouteDraft = {
 const draftFromRoute = (route: AmkrRoute): RouteDraft => ({
   originalId: route.id,
   id: route.id,
-  targets: route.targets.length ? route.targets.map((target) => ({ ...target })) : [{ provider: "", pool: "", upstream_model: "" }],
+  targets: route.targets.length ? route.targets.map((target) => ({ ...target })) : [emptyTarget()],
   aliases: route.aliases.join(", "),
   mode: route.routing_mode ?? "round_robin",
 });
@@ -30,9 +32,7 @@ type RoutingPageProps = {
 export function RoutingPage({ configPath, onUnifiedModelChange }: RoutingPageProps) {
   const [data, setData] = useState<AmkrRoutesResponse | null>(null);
   const [id, setId] = useState("");
-  const [provider, setProvider] = useState("");
-  const [pool, setPool] = useState("");
-  const [model, setModel] = useState("");
+  const [createTargets, setCreateTargets] = useState<AmkrRouteTarget[]>([emptyTarget()]);
   const [aliases, setAliases] = useState("");
   const [mode, setMode] = useState("round_robin");
   const [editing, setEditing] = useState<RouteDraft | null>(null);
@@ -50,9 +50,13 @@ export function RoutingPage({ configPath, onUnifiedModelChange }: RoutingPagePro
 
   const create = async () => {
     if (!data) return;
+    if (!hasCompleteTargets(createTargets)) {
+      setError("每个路由目标都必须完整填写。");
+      return;
+    }
     try {
-      await createAmkrRoute(data.config_revision, id, provider, pool, model, csv(aliases), mode || null, configPath);
-      setId(""); setProvider(""); setPool(""); setModel(""); setAliases("");
+      await createAmkrRoute(data.config_revision, id, createTargets, csv(aliases), mode || null, configPath);
+      setId(""); setCreateTargets([emptyTarget()]); setAliases("");
       await refresh();
       setUnifiedModelRefreshToken((value) => value + 1);
     } catch (reason) {
@@ -64,6 +68,10 @@ export function RoutingPage({ configPath, onUnifiedModelChange }: RoutingPagePro
 
   const save = async () => {
     if (!data || !editing) return;
+    if (!hasCompleteTargets(editing.targets)) {
+      setError("每个路由目标都必须完整填写。");
+      return;
+    }
     try {
       await updateAmkrRoute(data.config_revision, editing.originalId, editing.id, editing.targets, csv(editing.aliases), editing.mode || null, configPath);
       setEditing(null);
@@ -86,20 +94,37 @@ export function RoutingPage({ configPath, onUnifiedModelChange }: RoutingPagePro
     }
   };
 
-  const updatePrimaryTarget = (field: keyof AmkrRouteTarget, value: string) => {
-    if (!editing) return;
-    const targets = editing.targets.map((target, index) => index === 0 ? { ...target, [field]: value } : target);
-    setEditing({ ...editing, targets });
+  const updateCreateTarget = (index: number, field: keyof AmkrRouteTarget, value: string) => {
+    setCreateTargets((targets) => targets.map((target, targetIndex) => targetIndex === index ? { ...target, [field]: value } : target));
   };
+
+  const updateEditingTarget = (index: number, field: keyof AmkrRouteTarget, value: string) => {
+    if (!editing) return;
+    setEditing({ ...editing, targets: editing.targets.map((target, targetIndex) => targetIndex === index ? { ...target, [field]: value } : target) });
+  };
+
+  const addCreateTarget = () => setCreateTargets((targets) => [...targets, emptyTarget()]);
+  const removeCreateTarget = (index: number) => setCreateTargets((targets) => targets.length > 1 ? targets.filter((_, targetIndex) => targetIndex !== index) : targets);
+  const addEditingTarget = () => setEditing((current) => current ? { ...current, targets: [...current.targets, emptyTarget()] } : current);
+  const removeEditingTarget = (index: number) => setEditing((current) => current && current.targets.length > 1 ? { ...current, targets: current.targets.filter((_, targetIndex) => targetIndex !== index) } : current);
+
+  const targetLabel = (prefix: string, index: number) => `${prefix}${index === 0 ? "" : ` ${index + 1}`}`;
 
   return <section className="routes-page" aria-labelledby="routes-heading">
     <header className="page-header"><div><h2 id="routes-heading">模型路由</h2><p>管理模型别名、路由模式和上游目标。</p></div>{data ? <span className="config-revision">版本 {data.config_revision.slice(0, 12)}</span> : null}</header>
     <UnifiedModelPanel configPath={configPath} refreshToken={unifiedModelRefreshToken} onChange={onUnifiedModelChange} />
     <form className="route-create" onSubmit={(event) => { event.preventDefault(); void create(); }}>
       <label>模型 ID<input required value={id} onChange={(event) => setId(event.target.value)} /></label>
-      <label>供应商<input required value={provider} onChange={(event) => setProvider(event.target.value)} /></label>
-      <label>模型池<input required value={pool} onChange={(event) => setPool(event.target.value)} /></label>
-      <label>上游模型<input required value={model} onChange={(event) => setModel(event.target.value)} /></label>
+      <fieldset className="route-targets" aria-label="创建路由目标">
+        <legend>上游目标</legend>
+        {createTargets.map((target, index) => <div className="route-target-row" key={index}>
+          <label>{targetLabel("供应商", index)}<input required aria-label={targetLabel("供应商", index)} value={target.provider} onChange={(event) => updateCreateTarget(index, "provider", event.target.value)} /></label>
+          <label>{targetLabel("模型池", index)}<input required aria-label={targetLabel("模型池", index)} value={target.pool} onChange={(event) => updateCreateTarget(index, "pool", event.target.value)} /></label>
+          <label>{targetLabel("上游模型", index)}<input required aria-label={targetLabel("上游模型", index)} value={target.upstream_model} onChange={(event) => updateCreateTarget(index, "upstream_model", event.target.value)} /></label>
+          <button aria-label={`删除创建路由目标 ${index + 1}`} className="secondary-button" type="button" disabled={createTargets.length === 1} onClick={() => removeCreateTarget(index)}>删除目标</button>
+        </div>)}
+        <button aria-label="添加路由目标" className="secondary-button" type="button" onClick={addCreateTarget}>添加目标</button>
+      </fieldset>
       <label>别名<input value={aliases} placeholder="逗号分隔" onChange={(event) => setAliases(event.target.value)} /></label>
       <label>模式<select value={mode} onChange={(event) => setMode(event.target.value)}><option value="round_robin">轮询</option><option value="priority">优先级</option><option value="only_first">首 Key</option></select></label>
       <button type="submit" disabled={!data || loading}>添加路由</button>
@@ -112,12 +137,19 @@ export function RoutingPage({ configPath, onUnifiedModelChange }: RoutingPagePro
         <div><h3>{route.id}</h3><p>{route.aliases.length ? route.aliases.join(", ") : "无别名"}</p></div>
         <div className="item-actions"><span>{route.routing_mode ?? "默认策略"}</span><button aria-label={`编辑路由 ${route.id}`} className="secondary-button" type="button" onClick={() => setEditing(draftFromRoute(route))}>编辑</button><button aria-label={`删除路由 ${route.id}`} className="danger-button" type="button" onClick={() => void remove(route.id)}>删除</button></div>
       </header>
-      <ul aria-label={`${route.id} 的路由目标`}>{route.targets.map((target) => <li key={`${target.provider}:${target.pool}:${target.upstream_model}`}>{target.provider} / {target.pool} / {target.upstream_model}</li>)}</ul>
+      <ul aria-label={`${route.id} 的路由目标`}>{route.targets.map((target, index) => <li key={`${target.provider}:${target.pool}:${target.upstream_model}:${index}`}>{target.provider} / {target.pool} / {target.upstream_model}</li>)}</ul>
       {editing?.originalId === route.id ? <form className="inline-form editor-form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
         <label>编辑模型 ID<input required value={editing.id} onChange={(event) => setEditing({ ...editing, id: event.target.value })} /></label>
-        <label>编辑供应商<input required value={editing.targets[0].provider} onChange={(event) => updatePrimaryTarget("provider", event.target.value)} /></label>
-        <label>编辑模型池<input required value={editing.targets[0].pool} onChange={(event) => updatePrimaryTarget("pool", event.target.value)} /></label>
-        <label>编辑上游模型<input required value={editing.targets[0].upstream_model} onChange={(event) => updatePrimaryTarget("upstream_model", event.target.value)} /></label>
+        <fieldset className="route-targets" aria-label={`编辑 ${route.id} 的路由目标`}>
+          <legend>上游目标</legend>
+          {editing.targets.map((target, index) => <div className="route-target-row" key={index}>
+            <label>{targetLabel("编辑供应商", index)}<input required aria-label={targetLabel("编辑供应商", index)} value={target.provider} onChange={(event) => updateEditingTarget(index, "provider", event.target.value)} /></label>
+            <label>{targetLabel("编辑模型池", index)}<input required aria-label={targetLabel("编辑模型池", index)} value={target.pool} onChange={(event) => updateEditingTarget(index, "pool", event.target.value)} /></label>
+            <label>{targetLabel("编辑上游模型", index)}<input required aria-label={targetLabel("编辑上游模型", index)} value={target.upstream_model} onChange={(event) => updateEditingTarget(index, "upstream_model", event.target.value)} /></label>
+            <button aria-label={`删除路由目标 ${index + 1}`} className="secondary-button" type="button" disabled={editing.targets.length === 1} onClick={() => removeEditingTarget(index)}>删除目标</button>
+          </div>)}
+          <button aria-label="添加编辑路由目标" className="secondary-button" type="button" onClick={addEditingTarget}>添加目标</button>
+        </fieldset>
         <label>编辑别名<input value={editing.aliases} onChange={(event) => setEditing({ ...editing, aliases: event.target.value })} /></label>
         <label>编辑模式<select value={editing.mode} onChange={(event) => setEditing({ ...editing, mode: event.target.value })}><option value="round_robin">轮询</option><option value="priority">优先级</option><option value="only_first">首 Key</option></select></label>
         <button type="submit">保存路由</button>

@@ -686,6 +686,12 @@ button {
 .provider-create input, .inline-form input, .route-create input, .route-create select, .config-path-form input { min-height: 2.25rem; min-width: 9rem; padding: 0.4rem 0.5rem; color: #1d1d1f; background: #fff; border: 1px solid #b9b9c0; border-radius: 5px; font: inherit; }
 .config-path-form input { min-width: min(32rem, 70vw); }
 .provider-create button, .inline-form button, .route-create button, .config-path-form button { min-height: 2.25rem; padding: 0.4rem 0.65rem; color: #fff; background: #007aff; border: 1px solid #0067d6; border-radius: 5px; cursor: pointer; }
+.route-targets { flex: 1 1 100%; display: grid; gap: 0.6rem; margin: 0; padding: 0.7rem; border: 1px solid #d5d5da; border-radius: 6px; }
+.route-targets legend { padding: 0 0.25rem; color: #6e6e73; font-size: 0.8125rem; }
+.route-target-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; align-items: end; gap: 0.6rem; }
+.route-target-row input { width: 100%; min-width: 0; }
+.route-targets > .secondary-button, .route-target-row > .secondary-button { justify-self: start; color: #1d1d1f; background: #fff; border-color: #b9b9c0; }
+.route-targets button:disabled { cursor: not-allowed; opacity: 0.55; }
 .checkbox-label { display: flex !important; align-items: center; min-height: 2.25rem; gap: 0.35rem; }
 .checkbox-label input { min-width: auto !important; min-height: auto !important; }
 .danger-button { padding: 0.35rem 0.55rem; color: #b42318; background: transparent; border: 1px solid #f1c0bc; border-radius: 5px; cursor: pointer; }
@@ -710,4 +716,5 @@ textarea:focus-visible {
   .overview-cards, .overview-card { width: 100%; }
   .metric-grid { display: grid; grid-template-columns: repeat(2, 1fr); }
   .provider-details { grid-template-columns: 1fr; }
+  .route-target-row { grid-template-columns: 1fr; }
 }

@@ -229,8 +229,8 @@ export function deleteAmkrPool(configRevision: string, providerId: string, poolN
   return invoke("delete_amkr_pool", { configPath, configRevision, providerId, poolName });
 }
 
-export function createAmkrRoute(configRevision: string, id: string, provider: string, pool: string, upstreamModel: string, aliases: string[], routingMode: string | null, configPath: string | null = null) {
-  return invoke("create_amkr_route", { configPath, configRevision, id, provider, pool, upstreamModel, aliases, routingMode });
+export function createAmkrRoute(configRevision: string, id: string, targets: AmkrRouteTarget[], aliases: string[], routingMode: string | null, configPath: string | null = null) {
+  return invoke("create_amkr_route", { configPath, configRevision, id, targets, aliases, routingMode });
 }
 
 export function deleteAmkrRoute(configRevision: string, id: string, configPath: string | null = null) {

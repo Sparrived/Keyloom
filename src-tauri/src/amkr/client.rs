@@ -546,8 +546,28 @@ pub fn delete_pool(
     )
 }
 
-pub fn create_route(connection: &AmkrConnection, config_revision: &str, id: &str, provider: &str, pool: &str, upstream_model: &str, aliases: Vec<String>, routing_mode: Option<String>) -> Result<(), String> {
-    request_empty(connection, "POST", "/api/routes", "创建模型路由", serde_json::json!({ "config_revision": config_revision, "id": id, "targets": [{ "provider": provider, "pool": pool, "upstream_model": upstream_model }], "aliases": aliases, "routing_mode": routing_mode }), &[201])
+pub fn create_route(
+    connection: &AmkrConnection,
+    config_revision: &str,
+    id: &str,
+    targets: Vec<AmkrRouteTarget>,
+    aliases: Vec<String>,
+    routing_mode: Option<String>,
+) -> Result<(), String> {
+    request_empty(
+        connection,
+        "POST",
+        "/api/routes",
+        "创建模型路由",
+        serde_json::json!({
+            "config_revision": config_revision,
+            "id": id,
+            "targets": targets,
+            "aliases": aliases,
+            "routing_mode": routing_mode
+        }),
+        &[201],
+    )
 }
 
 pub fn export_config(connection: &AmkrConnection) -> Result<AmkrConfigExport, String> { request_json(connection, "POST", "/api/config/export", "导出配置", None, &[200]) }

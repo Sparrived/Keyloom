@@ -144,8 +144,8 @@ fn delete_amkr_pool(config_path: Option<String>, config_revision: String, provid
 }
 
 #[tauri::command]
-fn create_amkr_route(config_path: Option<String>, config_revision: String, id: String, provider: String, pool: String, upstream_model: String, aliases: Vec<String>, routing_mode: Option<String>) -> Result<(), String> {
-    keyloom_core::create_amkr_route(config_path.as_deref().map(Path::new), &config_revision, &id, &provider, &pool, &upstream_model, aliases, routing_mode)
+fn create_amkr_route(config_path: Option<String>, config_revision: String, id: String, targets: Vec<keyloom_core::amkr::client::AmkrRouteTarget>, aliases: Vec<String>, routing_mode: Option<String>) -> Result<(), String> {
+    keyloom_core::create_amkr_route(config_path.as_deref().map(Path::new), &config_revision, &id, targets, aliases, routing_mode)
 }
 
 #[tauri::command]
