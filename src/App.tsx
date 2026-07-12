@@ -54,6 +54,7 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
   const [metricHistory, setMetricHistory] = useState<MetricSnapshot[]>([]);
   const [discoveryError, setDiscoveryError] = useState<string | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
+  const [metricsError, setMetricsError] = useState<string | null>(null);
   const [serviceAction, setServiceAction] = useState<AmkrServiceAction | null>(null);
   const [serviceActionError, setServiceActionError] = useState<string | null>(null);
   const [serviceActionNotice, setServiceActionNotice] = useState<string | null>(null);
@@ -73,7 +74,6 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
         }
       } catch (error: unknown) {
         if (!cancelled) {
-          setHealth(null);
           setHealthError(error instanceof Error ? error.message : String(error));
         }
       }
@@ -84,11 +84,12 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
         const metricsResult = await getAmkrMetrics(selectedConfigPath);
         if (!cancelled && metricsResult?.total) {
           setMetrics(metricsResult);
+          setMetricsError(null);
           setMetricHistory((history) => appendMetricSnapshot(history, metricsResult, now()));
         }
-      } catch {
+      } catch (error: unknown) {
         if (!cancelled) {
-          setMetrics(null);
+          setMetricsError(error instanceof Error ? error.message : String(error));
         }
       }
     }
@@ -98,6 +99,8 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
         if (!cancelled) {
           setDiscoveryError(null);
           setHealthError(null);
+          setMetricsError(null);
+          setHealth(null);
           setMetrics(null);
           setMetricHistory([]);
         }
@@ -136,14 +139,15 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
     && health?.config_path
     && normalizeConfigPath(metadata.config_path) !== normalizeConfigPath(health.config_path),
   );
-  const serviceState = health?.status === "ok"
-    ? configMismatch ? "配置不一致" : "服务运行中"
-    : healthError || discoveryError
-      ? "服务未连接"
+  const serviceUnavailable = Boolean(healthError || discoveryError);
+  const serviceState = serviceUnavailable
+    ? "服务未连接"
+    : health?.status === "ok"
+      ? configMismatch ? "配置不一致" : "服务运行中"
     : metadata
       ? "服务未运行"
       : "正在查找服务";
-  const serviceTone = health?.status === "ok" ? configMismatch ? "warn" : "good" : healthError || discoveryError ? "bad" : "muted";
+  const serviceTone = serviceUnavailable ? "bad" : health?.status === "ok" ? configMismatch ? "warn" : "good" : "muted";
   const serviceRunning = health?.status === "ok";
   const unifiedTarget = health?.unified_model?.default?.primary;
   const unifiedModel = unifiedTarget?.model ?? "未设置";
@@ -280,7 +284,7 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
                 <span className={`status-${serviceTone}`}>{serviceState}</span>
               </section>
               <section className="overview-card" aria-labelledby="metrics-heading">
-                <div className="card-heading"><h3 id="metrics-heading">数据总览</h3><span>最近 60 分钟</span></div>
+                <div className="card-heading"><h3 id="metrics-heading">数据总览</h3>{metricsError && metrics ? <span aria-label="指标数据状态" className="status-warn" role="status">上次成功数据</span> : <span>最近 60 分钟</span>}</div>
                 {metrics ? (
                   <dl className="metric-grid">
                     <div><dt>请求</dt><dd>{formatCount(metrics.total.requests)}</dd></div>
@@ -288,7 +292,7 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
                     <div><dt>缓存命中</dt><dd className="status-good">{Math.round(metrics.total.cached_token_rate * 100)}%</dd></div>
                     <div><dt>平均延迟</dt><dd>{formatDuration(metrics.total.avg_duration_ms)}</dd></div>
                   </dl>
-                ) : <p className="empty-state">指标暂不可用</p>}
+                ) : <p className="empty-state" role={metricsError ? "alert" : undefined}>指标暂不可用</p>}
               </section>
             </div>
             <section className="trend-panel" aria-labelledby="trend-heading">

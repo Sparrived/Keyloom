@@ -434,6 +434,51 @@ describe("Keyloom application shell", () => {
     vi.useRealTimers();
   });
 
+  it("keeps the last successful health and metrics while polling is disconnected", async () => {
+    vi.useFakeTimers();
+    invokeMock.mockReset();
+    let healthReads = 0;
+    let metricReads = 0;
+    invokeMock.mockImplementation(async (command) => {
+      if (command === "discover_amkr") return {
+        config_path: "C:/config.json",
+        base_url: "http://127.0.0.1:18900",
+        metrics_db_path: null,
+        log_file_path: null,
+        auth_enabled: true,
+      };
+      if (command === "get_amkr_health") {
+        healthReads += 1;
+        if (healthReads > 1) throw new Error("connection refused");
+        return {
+          status: "ok",
+          local_auth_enabled: true,
+          unified_model: { default: { primary: { model: "cached-model", key: null } } },
+        };
+      }
+      if (command === "get_amkr_metrics") {
+        metricReads += 1;
+        if (metricReads > 1) throw new Error("metrics unavailable");
+        return {
+          total: { requests: 321, total_tokens: 654, cached_token_rate: 0.5, avg_duration_ms: 800 },
+        };
+      }
+      return undefined;
+    });
+
+    render(<App />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(screen.getByText("cached-model")).toBeInTheDocument();
+    expect(screen.getAllByText("321").length).toBeGreaterThan(0);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(15_001); });
+
+    expect(screen.getByRole("status", { name: "服务状态" })).toHaveTextContent("服务未连接");
+    expect(screen.getByText("cached-model")).toBeInTheDocument();
+    expect(screen.getAllByText("321").length).toBeGreaterThan(0);
+    expect(screen.getByRole("status", { name: "指标数据状态" })).toHaveTextContent("上次成功数据");
+  });
+
   it("loads redacted providers when the providers page opens", async () => {
     invokeMock.mockReset();
     invokeMock
