@@ -15,6 +15,11 @@ fn discover_amkr(config_path: Option<String>) -> Result<keyloom_core::AmkrMetada
 }
 
 #[tauri::command]
+fn initialize_default_amkr_config() -> Result<keyloom_core::AmkrMetadata, String> {
+    keyloom_core::initialize_default_amkr_config()
+}
+
+#[tauri::command]
 fn get_amkr_health(
     config_path: Option<String>,
 ) -> Result<keyloom_core::amkr::client::AmkrHealth, String> {
@@ -336,6 +341,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             discover_amkr,
+            initialize_default_amkr_config,
             get_amkr_health,
             get_amkr_metrics,
             read_amkr_log_tail,

@@ -59,6 +59,15 @@ pub fn discover_amkr(selected_path: Option<&Path>) -> Result<AmkrMetadata, Strin
     discover_amkr_from_paths(selected_path, &default_path)
 }
 
+pub fn initialize_default_amkr_config() -> Result<AmkrMetadata, String> {
+    let config_path = default_config_path();
+    installer::initialize_config_with_runtime(
+        &installer::private_runtime_python()?,
+        &config_path,
+    )?;
+    discover_amkr(Some(&config_path))
+}
+
 pub fn discover_amkr_from_paths(
     selected_path: Option<&Path>,
     default_path: &Path,

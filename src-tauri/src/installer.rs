@@ -1,6 +1,7 @@
 use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
@@ -9,6 +10,16 @@ use crate::windows_service::ServiceProgram;
 
 const INSTALL_STATE_SCHEMA_VERSION: u32 = 1;
 const INSTALL_STATE_OWNER: &str = "com.keyloom.app";
+const INITIALIZE_CONFIG_SCRIPT: &str = r#"
+import sys
+from pathlib import Path
+from auto_model_key_router.config import RouterConfig
+
+path = Path(sys.argv[1])
+if path.exists():
+    raise FileExistsError("staging config already exists")
+RouterConfig.load(path)
+"#;
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -184,6 +195,79 @@ pub fn private_runtime_python() -> Result<PathBuf, String> {
     Ok(paths.runtime_dir.join("python.exe"))
 }
 
+pub fn initialize_config_with_runtime(
+    python: &Path,
+    config_path: &Path,
+) -> Result<(), String> {
+    if !python.is_file() {
+        return Err("Keyloom 私有运行时缺少 python.exe".to_owned());
+    }
+    initialize_config_with_runner(python, config_path, |executable, arguments| {
+        let mut command = Command::new(executable);
+        command.args(arguments);
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            command.creation_flags(0x08000000);
+        }
+        let status = command
+            .status()
+            .map_err(|error| format!("无法启动 Keyloom 私有运行时: {error}"))?;
+        Ok(status.code().unwrap_or(-1))
+    })
+}
+
+fn initialize_config_with_runner<F>(
+    python: &Path,
+    config_path: &Path,
+    runner: F,
+) -> Result<(), String>
+where
+    F: FnOnce(&Path, &[String]) -> Result<i32, String>,
+{
+    if config_path.exists() {
+        return Err("默认 AMKR 配置已存在，Keyloom 不会覆盖现有文件".to_owned());
+    }
+    let parent = config_path
+        .parent()
+        .ok_or_else(|| "默认 AMKR 配置路径无效".to_owned())?;
+    fs::create_dir_all(parent).map_err(|error| format!("无法创建 AMKR 配置目录: {error}"))?;
+    let token = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| format!("无法创建配置事务标识: {error}"))?
+        .as_nanos();
+    let staging = parent.join(format!(".keyloom-config-{}-{token}.tmp", std::process::id()));
+    let arguments = vec![
+        "-I".to_owned(),
+        "-c".to_owned(),
+        INITIALIZE_CONFIG_SCRIPT.to_owned(),
+        staging.to_string_lossy().into_owned(),
+    ];
+
+    let result = (|| {
+        let exit_code = runner(python, &arguments)
+            .map_err(|_| "无法启动 Keyloom 私有运行时".to_owned())?;
+        if exit_code != 0 {
+            return Err(format!("AMKR 配置初始化失败（退出码 {exit_code}）"));
+        }
+        if !staging.is_file() {
+            return Err("AMKR 配置初始化未生成配置文件".to_owned());
+        }
+        fs::hard_link(&staging, config_path).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::AlreadyExists {
+                "默认 AMKR 配置已被其他进程创建，Keyloom 未覆盖该文件".to_owned()
+            } else {
+                format!("无法原子发布 AMKR 配置: {error}")
+            }
+        })
+    })();
+
+    if staging.exists() {
+        let _ = fs::remove_file(&staging);
+    }
+    result
+}
+
 pub fn private_runtime_service_program_from_paths(
     runtime_dir: &Path,
     state_path: &Path,
@@ -274,8 +358,8 @@ mod tests {
 
     use super::{
         detect_private_runtime, install_paths, previous_path,
-        private_runtime_service_program_from_paths, rollback_private_runtime_from_paths,
-        runtime_installation_status_from_paths,
+        initialize_config_with_runner, private_runtime_service_program_from_paths,
+        rollback_private_runtime_from_paths, runtime_installation_status_from_paths,
     };
 
     fn temp_root(name: &str) -> std::path::PathBuf {
@@ -503,6 +587,96 @@ mod tests {
             .unwrap_err()
             .contains("私有运行时文件不完整"));
 
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn atomically_initializes_a_config_without_returning_its_secret() {
+        let root = temp_root("initialize-config");
+        let python = root.join("runtime/python.exe");
+        let config = root.join("AutoModelKeyRouter/router-config.json");
+        fs::create_dir_all(python.parent().unwrap()).unwrap();
+        fs::write(&python, b"placeholder").unwrap();
+
+        initialize_config_with_runner(&python, &config, |executable, arguments| {
+            assert_eq!(executable, python);
+            assert_eq!(arguments[0..2], ["-I", "-c"]);
+            assert!(arguments[2].contains("RouterConfig.load"));
+            assert!(!arguments[2].contains("local_api_key"));
+            let staging = std::path::Path::new(&arguments[3]);
+            fs::write(staging, br#"{"config_version":3,"local_api_key":"secret"}"#)
+                .unwrap();
+            Ok(0)
+        })
+        .unwrap();
+
+        assert!(config.is_file());
+        assert_eq!(fs::read_to_string(&config).unwrap(), r#"{"config_version":3,"local_api_key":"secret"}"#);
+        assert_eq!(fs::read_dir(config.parent().unwrap()).unwrap().count(), 1);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn never_overwrites_an_existing_config_or_exposes_initializer_output() {
+        let root = temp_root("existing-config");
+        let python = root.join("runtime/python.exe");
+        let config = root.join("AutoModelKeyRouter/router-config.json");
+        fs::create_dir_all(python.parent().unwrap()).unwrap();
+        fs::create_dir_all(config.parent().unwrap()).unwrap();
+        fs::write(&python, b"placeholder").unwrap();
+        fs::write(&config, b"user-owned-config").unwrap();
+        let mut called = false;
+
+        let error = initialize_config_with_runner(&python, &config, |_, _| {
+            called = true;
+            Err("local_api_key=secret".to_owned())
+        })
+        .unwrap_err();
+
+        assert!(!called);
+        assert_eq!(fs::read(&config).unwrap(), b"user-owned-config");
+        assert!(!error.contains("secret"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn cleans_staging_after_a_private_runtime_failure() {
+        let root = temp_root("failed-config");
+        let python = root.join("runtime/python.exe");
+        let config = root.join("AutoModelKeyRouter/router-config.json");
+        fs::create_dir_all(python.parent().unwrap()).unwrap();
+        fs::write(&python, b"placeholder").unwrap();
+
+        let error = initialize_config_with_runner(&python, &config, |_, arguments| {
+            fs::write(&arguments[3], b"local_api_key=secret").unwrap();
+            Ok(1)
+        })
+        .unwrap_err();
+
+        assert!(!config.exists());
+        assert!(!error.contains("secret"));
+        assert_eq!(fs::read_dir(config.parent().unwrap()).unwrap().count(), 0);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn never_overwrites_a_config_created_during_initialization() {
+        let root = temp_root("racing-config");
+        let python = root.join("runtime/python.exe");
+        let config = root.join("AutoModelKeyRouter/router-config.json");
+        fs::create_dir_all(python.parent().unwrap()).unwrap();
+        fs::write(&python, b"placeholder").unwrap();
+
+        let error = initialize_config_with_runner(&python, &config, |_, arguments| {
+            fs::write(&arguments[3], b"generated-config").unwrap();
+            fs::write(&config, b"other-process-config").unwrap();
+            Ok(0)
+        })
+        .unwrap_err();
+
+        assert!(error.contains("其他进程"));
+        assert_eq!(fs::read(&config).unwrap(), b"other-process-config");
+        assert_eq!(fs::read_dir(config.parent().unwrap()).unwrap().count(), 1);
         fs::remove_dir_all(root).unwrap();
     }
 
