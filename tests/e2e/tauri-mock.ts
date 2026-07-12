@@ -14,6 +14,8 @@ export async function installTauriMock(page: Page) {
       visitor_feature_installed: false,
     };
     let health: typeof healthy | null = healthy;
+    let providerRevision = "revision-a";
+    let providers = [{ id: "provider-a", base_url: "https://api.example.test", keys: [{ name: "main", enabled: true, allow_visitor: false, api_key_fingerprint: "123456789abc" }], pools: [{ name: "primary", keys: ["main"], models: ["model-a"] }] }];
     const integrations: Record<string, Record<string, unknown>> = {
       "claude-code": {
         agent: "claude-code",
@@ -45,9 +47,9 @@ export async function installTauriMock(page: Page) {
             case "discover_amkr":
               return {
                 config_path: "C:/Users/test/AppData/Local/AutoModelKeyRouter/router-config.json",
-                base_url: "http://127.0.0.1:18900",
+                base_url: "http://127.0.0.1:19001",
                 host: "127.0.0.1",
-                port: 18900,
+                port: 19001,
                 request_timeout: 45,
                 stream_first_byte_timeout: 60,
                 stream_idle_timeout: 90,
@@ -62,7 +64,11 @@ export async function installTauriMock(page: Page) {
             case "get_amkr_metrics":
               return { total: { requests: 1284, successes: 1270, failures: 14, prompt_tokens: 800000, completion_tokens: 240000, total_tokens: 1040000, cached_tokens: 312000, cached_token_rate: 0.3, avg_duration_ms: 840 } };
             case "get_amkr_providers":
-              return { config_revision: "revision-a", providers: [{ id: "provider-a", base_url: "https://api.example.test", keys: [{ name: "main", enabled: true, allow_visitor: false, api_key_fingerprint: "123456789abc" }], pools: [{ name: "primary", keys: ["main"], models: ["model-a"] }] }] };
+              return { config_revision: providerRevision, providers };
+            case "update_amkr_provider":
+              providers = providers.map((provider) => provider.id === args.providerId ? { ...provider, id: String(args.id), base_url: String(args.baseUrl) } : provider);
+              providerRevision = "revision-b";
+              return {};
             case "get_amkr_routes":
               return { config_revision: "revision-a", routes: [{ id: "model-a", aliases: ["default"], routing_mode: "ordered", targets: [{ provider: "provider-a", pool: "primary", upstream_model: "model-a" }] }] };
             case "get_amkr_models":
