@@ -232,6 +232,36 @@ pub fn delete_amkr_route(selected_path: Option<&Path>, config_revision: &str, id
 pub fn export_amkr_config(selected_path: Option<&Path>) -> Result<amkr::client::AmkrConfigExport, String> { let instance = amkr::discover_from_paths(selected_path, &default_config_path()).map_err(|error| error.to_string())?; amkr::client::export_config(&instance.connection) }
 pub fn import_amkr_config(selected_path: Option<&Path>, config_revision: &str, config: serde_json::Value) -> Result<amkr::client::AmkrConfigImportResult, String> { let instance = amkr::discover_from_paths(selected_path, &default_config_path()).map_err(|error| error.to_string())?; amkr::client::import_config(&instance.connection, config_revision, config) }
 
+pub fn get_agent_integration_status(
+    agent: &str,
+) -> Result<integrations::AgentIntegrationStatus, String> {
+    match installer::private_runtime_python() {
+        Ok(python) => integrations::get_agent_status_with_runtime(&python, agent),
+        Err(_) => integrations::get_agent_status(agent),
+    }
+}
+
+pub fn configure_agent_integration(
+    selected_path: Option<&Path>,
+    agent: &str,
+    mode: &str,
+) -> Result<integrations::AgentIntegrationStatus, String> {
+    let instance = amkr::discover_from_paths(selected_path, &default_config_path())
+        .map_err(|error| error.to_string())?;
+    integrations::configure_agent_with_runtime(
+        &installer::private_runtime_python()?,
+        &instance.config_path,
+        agent,
+        mode,
+    )
+}
+
+pub fn rollback_agent_integration(
+    agent: &str,
+) -> Result<integrations::AgentIntegrationStatus, String> {
+    integrations::rollback_agent_with_runtime(&installer::private_runtime_python()?, agent)
+}
+
 pub fn probe_amkr_keys(
     selected_path: Option<&Path>,
     provider_id: &str,

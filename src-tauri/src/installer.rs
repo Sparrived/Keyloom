@@ -172,6 +172,18 @@ pub fn private_runtime_service_program() -> Result<ServiceProgram, String> {
     private_runtime_service_program_from_paths(&paths.runtime_dir, &paths.state_path)
 }
 
+pub fn private_runtime_python() -> Result<PathBuf, String> {
+    let paths =
+        default_install_paths().ok_or_else(|| "无法确定本机 LOCALAPPDATA 目录".to_owned())?;
+    let status = detect_private_runtime(&paths.runtime_dir, &paths.state_path);
+    if !status.private_runtime_installed {
+        return Err(status
+            .diagnostic
+            .unwrap_or_else(|| "Keyloom 私有运行时尚未安装".to_owned()));
+    }
+    Ok(paths.runtime_dir.join("python.exe"))
+}
+
 pub fn private_runtime_service_program_from_paths(
     runtime_dir: &Path,
     state_path: &Path,

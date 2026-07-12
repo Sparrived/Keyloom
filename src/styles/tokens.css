@@ -18,7 +18,7 @@ button {
 
 .app-shell {
   display: grid;
-  grid-template-columns: 160px 1fr;
+  grid-template-columns: 176px 1fr;
   min-height: 100vh;
 }
 
@@ -322,6 +322,17 @@ button {
 .activity-list div, .integration-item > div { display: grid; gap: 0.25rem; }
 .activity-list span { color: #6e6e73; font-size: 0.875rem; }
 .integration-item h3, .integration-item p { margin: 0; }
+.integration-item { display: grid; }
+.integration-item > .integration-item-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.integration-item-header > div { display: grid; gap: 0.25rem; }
+.integration-controls { display: flex !important; flex-wrap: wrap; align-items: end; gap: 0.5rem; }
+.integration-controls label { display: grid; gap: 0.25rem; color: #6e6e73; font-size: 0.8125rem; }
+.integration-controls select { min-height: 2.25rem; padding: 0.4rem 0.5rem; color: #1d1d1f; background: #fff; border: 1px solid #b9b9c0; border-radius: 5px; font: inherit; }
+.integration-controls button { min-height: 2.25rem; padding: 0.4rem 0.65rem; color: #fff; background: #007aff; border: 1px solid #0067d6; border-radius: 5px; cursor: pointer; }
+.integration-controls button.secondary-button { color: #1d1d1f; background: #fff; border-color: #b9b9c0; }
+.integration-controls button:disabled { cursor: not-allowed; opacity: 0.55; }
+.integration-preview { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; color: #6e6e73; }
+.integration-preview code { padding: 0.15rem 0.3rem; color: #1d1d1f; background: #f5f5f7; border-radius: 4px; font-size: 0.75rem; overflow-wrap: anywhere; }
 .integration-note { margin-top: 1rem; }
 .settings-list dd { margin: 0; overflow-wrap: anywhere; text-align: right; }
 .log-panel { margin-top: 1rem; padding: 1rem; border: 1px solid #d5d5da; border-radius: 6px; }

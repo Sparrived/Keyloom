@@ -165,7 +165,27 @@ fn import_amkr_config(config_path: Option<String>, config_revision: String, conf
 
 #[tauri::command]
 fn get_agent_integration_status(agent: String) -> Result<keyloom_core::integrations::AgentIntegrationStatus, String> {
-    keyloom_core::integrations::get_agent_status(&agent)
+    keyloom_core::get_agent_integration_status(&agent)
+}
+
+#[tauri::command]
+fn configure_agent_integration(
+    config_path: Option<String>,
+    agent: String,
+    mode: String,
+) -> Result<keyloom_core::integrations::AgentIntegrationStatus, String> {
+    keyloom_core::configure_agent_integration(
+        config_path.as_deref().map(Path::new),
+        &agent,
+        &mode,
+    )
+}
+
+#[tauri::command]
+fn rollback_agent_integration(
+    agent: String,
+) -> Result<keyloom_core::integrations::AgentIntegrationStatus, String> {
+    keyloom_core::rollback_agent_integration(&agent)
 }
 
 #[tauri::command]
@@ -339,6 +359,8 @@ fn main() {
             export_amkr_config,
             import_amkr_config,
             get_agent_integration_status,
+            configure_agent_integration,
+            rollback_agent_integration,
             get_runtime_installation_status,
             rollback_private_runtime,
             probe_amkr_keys,

@@ -132,12 +132,14 @@ export type AmkrProbe = {
   error: string | null;
 };
 export type AmkrIntegrationAgent = "claude-code" | "codex";
+export type AmkrIntegrationMode = "unified-model" | "native";
 export type AmkrIntegrationStatus = {
   agent: AmkrIntegrationAgent;
   display_name: string;
   target_path: string;
   target_exists: boolean;
   backup_available: boolean;
+  current_is_applied: boolean;
   mode: string | null;
 };
 
@@ -276,6 +278,14 @@ export function cancelAmkrProbe(probeId: string, configPath: string | null = nul
 
 export function getAgentIntegrationStatus(agent: AmkrIntegrationAgent) {
   return invoke<AmkrIntegrationStatus>("get_agent_integration_status", { agent });
+}
+
+export function configureAgentIntegration(configPath: string | null, agent: AmkrIntegrationAgent, mode: AmkrIntegrationMode) {
+  return invoke<AmkrIntegrationStatus>("configure_agent_integration", { configPath, agent, mode });
+}
+
+export function rollbackAgentIntegration(agent: AmkrIntegrationAgent) {
+  return invoke<AmkrIntegrationStatus>("rollback_agent_integration", { agent });
 }
 
 export function getRuntimeInstallationStatus() {
