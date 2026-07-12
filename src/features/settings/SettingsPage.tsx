@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
-import { exportAmkrConfig, getAmkrProviders, importAmkrConfig, type AmkrMetadata } from "../../api/amkr";
+import { exportAmkrConfig, getAmkrProviders, importAmkrConfig, type AmkrHealth, type AmkrMetadata } from "../../api/amkr";
 
 type SettingsPageProps = {
   configPath: string | null;
   metadata: AmkrMetadata | null;
+  health?: AmkrHealth | null;
   onConfigPathChange: (configPath: string | null) => void;
 };
 
-export function SettingsPage({ configPath, metadata, onConfigPathChange }: SettingsPageProps) {
+export function SettingsPage({ configPath, metadata, health = null, onConfigPathChange }: SettingsPageProps) {
   const [draftConfigPath, setDraftConfigPath] = useState(configPath ?? metadata?.config_path ?? "");
   const [transfer, setTransfer] = useState("");
   const [transferAction, setTransferAction] = useState<"export" | "import" | null>(null);
@@ -48,6 +49,9 @@ export function SettingsPage({ configPath, metadata, onConfigPathChange }: Setti
         <div><dt>监听地址</dt><dd>{metadata.host && metadata.port ? `${metadata.host}:${metadata.port}` : "未读取"}</dd></div>
         <div><dt>配置文件</dt><dd>{metadata.config_path}</dd></div>
         <div><dt>本地鉴权</dt><dd>{metadata.auth_enabled ? "已启用" : "未启用"}</dd></div>
+        <div><dt>本地 API Key 指纹</dt><dd>{health?.local_api_key_fingerprint ?? "暂不可用"}</dd></div>
+        <div><dt>模型能力</dt><dd>{health?.models ? `已配置 ${health.models.length} 个模型` : "暂不可用"}</dd></div>
+        <div><dt>访客访问</dt><dd>{health?.visitor_feature_installed ? `访客访问：${health.visitor_access_enabled ? "已启用" : "未启用"}（${health.visitor_key_count ?? 0} 个 Key）` : "功能未安装"}</dd></div>
         <div><dt>请求超时</dt><dd>{metadata.request_timeout == null ? "未配置" : `${metadata.request_timeout} 秒`}</dd></div>
         <div><dt>流式首字节超时</dt><dd>{metadata.stream_first_byte_timeout == null ? "未配置" : `${metadata.stream_first_byte_timeout} 秒`}</dd></div>
         <div><dt>流式空闲超时</dt><dd>{metadata.stream_idle_timeout == null ? "未配置" : `${metadata.stream_idle_timeout} 秒`}</dd></div>

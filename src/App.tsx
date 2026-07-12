@@ -320,7 +320,7 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
           </section>
         ) : activePage === "供应商" ? <ProvidersPage configPath={selectedConfigPath} /> : activePage === "模型路由" ? <RoutingPage configPath={selectedConfigPath} onUnifiedModelChange={applyUnifiedModel} /> : activePage === "活动" ? <ActivityPage configPath={selectedConfigPath} history={metricHistory} />
           : activePage === "集成" ? <IntegrationsPage baseUrl={metadata?.base_url ?? null} authEnabled={metadata?.auth_enabled ?? false} />
-            : <SettingsPage configPath={selectedConfigPath} metadata={metadata} onConfigPathChange={applyConfigPath} />}
+          : <SettingsPage configPath={selectedConfigPath} metadata={metadata} health={health} onConfigPathChange={applyConfigPath} />}
       </section>
     </main>
   );

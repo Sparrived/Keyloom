@@ -98,4 +98,21 @@ describe("SettingsPage", () => {
     expect(screen.getByText("最大重试")).toBeInTheDocument();
     expect(screen.getByText("4 次")).toBeInTheDocument();
   });
+
+  it("shows safe health capabilities and the local key fingerprint", () => {
+    render(<SettingsPage configPath={null} metadata={metadata} health={{
+      status: "ok",
+      local_auth_enabled: true,
+      models: ["model-a", "model-b"],
+      local_api_key_fingerprint: "65bbff9a6cb9",
+      visitor_feature_installed: true,
+      visitor_access_enabled: true,
+      visitor_key_count: 2,
+    }} onConfigPathChange={() => undefined} />);
+
+    expect(screen.getByText("本地 API Key 指纹")).toBeInTheDocument();
+    expect(screen.getByText("65bbff9a6cb9")).toBeInTheDocument();
+    expect(screen.getByText("已配置 2 个模型")).toBeInTheDocument();
+    expect(screen.getByText("访客访问：已启用（2 个 Key）")).toBeInTheDocument();
+  });
 });

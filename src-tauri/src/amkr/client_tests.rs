@@ -62,6 +62,31 @@ fn keeps_new_metric_fields_optional_for_older_amkr_responses() {
 }
 
 #[test]
+fn reads_rich_health_capabilities_without_returning_secret_values() {
+    let health: AmkrHealth = serde_json::from_str(
+        r#"{
+          "status":"ok",
+          "local_auth_enabled":true,
+          "models":["model-a"],
+          "local_api_key_fingerprint":"65bbff9a6cb9",
+          "visitor_feature_installed":true,
+          "visitor_access_enabled":true,
+          "visitor_key_count":2,
+          "native_endpoint_states":{"model-a":"ready"}
+        }"#,
+    )
+    .unwrap();
+
+    assert_eq!(health.models, ["model-a"]);
+    assert_eq!(health.local_api_key_fingerprint.as_deref(), Some("65bbff9a6cb9"));
+    assert!(health.visitor_feature_installed);
+    assert!(health.visitor_access_enabled);
+    assert_eq!(health.visitor_key_count, 2);
+    assert!(health.native_endpoint_states.is_some());
+    assert!(!serde_json::to_string(&health).unwrap().contains("secret"));
+}
+
+#[test]
 fn normalizes_legacy_flat_unified_model_responses() {
     let response: super::client::AmkrUnifiedModelResponse = serde_json::from_str(
         r#"{"unified_model":{"model":"model-a","key":"key-a","image_model":"image-a","image_key":null}}"#,

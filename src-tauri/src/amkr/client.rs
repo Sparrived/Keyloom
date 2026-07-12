@@ -12,6 +12,20 @@ pub struct AmkrHealth {
     pub status: String,
     pub local_auth_enabled: bool,
     #[serde(default)]
+    pub models: Vec<String>,
+    #[serde(default)]
+    pub config_path: Option<String>,
+    #[serde(default)]
+    pub local_api_key_fingerprint: Option<String>,
+    #[serde(default)]
+    pub visitor_feature_installed: bool,
+    #[serde(default)]
+    pub visitor_access_enabled: bool,
+    #[serde(default)]
+    pub visitor_key_count: u64,
+    #[serde(default)]
+    pub native_endpoint_states: Option<serde_json::Value>,
+    #[serde(default)]
     pub unified_model: Option<AmkrUnifiedModel>,
 }
 

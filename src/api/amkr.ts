@@ -17,6 +17,13 @@ export type AmkrMetadata = {
 export type AmkrHealth = {
   status: string;
   local_auth_enabled: boolean;
+  models?: string[];
+  config_path?: string | null;
+  local_api_key_fingerprint?: string | null;
+  visitor_feature_installed?: boolean;
+  visitor_access_enabled?: boolean;
+  visitor_key_count?: number;
+  native_endpoint_states?: Record<string, unknown> | null;
   unified_model?: AmkrUnifiedModel | null;
 };
 
