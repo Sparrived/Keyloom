@@ -15,6 +15,7 @@ import {
   type AmkrProviderPool,
   type AmkrProvidersResponse,
 } from "../../api/amkr";
+import { ProbePanel } from "./ProbePanel";
 
 const csv = (value: string) => value.split(",").map((item) => item.trim()).filter(Boolean);
 const errorMessage = (reason: unknown) => reason instanceof Error ? reason.message : String(reason);
@@ -144,6 +145,7 @@ function ProviderCard({ configPath, provider, revision, refresh }: ProviderCardP
         </form>
       </section>
     </div>
+    <ProbePanel configPath={configPath} providerId={provider.id} keys={provider.keys.map((key) => key.name)} pools={provider.pools.map((pool) => pool.name)} />
     {error ? <p className="service-action-error">操作失败: {error}</p> : null}
   </article>;
 }
