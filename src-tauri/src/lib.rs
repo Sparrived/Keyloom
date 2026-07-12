@@ -1,4 +1,5 @@
 pub mod amkr;
+pub mod integrations;
 pub mod tray;
 pub mod windows_service;
 

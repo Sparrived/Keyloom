@@ -151,6 +151,11 @@ fn export_amkr_config(config_path: Option<String>) -> Result<keyloom_core::amkr:
 fn import_amkr_config(config_path: Option<String>, config_revision: String, config: serde_json::Value) -> Result<keyloom_core::amkr::client::AmkrConfigImportResult, String> { keyloom_core::import_amkr_config(config_path.as_deref().map(Path::new), &config_revision, config) }
 
 #[tauri::command]
+fn get_agent_integration_status(agent: String) -> Result<keyloom_core::integrations::AgentIntegrationStatus, String> {
+    keyloom_core::integrations::get_agent_status(&agent)
+}
+
+#[tauri::command]
 fn probe_amkr_keys(config_path: Option<String>, provider_id: String, keys: Vec<String>, timeout_seconds: f64) -> Result<keyloom_core::amkr::client::AmkrProbeStart, String> {
     keyloom_core::probe_amkr_keys(config_path.as_deref().map(Path::new), &provider_id, keys, timeout_seconds)
 }
@@ -309,6 +314,7 @@ fn main() {
             delete_amkr_route,
             export_amkr_config,
             import_amkr_config,
+            get_agent_integration_status,
             probe_amkr_keys,
             probe_amkr_pools,
             get_amkr_probe,
