@@ -216,6 +216,31 @@ describe("Keyloom application shell", () => {
     expect(invokeMock).toHaveBeenCalledWith("get_amkr_metrics", { configPath: null });
   });
 
+  it("opens unified model settings and immediately reflects a saved fixed key", async () => {
+    invokeMock.mockReset();
+    invokeMock.mockImplementation(async (command) => {
+      if (command === "discover_amkr") return { config_path: "C:/config.json", base_url: "http://127.0.0.1:18900", metrics_db_path: null, log_file_path: null, auth_enabled: true };
+      if (command === "get_amkr_health") return { status: "ok", local_auth_enabled: true, unified_model: { default: { primary: { model: "model-a", key: null } } } };
+      if (command === "get_amkr_metrics") return { total: { requests: 0, total_tokens: 0, cached_token_rate: 0, avg_duration_ms: 0 } };
+      if (command === "get_amkr_routes") return { config_revision: "revision-a", routes: [] };
+      if (command === "get_amkr_models") return { models: [{ id: "model-a", aliases: [], routing_mode: "round_robin", reasoning_effort: null, visitor_available: false, keys: [{ name: "key-a", base_url: null, enabled: true, allow_visitor: false, api_key_fingerprint: "65bbff9a6cb9" }] }] };
+      if (command === "get_amkr_unified_model") return { unified_model: { default: { primary: { model: "model-a", key: null } } } };
+      if (command === "update_amkr_unified_model") return { unified_model: { default: { primary: { model: "model-a", key: "key-a" } } } };
+      return undefined;
+    });
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "切换" }));
+    expect(screen.getByRole("heading", { name: "模型路由" })).toBeInTheDocument();
+    await screen.findByRole("radio", { name: "自动路由" });
+    fireEvent.click(screen.getByRole("radio", { name: "固定 Key" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存统一模型" }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_amkr_unified_model", { configPath: null, model: "model-a", key: "key-a", fallback: null, image: null }));
+    fireEvent.click(screen.getByRole("button", { name: "概览" }));
+
+    expect(screen.getByText("固定 Key · key-a")).toBeInTheDocument();
+  });
+
   it("shows real metric snapshots on the activity page", async () => {
     render(<App />);
 
@@ -415,21 +440,12 @@ describe("Keyloom application shell", () => {
 
   it("loads model routes when the routing page opens", async () => {
     invokeMock.mockReset();
-    invokeMock
-      .mockResolvedValueOnce({
-        config_path: "C:/Users/test/AppData/Local/AutoModelKeyRouter/router-config.json",
-        base_url: "http://127.0.0.1:18900",
-        metrics_db_path: null,
-        log_file_path: null,
-        auth_enabled: true,
-      })
-      .mockResolvedValueOnce({ status: "ok", local_auth_enabled: true })
-      .mockResolvedValueOnce({
-        total: { requests: 0, total_tokens: 0, cached_token_rate: 0, avg_duration_ms: 0 },
-      })
-      .mockResolvedValueOnce({
-        config_revision: "revision-a",
-        routes: [
+    invokeMock.mockImplementation(async (command) => {
+      if (command === "discover_amkr") return { config_path: "C:/config.json", base_url: "http://127.0.0.1:18900", metrics_db_path: null, log_file_path: null, auth_enabled: true };
+      if (command === "get_amkr_health") return { status: "ok", local_auth_enabled: true };
+      if (command === "get_amkr_metrics") return { total: { requests: 0, total_tokens: 0, cached_token_rate: 0, avg_duration_ms: 0 } };
+      if (command === "get_amkr_routes") return {
+        config_revision: "revision-a", routes: [
           {
             id: "model-a",
             aliases: ["alias-a"],
@@ -439,7 +455,11 @@ describe("Keyloom application shell", () => {
             ],
           },
         ],
-      });
+      };
+      if (command === "get_amkr_models") return { models: [] };
+      if (command === "get_amkr_unified_model") return { unified_model: null };
+      return undefined;
+    });
 
     render(<App />);
     await screen.findByRole("status", { name: "服务状态" });

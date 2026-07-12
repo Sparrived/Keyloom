@@ -49,4 +49,30 @@ describe("RoutingPage", () => {
       routingMode: "priority",
     }));
   });
+
+  it("refreshes unified model candidates after creating a route", async () => {
+    let modelReads = 0;
+    invokeMock.mockImplementation(async (command) => {
+      if (command === "get_amkr_routes") return { config_revision: "revision-a", routes: [] };
+      if (command === "get_amkr_models") {
+        modelReads += 1;
+        const model = { id: "model-a", aliases: [], routing_mode: "round_robin", reasoning_effort: null, visitor_available: false, keys: [] };
+        return { models: modelReads === 1 ? [model] : [model, { ...model, id: "model-b" }] };
+      }
+      if (command === "get_amkr_unified_model") return { unified_model: null };
+      if (command === "create_amkr_route") return undefined;
+      return undefined;
+    });
+
+    render(<RoutingPage configPath="C:/amkr.json" />);
+    await screen.findByRole("option", { name: "model-a" });
+    fireEvent.change(screen.getByLabelText("模型 ID"), { target: { value: "model-b" } });
+    fireEvent.change(screen.getByLabelText("供应商"), { target: { value: "provider-a" } });
+    fireEvent.change(screen.getByLabelText("模型池"), { target: { value: "pool-a" } });
+    fireEvent.change(screen.getByLabelText("上游模型"), { target: { value: "upstream-b" } });
+    fireEvent.click(screen.getByRole("button", { name: "添加路由" }));
+
+    expect(await screen.findByRole("option", { name: "model-b" })).toBeInTheDocument();
+    expect(modelReads).toBe(2);
+  });
 });

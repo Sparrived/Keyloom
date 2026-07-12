@@ -4,8 +4,10 @@ use std::thread;
 
 use super::client::{
     create_provider, create_provider_key, delete_pool, delete_provider_key, delete_route,
-    export_config, get_health, get_providers, get_routes, import_config, update_pool,
-    update_provider, update_provider_key, update_route, AmkrRouteTarget, AmkrUsageStats,
+    delete_unified_model, export_config, get_health, get_models, get_providers, get_routes,
+    get_unified_model, import_config, update_pool, update_provider, update_provider_key,
+    update_route, update_unified_model, AmkrHealth, AmkrRouteTarget, AmkrUnifiedModel,
+    AmkrUnifiedPlan, AmkrUnifiedTarget, AmkrUsageStats,
 };
 use super::AmkrConnection;
 
@@ -56,6 +58,25 @@ fn keeps_new_metric_fields_optional_for_older_amkr_responses() {
     assert_eq!(stats.prompt_tokens, None);
     assert_eq!(stats.completion_tokens, None);
     assert_eq!(stats.cached_tokens, None);
+}
+
+#[test]
+fn normalizes_legacy_flat_unified_model_responses() {
+    let response: super::client::AmkrUnifiedModelResponse = serde_json::from_str(
+        r#"{"unified_model":{"model":"model-a","key":"key-a","image_model":"image-a","image_key":null}}"#,
+    )
+    .unwrap();
+    let unified = response.unified_model.unwrap();
+
+    assert_eq!(unified.default.primary.model, "model-a");
+    assert_eq!(unified.default.primary.key.as_deref(), Some("key-a"));
+    assert_eq!(unified.image.unwrap().primary.model, "image-a");
+
+    let health: AmkrHealth = serde_json::from_str(
+        r#"{"status":"ok","local_auth_enabled":true,"unified_model":{"model":"model-a","key":null}}"#,
+    )
+    .unwrap();
+    assert_eq!(health.unified_model.unwrap().default.primary.model, "model-a");
 }
 
 #[test]
@@ -127,6 +148,118 @@ fn reads_model_routes_with_their_provider_targets() {
     assert_eq!(response.routes[0].id, "model-a");
     assert_eq!(response.routes[0].targets[0].provider, "a.example.test");
     assert_eq!(response.routes[0].aliases, ["alias-a"]);
+    server.join().unwrap();
+}
+
+#[test]
+fn reads_and_updates_the_unified_model_with_an_explicit_automatic_key() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = thread::spawn(move || {
+        for (expected, status, body) in [
+            (
+                "GET /api/models HTTP/1.1",
+                "200 OK",
+                r#"{"models":[{"id":"model-a","aliases":["alias-a"],"routing_mode":"round_robin","reasoning_effort":null,"visitor_available":false,"keys":[{"name":"key-a","base_url":"https://a.example.test","enabled":true,"allow_visitor":false,"api_key_fingerprint":"65bbff9a6cb9"}]}]}"#,
+            ),
+            (
+                "GET /api/unified-model HTTP/1.1",
+                "200 OK",
+                r#"{"unified_model":{"default":{"primary":{"model":"model-a","key":"key-a"}}}}"#,
+            ),
+            (
+                "PUT /api/unified-model HTTP/1.1",
+                "200 OK",
+                r#"{"unified_model":{"default":{"primary":{"model":"model-a","key":null}}}}"#,
+            ),
+            ("DELETE /api/unified-model HTTP/1.1", "204 No Content", ""),
+        ] {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buffer = [0_u8; 4096];
+            let read = stream.read(&mut buffer).unwrap();
+            let request = String::from_utf8_lossy(&buffer[..read]);
+            assert!(request.starts_with(expected));
+            assert!(request.contains("Authorization: Bearer local-api-key"));
+            if expected.starts_with("PUT") {
+                assert!(request.contains("\"model\":\"model-a\""));
+                assert!(request.contains("\"key\":null"));
+            }
+            write!(
+                stream,
+                "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            )
+            .unwrap();
+        }
+    });
+    let connection = AmkrConnection {
+        base_url: format!("http://{address}"),
+        local_api_key: Some("local-api-key".to_owned()),
+        metrics_db_path: None,
+        log_file_path: None,
+    };
+
+    let models = get_models(&connection).unwrap();
+    assert_eq!(models.models[0].keys[0].name, "key-a");
+    let current = get_unified_model(&connection).unwrap();
+    assert_eq!(current.unified_model.unwrap().default.primary.key.as_deref(), Some("key-a"));
+    let updated = update_unified_model(
+        &connection,
+        &AmkrUnifiedModel {
+            default: AmkrUnifiedPlan {
+                primary: AmkrUnifiedTarget {
+                    model: "model-a".to_owned(),
+                    key: None,
+                },
+                fallback: None,
+            },
+            image: None,
+        },
+    )
+    .unwrap();
+    assert_eq!(updated.unified_model.unwrap().default.primary.key, None);
+    delete_unified_model(&connection).unwrap();
+
+    server.join().unwrap();
+}
+
+#[test]
+fn preserves_unedited_fallback_and_image_plans_when_updating_unified_model() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let mut buffer = [0_u8; 4096];
+        let read = stream.read(&mut buffer).unwrap();
+        let request = String::from_utf8_lossy(&buffer[..read]);
+        assert!(request.starts_with("PUT /api/unified-model HTTP/1.1"));
+        assert!(request.contains("\"default\":{"));
+        assert!(request.contains("\"fallback\":{"));
+        assert!(request.contains("\"model\":\"backup-a\""));
+        assert!(request.contains("\"image\":{"));
+        assert!(request.contains("\"model\":\"image-a\""));
+        assert!(request.contains("\"key\":\"image-key\""));
+        let body = r#"{"unified_model":{"default":{"primary":{"model":"model-b","key":null},"fallback":{"model":"backup-a","key":null}},"image":{"primary":{"model":"image-a","key":"image-key"}}}}"#;
+        write!(stream, "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body).unwrap();
+    });
+    let connection = AmkrConnection { base_url: format!("http://{address}"), local_api_key: None, metrics_db_path: None, log_file_path: None };
+    let response = update_unified_model(
+        &connection,
+        &AmkrUnifiedModel {
+            default: AmkrUnifiedPlan {
+                primary: AmkrUnifiedTarget { model: "model-b".to_owned(), key: None },
+                fallback: Some(AmkrUnifiedTarget { model: "backup-a".to_owned(), key: None }),
+            },
+            image: Some(AmkrUnifiedPlan {
+                primary: AmkrUnifiedTarget { model: "image-a".to_owned(), key: Some("image-key".to_owned()) },
+                fallback: None,
+            }),
+        },
+    )
+    .unwrap();
+
+    assert_eq!(response.unified_model.unwrap().default.fallback.unwrap().model, "backup-a");
     server.join().unwrap();
 }
 

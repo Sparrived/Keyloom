@@ -11,9 +11,7 @@ export type AmkrMetadata = {
 export type AmkrHealth = {
   status: string;
   local_auth_enabled: boolean;
-  unified_model?: {
-    default?: { primary?: { model?: string } };
-  } | null;
+  unified_model?: AmkrUnifiedModel | null;
 };
 
 export type AmkrMetrics = {
@@ -73,6 +71,30 @@ export type AmkrRoutesResponse = {
   routes: AmkrRoute[];
 };
 
+export type AmkrModelKey = {
+  name: string;
+  base_url: string | null;
+  enabled: boolean;
+  allow_visitor: boolean;
+  api_key_fingerprint: string;
+};
+
+export type AmkrModel = {
+  id: string;
+  aliases: string[];
+  routing_mode: string;
+  reasoning_effort: string | null;
+  visitor_available: boolean;
+  keys: AmkrModelKey[];
+};
+
+export type AmkrModelsResponse = { models: AmkrModel[] };
+
+export type AmkrUnifiedTarget = { model: string; key: string | null };
+export type AmkrUnifiedPlan = { primary: AmkrUnifiedTarget; fallback?: AmkrUnifiedTarget | null };
+export type AmkrUnifiedModel = { default: AmkrUnifiedPlan; image?: AmkrUnifiedPlan | null };
+export type AmkrUnifiedModelResponse = { unified_model: AmkrUnifiedModel | null };
+
 export type AmkrConfigTransfer = { config_revision: string; config: unknown };
 export type AmkrServiceAction = "start_amkr" | "stop_amkr" | "restart_amkr" | "install_user_amkr" | "uninstall_amkr" | "status_amkr";
 export type AmkrServiceCommandResult = { command: string[]; exit_code: number; stdout: string; stderr: string };
@@ -99,6 +121,28 @@ export function getAmkrProviders(configPath: string | null = null) {
 
 export function getAmkrRoutes(configPath: string | null = null) {
   return invoke<AmkrRoutesResponse>("get_amkr_routes", { configPath });
+}
+
+export function getAmkrModels(configPath: string | null = null) {
+  return invoke<AmkrModelsResponse>("get_amkr_models", { configPath });
+}
+
+export function getAmkrUnifiedModel(configPath: string | null = null) {
+  return invoke<AmkrUnifiedModelResponse>("get_amkr_unified_model", { configPath });
+}
+
+export function updateAmkrUnifiedModel(unifiedModel: AmkrUnifiedModel, configPath: string | null = null) {
+  return invoke<AmkrUnifiedModelResponse>("update_amkr_unified_model", {
+    configPath,
+    model: unifiedModel.default.primary.model,
+    key: unifiedModel.default.primary.key,
+    fallback: unifiedModel.default.fallback ?? null,
+    image: unifiedModel.image ?? null,
+  });
+}
+
+export function deleteAmkrUnifiedModel(configPath: string | null = null) {
+  return invoke<void>("delete_amkr_unified_model", { configPath });
 }
 
 export function createAmkrProvider(configRevision: string, id: string, baseUrl: string, configPath: string | null = null) {

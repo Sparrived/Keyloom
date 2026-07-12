@@ -12,7 +12,7 @@ pub struct AmkrHealth {
     pub status: String,
     pub local_auth_enabled: bool,
     #[serde(default)]
-    pub unified_model: Option<serde_json::Value>,
+    pub unified_model: Option<AmkrUnifiedModel>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -92,6 +92,106 @@ pub struct AmkrRoute {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+pub struct AmkrModelKey {
+    pub name: String,
+    #[serde(default)]
+    pub base_url: Option<String>,
+    pub enabled: bool,
+    pub allow_visitor: bool,
+    pub api_key_fingerprint: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct AmkrModel {
+    pub id: String,
+    #[serde(default)]
+    pub aliases: Vec<String>,
+    pub routing_mode: String,
+    #[serde(default)]
+    pub reasoning_effort: Option<String>,
+    pub visitor_available: bool,
+    #[serde(default)]
+    pub keys: Vec<AmkrModelKey>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct AmkrModelsResponse {
+    #[serde(default)]
+    pub models: Vec<AmkrModel>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct AmkrUnifiedTarget {
+    pub model: String,
+    #[serde(default)]
+    pub key: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct AmkrUnifiedPlan {
+    pub primary: AmkrUnifiedTarget,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fallback: Option<AmkrUnifiedTarget>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AmkrUnifiedModel {
+    pub default: AmkrUnifiedPlan,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image: Option<AmkrUnifiedPlan>,
+}
+
+impl<'de> Deserialize<'de> for AmkrUnifiedModel {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct RawUnifiedModel {
+            #[serde(default)]
+            default: Option<AmkrUnifiedPlan>,
+            #[serde(default)]
+            image: Option<AmkrUnifiedPlan>,
+            #[serde(default)]
+            model: Option<String>,
+            #[serde(default)]
+            key: Option<String>,
+            #[serde(default)]
+            image_model: Option<String>,
+            #[serde(default)]
+            image_key: Option<String>,
+        }
+
+        let raw = RawUnifiedModel::deserialize(deserializer)?;
+        if let Some(default) = raw.default {
+            return Ok(Self { default, image: raw.image });
+        }
+        let model = raw
+            .model
+            .ok_or_else(|| serde::de::Error::custom("统一模型缺少 default 或 model"))?;
+        Ok(Self {
+            default: AmkrUnifiedPlan {
+                primary: AmkrUnifiedTarget { model, key: raw.key },
+                fallback: None,
+            },
+            image: raw.image_model.map(|model| AmkrUnifiedPlan {
+                primary: AmkrUnifiedTarget {
+                    model,
+                    key: raw.image_key,
+                },
+                fallback: None,
+            }),
+        })
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct AmkrUnifiedModelResponse {
+    #[serde(default)]
+    pub unified_model: Option<AmkrUnifiedModel>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
 pub struct AmkrRoutesResponse {
     pub config_revision: String,
     pub routes: Vec<AmkrRoute>,
@@ -117,6 +217,67 @@ pub fn get_providers(connection: &AmkrConnection) -> Result<AmkrProvidersRespons
 
 pub fn get_routes(connection: &AmkrConnection) -> Result<AmkrRoutesResponse, String> {
     get_json(connection, "/api/routes", "模型路由")
+}
+
+pub fn get_models(connection: &AmkrConnection) -> Result<AmkrModelsResponse, String> {
+    get_json(connection, "/api/models", "模型")
+}
+
+pub fn get_unified_model(connection: &AmkrConnection) -> Result<AmkrUnifiedModelResponse, String> {
+    get_json(connection, "/api/unified-model", "统一模型")
+}
+
+pub fn update_unified_model(
+    connection: &AmkrConnection,
+    unified_model: &AmkrUnifiedModel,
+) -> Result<AmkrUnifiedModelResponse, String> {
+    let primary = &unified_model.default.primary;
+    let payload = if unified_model.default.fallback.is_some()
+        || unified_model
+            .image
+            .as_ref()
+            .is_some_and(|plan| plan.fallback.is_some())
+    {
+        serde_json::json!({
+            "default": unified_model.default,
+            "image": unified_model.image,
+        })
+    } else {
+        let mut payload = serde_json::json!({
+            "model": primary.model,
+            "key": primary.key,
+        });
+        if let Some(image) = &unified_model.image {
+            payload["image_model"] = serde_json::Value::String(image.primary.model.clone());
+            payload["image_key"] = image
+                .primary
+                .key
+                .clone()
+                .map(serde_json::Value::String)
+                .unwrap_or(serde_json::Value::Null);
+        }
+        payload
+    };
+    request_json(
+        connection,
+        "PUT",
+        "/api/unified-model",
+        "更新统一模型",
+        Some(payload),
+        &[200],
+    )
+}
+
+pub fn delete_unified_model(connection: &AmkrConnection) -> Result<(), String> {
+    let _: serde_json::Value = request_json(
+        connection,
+        "DELETE",
+        "/api/unified-model",
+        "停用统一模型",
+        None,
+        &[204],
+    )?;
+    Ok(())
 }
 
 pub fn create_provider(

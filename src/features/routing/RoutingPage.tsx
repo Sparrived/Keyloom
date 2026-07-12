@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { createAmkrRoute, deleteAmkrRoute, getAmkrRoutes, updateAmkrRoute, type AmkrRoute, type AmkrRouteTarget, type AmkrRoutesResponse } from "../../api/amkr";
+import { createAmkrRoute, deleteAmkrRoute, getAmkrRoutes, updateAmkrRoute, type AmkrRoute, type AmkrRouteTarget, type AmkrRoutesResponse, type AmkrUnifiedModel } from "../../api/amkr";
+import { UnifiedModelPanel } from "./UnifiedModelPanel";
 
 const csv = (value: string) => value.split(",").map((item) => item.trim()).filter(Boolean);
 const errorMessage = (reason: unknown) => reason instanceof Error ? reason.message : String(reason);
@@ -21,7 +22,12 @@ const draftFromRoute = (route: AmkrRoute): RouteDraft => ({
   mode: route.routing_mode ?? "round_robin",
 });
 
-export function RoutingPage({ configPath }: { configPath: string | null }) {
+type RoutingPageProps = {
+  configPath: string | null;
+  onUnifiedModelChange?: (unifiedModel: AmkrUnifiedModel | null) => void;
+};
+
+export function RoutingPage({ configPath, onUnifiedModelChange }: RoutingPageProps) {
   const [data, setData] = useState<AmkrRoutesResponse | null>(null);
   const [id, setId] = useState("");
   const [provider, setProvider] = useState("");
@@ -32,6 +38,7 @@ export function RoutingPage({ configPath }: { configPath: string | null }) {
   const [editing, setEditing] = useState<RouteDraft | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [unifiedModelRefreshToken, setUnifiedModelRefreshToken] = useState(0);
 
   const refresh = async () => {
     setLoading(true);
@@ -47,6 +54,7 @@ export function RoutingPage({ configPath }: { configPath: string | null }) {
       await createAmkrRoute(data.config_revision, id, provider, pool, model, csv(aliases), mode || null, configPath);
       setId(""); setProvider(""); setPool(""); setModel(""); setAliases("");
       await refresh();
+      setUnifiedModelRefreshToken((value) => value + 1);
     } catch (reason) {
       const message = errorMessage(reason);
       if (isConflict(message)) await refresh();
@@ -60,6 +68,7 @@ export function RoutingPage({ configPath }: { configPath: string | null }) {
       await updateAmkrRoute(data.config_revision, editing.originalId, editing.id, editing.targets, csv(editing.aliases), editing.mode || null, configPath);
       setEditing(null);
       await refresh();
+      setUnifiedModelRefreshToken((value) => value + 1);
     } catch (reason) {
       const message = errorMessage(reason);
       if (isConflict(message)) await refresh();
@@ -69,7 +78,7 @@ export function RoutingPage({ configPath }: { configPath: string | null }) {
 
   const remove = async (routeId: string) => {
     if (!data || !window.confirm(`删除模型路由 ${routeId}？`)) return;
-    try { await deleteAmkrRoute(data.config_revision, routeId, configPath); await refresh(); }
+    try { await deleteAmkrRoute(data.config_revision, routeId, configPath); await refresh(); setUnifiedModelRefreshToken((value) => value + 1); }
     catch (reason) {
       const message = errorMessage(reason);
       if (isConflict(message)) await refresh();
@@ -85,6 +94,7 @@ export function RoutingPage({ configPath }: { configPath: string | null }) {
 
   return <section className="routes-page" aria-labelledby="routes-heading">
     <header className="page-header"><div><h2 id="routes-heading">模型路由</h2><p>管理模型别名、路由模式和上游目标。</p></div>{data ? <span className="config-revision">版本 {data.config_revision.slice(0, 12)}</span> : null}</header>
+    <UnifiedModelPanel configPath={configPath} refreshToken={unifiedModelRefreshToken} onChange={onUnifiedModelChange} />
     <form className="route-create" onSubmit={(event) => { event.preventDefault(); void create(); }}>
       <label>模型 ID<input required value={id} onChange={(event) => setId(event.target.value)} /></label>
       <label>供应商<input required value={provider} onChange={(event) => setProvider(event.target.value)} /></label>

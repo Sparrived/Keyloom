@@ -93,6 +93,37 @@ pub fn get_amkr_routes(
     amkr::client::get_routes(&instance.connection)
 }
 
+pub fn get_amkr_models(
+    selected_path: Option<&Path>,
+) -> Result<amkr::client::AmkrModelsResponse, String> {
+    let instance = amkr::discover_from_paths(selected_path, &default_config_path())
+        .map_err(|error| error.to_string())?;
+    amkr::client::get_models(&instance.connection)
+}
+
+pub fn get_amkr_unified_model(
+    selected_path: Option<&Path>,
+) -> Result<amkr::client::AmkrUnifiedModelResponse, String> {
+    let instance = amkr::discover_from_paths(selected_path, &default_config_path())
+        .map_err(|error| error.to_string())?;
+    amkr::client::get_unified_model(&instance.connection)
+}
+
+pub fn update_amkr_unified_model(
+    selected_path: Option<&Path>,
+    unified_model: &amkr::client::AmkrUnifiedModel,
+) -> Result<amkr::client::AmkrUnifiedModelResponse, String> {
+    let instance = amkr::discover_from_paths(selected_path, &default_config_path())
+        .map_err(|error| error.to_string())?;
+    amkr::client::update_unified_model(&instance.connection, unified_model)
+}
+
+pub fn delete_amkr_unified_model(selected_path: Option<&Path>) -> Result<(), String> {
+    let instance = amkr::discover_from_paths(selected_path, &default_config_path())
+        .map_err(|error| error.to_string())?;
+    amkr::client::delete_unified_model(&instance.connection)
+}
+
 pub fn create_amkr_provider(selected_path: Option<&Path>, config_revision: &str, id: &str, base_url: &str) -> Result<amkr::client::AmkrProviderResponse, String> {
     let default_path = default_config_path();
     let instance = amkr::discover_from_paths(selected_path, &default_path).map_err(|error| error.to_string())?;

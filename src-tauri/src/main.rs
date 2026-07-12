@@ -46,6 +46,46 @@ fn get_amkr_routes(
 }
 
 #[tauri::command]
+fn get_amkr_models(
+    config_path: Option<String>,
+) -> Result<keyloom_core::amkr::client::AmkrModelsResponse, String> {
+    keyloom_core::get_amkr_models(config_path.as_deref().map(Path::new))
+}
+
+#[tauri::command]
+fn get_amkr_unified_model(
+    config_path: Option<String>,
+) -> Result<keyloom_core::amkr::client::AmkrUnifiedModelResponse, String> {
+    keyloom_core::get_amkr_unified_model(config_path.as_deref().map(Path::new))
+}
+
+#[tauri::command]
+fn update_amkr_unified_model(
+    config_path: Option<String>,
+    model: String,
+    key: Option<String>,
+    fallback: Option<keyloom_core::amkr::client::AmkrUnifiedTarget>,
+    image: Option<keyloom_core::amkr::client::AmkrUnifiedPlan>,
+) -> Result<keyloom_core::amkr::client::AmkrUnifiedModelResponse, String> {
+    let unified_model = keyloom_core::amkr::client::AmkrUnifiedModel {
+        default: keyloom_core::amkr::client::AmkrUnifiedPlan {
+            primary: keyloom_core::amkr::client::AmkrUnifiedTarget { model, key },
+            fallback,
+        },
+        image,
+    };
+    keyloom_core::update_amkr_unified_model(
+        config_path.as_deref().map(Path::new),
+        &unified_model,
+    )
+}
+
+#[tauri::command]
+fn delete_amkr_unified_model(config_path: Option<String>) -> Result<(), String> {
+    keyloom_core::delete_amkr_unified_model(config_path.as_deref().map(Path::new))
+}
+
+#[tauri::command]
 fn create_amkr_provider(config_path: Option<String>, config_revision: String, id: String, base_url: String) -> Result<keyloom_core::amkr::client::AmkrProviderResponse, String> {
     keyloom_core::create_amkr_provider(config_path.as_deref().map(Path::new), &config_revision, &id, &base_url)
 }
@@ -231,6 +271,10 @@ fn main() {
             read_amkr_log_tail,
             get_amkr_providers,
             get_amkr_routes,
+            get_amkr_models,
+            get_amkr_unified_model,
+            update_amkr_unified_model,
+            delete_amkr_unified_model,
             create_amkr_provider,
             update_amkr_provider,
             delete_amkr_provider,

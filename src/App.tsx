@@ -9,6 +9,7 @@ import {
   type AmkrMetadata,
   type AmkrServiceCommandResult,
   type AmkrServiceAction,
+  type AmkrUnifiedModel,
 } from "./api/amkr";
 import { UsageChart, type UsageMetric } from "./features/overview/UsageChart";
 import { appendMetricSnapshot, type MetricSnapshot } from "./features/overview/useMetricHistory";
@@ -134,7 +135,9 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
       : "正在查找服务";
   const serviceTone = health?.status === "ok" ? "good" : healthError || discoveryError ? "bad" : "muted";
   const serviceRunning = health?.status === "ok";
-  const unifiedModel = health?.unified_model?.default?.primary?.model ?? "未设置";
+  const unifiedTarget = health?.unified_model?.default?.primary;
+  const unifiedModel = unifiedTarget?.model ?? "未设置";
+  const unifiedModelRouting = unifiedTarget?.key ? `固定 Key · ${unifiedTarget.key}` : unifiedTarget ? "自动路由" : "尚未配置统一路由";
   const latestSnapshot = metricHistory.at(-1);
 
   async function waitForServiceHealth() {
@@ -205,6 +208,10 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
     setSelectedConfigPath(normalized);
   }
 
+  function applyUnifiedModel(unifiedModel: AmkrUnifiedModel | null) {
+    setHealth((current) => current ? { ...current, unified_model: unifiedModel } : current);
+  }
+
   return (
     <main className="app-shell">
       <aside aria-label="主导航" className="sidebar">
@@ -257,9 +264,9 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
             </header>
             <div className="overview-cards">
               <section className="overview-card unified-model-card" aria-labelledby="unified-model-heading">
-                <div className="card-heading"><h3 id="unified-model-heading">统一模型</h3><button type="button">切换</button></div>
+                <div className="card-heading"><h3 id="unified-model-heading">统一模型</h3><button type="button" onClick={() => setActivePage("模型路由")}>切换</button></div>
                 <strong>{unifiedModel}</strong>
-                <p>{unifiedModel === "未设置" ? "尚未配置统一路由" : "自动路由"}</p>
+                <p>{unifiedModelRouting}</p>
                 <span className={health?.status === "ok" ? "status-good" : "status-muted"}>{serviceState}</span>
               </section>
               <section className="overview-card" aria-labelledby="metrics-heading">
@@ -311,7 +318,7 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
             {serviceCommandOutput ? <pre className="service-command-output">{serviceCommandOutput}</pre> : null}
             {serviceActionError ? <p className="service-action-error">服务操作失败: {serviceActionError}</p> : null}
           </section>
-        ) : activePage === "供应商" ? <ProvidersPage configPath={selectedConfigPath} /> : activePage === "模型路由" ? <RoutingPage configPath={selectedConfigPath} /> : activePage === "活动" ? <ActivityPage configPath={selectedConfigPath} history={metricHistory} />
+        ) : activePage === "供应商" ? <ProvidersPage configPath={selectedConfigPath} /> : activePage === "模型路由" ? <RoutingPage configPath={selectedConfigPath} onUnifiedModelChange={applyUnifiedModel} /> : activePage === "活动" ? <ActivityPage configPath={selectedConfigPath} history={metricHistory} />
           : activePage === "集成" ? <IntegrationsPage baseUrl={metadata?.base_url ?? null} authEnabled={metadata?.auth_enabled ?? false} />
             : <SettingsPage configPath={selectedConfigPath} metadata={metadata} onConfigPathChange={applyConfigPath} />}
       </section>
