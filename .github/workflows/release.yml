@@ -48,6 +48,9 @@ jobs:
         working-directory: src-tauri
       - run: npm run build
       - run: npm run test:e2e
+      - name: Verify native Windows contracts
+        shell: pwsh
+        run: ./tests/windows-subsystem-contract.ps1
 
       - name: Prepare pinned private runtime
         if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
@@ -91,6 +94,11 @@ jobs:
       - name: Build unsigned NSIS verification artifact
         if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
         run: npx tauri build --bundles nsis --ci --no-sign
+
+      - name: Verify packaged Windows subsystem
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        run: ./tests/windows-subsystem-contract.ps1 -ExecutablePath 'src-tauri/target/release/keyloom-core.exe'
 
       - name: Record installer SHA-256
         if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
