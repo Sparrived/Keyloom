@@ -55,6 +55,16 @@ describe("appendMetricSnapshot", () => {
     expect(result.at(-1)).toMatchObject({ timestamp: "2026-07-12T11:00:00.000Z" });
   });
 
+  it("replaces the last snapshot when two samples share a timestamp", () => {
+    const timestamp = "2026-07-12T10:00:00.000Z";
+    const first = appendMetricSnapshot([], metrics, timestamp);
+    const result = appendMetricSnapshot(first, { total: { ...metrics.total, requests: 99 } }, timestamp);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ timestamp, requests: 99 });
+    expect(first[0]).toMatchObject({ timestamp, requests: 12 });
+  });
+
   it("does not mutate the supplied history or samples", () => {
     const history = [
       {

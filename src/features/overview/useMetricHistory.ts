@@ -24,5 +24,8 @@ export function appendMetricSnapshot(
     completion_tokens: metrics.total.completion_tokens ?? null,
   };
 
+  if (history.at(-1)?.timestamp === timestamp) {
+    return [...history.slice(0, -1), snapshot];
+  }
   return [...history, snapshot].slice(-240);
 }

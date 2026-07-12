@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   controlAmkr,
   discoverAmkr,
@@ -46,6 +46,8 @@ type AppProps = {
 
 export default function App({ now = () => new Date().toISOString() }: AppProps) {
   const [activePage, setActivePage] = useState<NavigationItem>("概览");
+  const activePageRef = useRef<NavigationItem>(activePage);
+  activePageRef.current = activePage;
   const [selectedConfigPath, setSelectedConfigPath] = useState<string | null>(() => localStorage.getItem(configPathStorageKey));
   const [trendMetric, setTrendMetric] = useState<UsageMetric>("请求");
   const [metadata, setMetadata] = useState<AmkrMetadata | null>(null);
@@ -111,7 +113,9 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
         await refreshHealth();
         await refreshMetrics();
         healthPoll = window.setInterval(() => void refreshHealth(), 5_000);
-        metricsPoll = window.setInterval(() => void refreshMetrics(), 15_000);
+        metricsPoll = window.setInterval(() => {
+          if (activePageRef.current !== "活动") void refreshMetrics();
+        }, 15_000);
       } catch (error: unknown) {
         if (!cancelled) {
           setMetadata(null);
@@ -133,6 +137,29 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
       }
     };
   }, [selectedConfigPath]);
+
+  useEffect(() => {
+    if (activePage !== "活动" || !metadata) return;
+    let cancelled = false;
+    const refreshMetrics = async () => {
+      try {
+        const metricsResult = await getAmkrMetrics(selectedConfigPath);
+        if (!cancelled && metricsResult?.total) {
+          setMetrics(metricsResult);
+          setMetricsError(null);
+          setMetricHistory((history) => appendMetricSnapshot(history, metricsResult, now()));
+        }
+      } catch (error: unknown) {
+        if (!cancelled) setMetricsError(error instanceof Error ? error.message : String(error));
+      }
+    };
+    void refreshMetrics();
+    const interval = window.setInterval(() => void refreshMetrics(), 2_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [activePage, metadata?.config_path, selectedConfigPath]);
 
   const configMismatch = Boolean(
     metadata?.config_path

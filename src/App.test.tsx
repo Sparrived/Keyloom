@@ -407,6 +407,44 @@ describe("Keyloom application shell", () => {
     vi.useRealTimers();
   });
 
+  it("refreshes metrics every two seconds only while the activity page is open", async () => {
+    vi.useFakeTimers();
+    invokeMock.mockReset();
+    let metricReads = 0;
+    invokeMock.mockImplementation(async (command) => {
+      if (command === "discover_amkr") return {
+        config_path: "C:/config.json",
+        base_url: "http://127.0.0.1:18900",
+        metrics_db_path: null,
+        log_file_path: null,
+        auth_enabled: true,
+      };
+      if (command === "get_amkr_health") return { status: "ok", local_auth_enabled: true };
+      if (command === "get_amkr_metrics") {
+        metricReads += 1;
+        return { total: { requests: metricReads, total_tokens: 0, cached_token_rate: 0, avg_duration_ms: 0 } };
+      }
+      if (command === "read_amkr_log_tail") return "";
+      return undefined;
+    });
+
+    render(<App />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(metricReads).toBe(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "活动" }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(metricReads).toBe(2);
+    await act(async () => { await vi.advanceTimersByTimeAsync(4_001); });
+    expect(metricReads).toBe(4);
+
+    fireEvent.click(screen.getByRole("button", { name: "概览" }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(4_001); });
+    expect(metricReads).toBe(4);
+    await act(async () => { await vi.advanceTimersByTimeAsync(7_001); });
+    expect(metricReads).toBe(5);
+  });
+
   it("shows a disconnected state when a health refresh fails", async () => {
     vi.useFakeTimers();
     invokeMock.mockReset();
