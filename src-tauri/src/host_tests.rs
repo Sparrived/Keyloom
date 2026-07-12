@@ -164,6 +164,30 @@ fn executes_service_actions_only_for_the_discovered_config_path() {
 }
 
 #[test]
+fn runs_registered_task_actions_without_a_config_file() {
+    let missing = std::env::temp_dir().join("keyloom-missing-service-config.json");
+    let _ = fs::remove_file(&missing);
+
+    let results = crate::execute_amkr_service_from_paths(
+        ServiceAction::Start,
+        None,
+        &missing,
+        |command| {
+            assert_eq!(command, ["schtasks", "/Run", "/TN", WINDOWS_TASK_NAME]);
+            Ok(TaskCommandResult {
+                command: command.to_vec(),
+                exit_code: 0,
+                stdout: String::new(),
+                stderr: String::new(),
+            })
+        },
+    )
+    .unwrap();
+
+    assert_eq!(results.len(), 1);
+}
+
+#[test]
 fn reads_only_the_tail_of_the_discovered_amkr_log() {
     let log_path = std::env::temp_dir().join("keyloom-activity.log");
     let config_path = std::env::temp_dir().join("keyloom-activity-config.json");

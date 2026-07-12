@@ -335,14 +335,26 @@ pub fn execute_amkr_service_from_paths<F>(
 where
     F: FnMut(&[String]) -> Result<windows_service::TaskCommandResult, String>,
 {
-    let instance = amkr::discover_from_paths(selected_path, default_path)
-        .map_err(|error| error.to_string())?;
+    let config_path = service_action_config_path(action, selected_path, default_path)?;
     windows_service::execute_task_commands(
         action,
         Path::new("amkr"),
-        &instance.config_path,
+        &config_path,
         runner,
     )
+}
+
+fn service_action_config_path(
+    action: windows_service::ServiceAction,
+    selected_path: Option<&Path>,
+    default_path: &Path,
+) -> Result<PathBuf, String> {
+    if action != windows_service::ServiceAction::InstallUser {
+        return Ok(PathBuf::new());
+    }
+    amkr::discover_from_paths(selected_path, default_path)
+        .map(|instance| instance.config_path)
+        .map_err(|error| error.to_string())
 }
 
 pub fn run_amkr_service(
@@ -350,14 +362,13 @@ pub fn run_amkr_service(
     selected_path: Option<&Path>,
 ) -> Result<Vec<windows_service::TaskCommandResult>, String> {
     let default_path = default_config_path();
-    let instance = amkr::discover_from_paths(selected_path, &default_path)
-        .map_err(|error| error.to_string())?;
+    let config_path = service_action_config_path(action, selected_path, &default_path)?;
     let program = if action == windows_service::ServiceAction::InstallUser {
         installer::private_runtime_service_program()?
     } else {
         windows_service::ServiceProgram::executable("amkr")
     };
-    windows_service::run_task_action_for_program(action, &program, &instance.config_path)
+    windows_service::run_task_action_for_program(action, &program, &config_path)
 }
 
 #[cfg(test)]
