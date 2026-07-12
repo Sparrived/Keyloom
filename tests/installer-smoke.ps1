@@ -19,11 +19,13 @@ if (-not $InstallStatePath) {
 
 $runtime = [IO.Path]::GetFullPath($RuntimeDirectory)
 $statePath = [IO.Path]::GetFullPath($InstallStatePath)
+$repoRoot = Split-Path -Parent $PSScriptRoot
+$contractScript = Join-Path $repoRoot 'scripts\verify-amkr-contract.py'
 $python = Join-Path $runtime 'python.exe'
 $pythonw = Join-Path $runtime 'pythonw.exe'
 $module = Join-Path $runtime 'Lib\site-packages\auto_model_key_router\__init__.py'
 
-foreach ($requiredFile in @($python, $pythonw, $module, $statePath)) {
+foreach ($requiredFile in @($python, $pythonw, $module, $statePath, $contractScript)) {
     if (-not (Test-Path -LiteralPath $requiredFile -PathType Leaf)) {
         throw "Required runtime file is missing: $requiredFile"
     }
@@ -58,6 +60,11 @@ if ($smoke.amkr_version -ne $state.amkr_version) {
 }
 if ([IO.Path]::GetFullPath($smoke.executable) -ne [IO.Path]::GetFullPath($python)) {
     throw "Smoke test used an unexpected Python executable: $($smoke.executable)."
+}
+
+& $python -I $contractScript
+if ($LASTEXITCODE -ne 0) {
+    throw 'Private runtime AMKR management API contract failed.'
 }
 
 [PSCustomObject]@{
