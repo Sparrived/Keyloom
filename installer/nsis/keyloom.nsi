@@ -12,13 +12,28 @@
 !macroend
 
 !macro NSIS_HOOK_PREINSTALL
+  FindWindow $0 "" "Keyloom"
+  ${If} $0 != 0
+    Abort "请先关闭 Keyloom 后再升级。"
+  ${EndIf}
   ${If} ${FileExists} "$INSTDIR\runtime\python.exe"
     RMDir /r "$INSTDIR\runtime.previous"
+    ClearErrors
     Rename "$INSTDIR\runtime" "$INSTDIR\runtime.previous"
+    ${If} ${Errors}
+      Abort "无法备份现有 Keyloom 私有运行时。"
+    ${EndIf}
   ${EndIf}
   ${If} ${FileExists} "$LOCALAPPDATA\Keyloom\install-state.json"
     Delete "$LOCALAPPDATA\Keyloom\install-state.json.previous"
+    ClearErrors
     Rename "$LOCALAPPDATA\Keyloom\install-state.json" "$LOCALAPPDATA\Keyloom\install-state.json.previous"
+    ${If} ${Errors}
+      ${If} ${FileExists} "$INSTDIR\runtime.previous\python.exe"
+        Rename "$INSTDIR\runtime.previous" "$INSTDIR\runtime"
+      ${EndIf}
+      Abort "无法备份现有 Keyloom 安装状态。"
+    ${EndIf}
   ${EndIf}
 !macroend
 

@@ -42,6 +42,9 @@ if ($hook -notmatch [Regex]::Escape('$LOCALAPPDATA\Keyloom\install-state.json'))
 if ($hook -match 'AutoModelKeyRouter') {
     throw 'NSIS hooks must never modify the shared AMKR config directory.'
 }
+if ($hook -notmatch 'FindWindow\s+\$0\s+""\s+"Keyloom"') {
+    throw 'NSIS preinstall hook must reject upgrades while the Keyloom window is open.'
+}
 
 [PSCustomObject]@{
     status = 'PASS'
