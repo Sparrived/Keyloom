@@ -21,6 +21,7 @@ import { RoutingPage } from "./features/routing/RoutingPage";
 const primaryNavigation = ["概览", "供应商", "模型路由", "活动", "集成", "设置"] as const;
 const navigation = [...primaryNavigation, "服务状态"] as const;
 type NavigationItem = (typeof navigation)[number];
+const configPathStorageKey = "keyloom.configPath";
 function formatCount(value: number) {
   return new Intl.NumberFormat("zh-CN").format(value);
 }
@@ -39,7 +40,7 @@ type AppProps = {
 
 export default function App({ now = () => new Date().toISOString() }: AppProps) {
   const [activePage, setActivePage] = useState<NavigationItem>("概览");
-  const [selectedConfigPath, setSelectedConfigPath] = useState<string | null>(null);
+  const [selectedConfigPath, setSelectedConfigPath] = useState<string | null>(() => localStorage.getItem(configPathStorageKey));
   const [trendMetric, setTrendMetric] = useState<UsageMetric>("请求");
   const [metadata, setMetadata] = useState<AmkrMetadata | null>(null);
   const [health, setHealth] = useState<AmkrHealth | null>(null);
@@ -158,6 +159,16 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
       .join("\n\n");
   }
 
+  function applyConfigPath(configPath: string | null) {
+    const normalized = configPath?.trim() || null;
+    if (normalized) {
+      localStorage.setItem(configPathStorageKey, normalized);
+    } else {
+      localStorage.removeItem(configPathStorageKey);
+    }
+    setSelectedConfigPath(normalized);
+  }
+
   return (
     <main className="app-shell">
       <aside aria-label="主导航" className="sidebar">
@@ -266,7 +277,7 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
           </section>
         ) : activePage === "供应商" ? <ProvidersPage configPath={selectedConfigPath} /> : activePage === "模型路由" ? <RoutingPage configPath={selectedConfigPath} /> : activePage === "活动" ? <ActivityPage configPath={selectedConfigPath} history={metricHistory} />
           : activePage === "集成" ? <IntegrationsPage baseUrl={metadata?.base_url ?? null} authEnabled={metadata?.auth_enabled ?? false} />
-            : <SettingsPage configPath={selectedConfigPath} metadata={metadata} onConfigPathChange={setSelectedConfigPath} />}
+            : <SettingsPage configPath={selectedConfigPath} metadata={metadata} onConfigPathChange={applyConfigPath} />}
       </section>
     </main>
   );

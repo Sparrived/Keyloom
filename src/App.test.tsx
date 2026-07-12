@@ -12,6 +12,7 @@ const invokeMock = vi.mocked(invoke);
 
 describe("Keyloom application shell", () => {
   beforeEach(() => {
+    localStorage.clear();
     invokeMock.mockReset();
     invokeMock
       .mockResolvedValueOnce({
@@ -185,6 +186,24 @@ describe("Keyloom application shell", () => {
 
     expect(await screen.findByText("http://127.0.0.1:19000")).toBeInTheDocument();
     expect(invokeMock).toHaveBeenCalledWith("discover_amkr", { configPath: "D:/amkr/custom.json" });
+    expect(localStorage.getItem("keyloom.configPath")).toBe("D:/amkr/custom.json");
+  });
+
+  it("uses the remembered AMKR config path at startup", async () => {
+    localStorage.setItem("keyloom.configPath", "D:/amkr/remembered.json");
+    invokeMock.mockReset();
+    invokeMock.mockImplementation(async (command, args) => {
+      const configPath = (args as { configPath?: string | null } | undefined)?.configPath;
+      if (command === "discover_amkr") return { config_path: configPath, base_url: "http://127.0.0.1:19100", metrics_db_path: null, log_file_path: null, auth_enabled: true };
+      if (command === "get_amkr_health") return { status: "ok", local_auth_enabled: true };
+      if (command === "get_amkr_metrics") return { total: { requests: 0, total_tokens: 0, cached_token_rate: 0, avg_duration_ms: 0 } };
+      return undefined;
+    });
+
+    render(<App />);
+
+    expect(await screen.findByText("http://127.0.0.1:19100")).toBeInTheDocument();
+    expect(invokeMock).toHaveBeenCalledWith("discover_amkr", { configPath: "D:/amkr/remembered.json" });
   });
 
   it("selects a usage trend metric", async () => {
