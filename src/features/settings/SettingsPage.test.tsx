@@ -108,11 +108,29 @@ describe("SettingsPage", () => {
       visitor_feature_installed: true,
       visitor_access_enabled: true,
       visitor_key_count: 2,
+      native_endpoint_summary: { supported: 2, fallback: 1, unknown: 1 },
     }} onConfigPathChange={() => undefined} />);
 
     expect(screen.getByText("本地 API Key 指纹")).toBeInTheDocument();
     expect(screen.getByText("65bbff9a6cb9")).toBeInTheDocument();
     expect(screen.getByText("已配置 2 个模型")).toBeInTheDocument();
     expect(screen.getByText("访客访问：已启用（2 个 Key）")).toBeInTheDocument();
+    expect(screen.getByText("原生可用 2 · 兼容回退 1 · 未识别 1")).toBeInTheDocument();
+  });
+
+  it("distinguishes an empty native endpoint cache from an unavailable summary", () => {
+    const { rerender } = render(<SettingsPage configPath={null} metadata={metadata} health={{
+      status: "ok",
+      local_auth_enabled: true,
+      native_endpoint_summary: { supported: 0, fallback: 0, unknown: 0 },
+    }} onConfigPathChange={() => undefined} />);
+
+    expect(screen.getByText("尚无探测缓存")).toBeInTheDocument();
+
+    rerender(<SettingsPage configPath={null} metadata={metadata} health={{
+      status: "ok",
+      local_auth_enabled: true,
+    }} onConfigPathChange={() => undefined} />);
+    expect(screen.getByText("服务未提供")).toBeInTheDocument();
   });
 });

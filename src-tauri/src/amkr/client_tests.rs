@@ -72,7 +72,12 @@ fn reads_rich_health_capabilities_without_returning_secret_values() {
           "visitor_feature_installed":true,
           "visitor_access_enabled":true,
           "visitor_key_count":2,
-          "native_endpoint_states":{"model-a":"ready"}
+          "native_endpoint_states":{
+            "https://upstream-secret.example|v1/messages":{"supported":true,"reason":"secret-reason"},
+            "https://fallback.example|v1/responses":{"supported":false,"reason":"unsupported"},
+            "https://legacy.example":true,
+            "https://unknown.example":"secret-unknown"
+          }
         }"#,
     )
     .unwrap();
@@ -82,8 +87,14 @@ fn reads_rich_health_capabilities_without_returning_secret_values() {
     assert!(health.visitor_feature_installed);
     assert!(health.visitor_access_enabled);
     assert_eq!(health.visitor_key_count, 2);
-    assert!(health.native_endpoint_states.is_some());
-    assert!(!serde_json::to_string(&health).unwrap().contains("secret"));
+    let summary = health.native_endpoint_summary.as_ref().unwrap();
+    assert_eq!(summary.supported, 2);
+    assert_eq!(summary.fallback, 1);
+    assert_eq!(summary.unknown, 1);
+    let serialized = serde_json::to_string(&health).unwrap();
+    assert!(serialized.contains("native_endpoint_summary"));
+    assert!(!serialized.contains("native_endpoint_states"));
+    assert!(!serialized.contains("secret"));
 }
 
 #[test]

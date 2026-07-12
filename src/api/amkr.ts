@@ -23,7 +23,11 @@ export type AmkrHealth = {
   visitor_feature_installed?: boolean;
   visitor_access_enabled?: boolean;
   visitor_key_count?: number;
-  native_endpoint_states?: Record<string, unknown> | null;
+  native_endpoint_summary?: {
+    supported: number;
+    fallback: number;
+    unknown: number;
+  } | null;
   unified_model?: AmkrUnifiedModel | null;
 };
 

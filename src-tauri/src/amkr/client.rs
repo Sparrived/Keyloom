@@ -3,9 +3,44 @@ use std::net::{TcpStream, ToSocketAddrs};
 use std::time::Duration;
 
 use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use super::AmkrConnection;
+
+#[derive(Debug, Default, Serialize)]
+pub struct AmkrNativeEndpointSummary {
+    pub supported: u64,
+    pub fallback: u64,
+    pub unknown: u64,
+}
+
+fn deserialize_native_endpoint_summary<'de, D>(
+    deserializer: D,
+) -> Result<Option<AmkrNativeEndpointSummary>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    let Some(states) = value.as_object() else {
+        return Ok(None);
+    };
+    let mut summary = AmkrNativeEndpointSummary::default();
+    for state in states.values() {
+        let supported = match state {
+            serde_json::Value::Bool(value) => Some(*value),
+            serde_json::Value::Object(value) => {
+                value.get("supported").and_then(serde_json::Value::as_bool)
+            }
+            _ => None,
+        };
+        match supported {
+            Some(true) => summary.supported += 1,
+            Some(false) => summary.fallback += 1,
+            None => summary.unknown += 1,
+        }
+    }
+    Ok(Some(summary))
+}
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct AmkrHealth {
@@ -23,8 +58,16 @@ pub struct AmkrHealth {
     pub visitor_access_enabled: bool,
     #[serde(default)]
     pub visitor_key_count: u64,
-    #[serde(default)]
-    pub native_endpoint_states: Option<serde_json::Value>,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_native_endpoint_summary",
+        rename(
+            deserialize = "native_endpoint_states",
+            serialize = "native_endpoint_summary"
+        ),
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub native_endpoint_summary: Option<AmkrNativeEndpointSummary>,
     #[serde(default)]
     pub unified_model: Option<AmkrUnifiedModel>,
 }

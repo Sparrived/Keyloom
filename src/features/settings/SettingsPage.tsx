@@ -8,6 +8,14 @@ type SettingsPageProps = {
   onConfigPathChange: (configPath: string | null) => void;
 };
 
+function formatNativeEndpointSummary(summary: AmkrHealth["native_endpoint_summary"]) {
+  if (!summary) return "服务未提供";
+  if (summary.supported + summary.fallback + summary.unknown === 0) return "尚无探测缓存";
+  const parts = [`原生可用 ${summary.supported}`, `兼容回退 ${summary.fallback}`];
+  if (summary.unknown > 0) parts.push(`未识别 ${summary.unknown}`);
+  return parts.join(" · ");
+}
+
 export function SettingsPage({ configPath, metadata, health = null, onConfigPathChange }: SettingsPageProps) {
   const [draftConfigPath, setDraftConfigPath] = useState(configPath ?? metadata?.config_path ?? "");
   const [transfer, setTransfer] = useState("");
@@ -51,6 +59,7 @@ export function SettingsPage({ configPath, metadata, health = null, onConfigPath
         <div><dt>本地鉴权</dt><dd>{metadata.auth_enabled ? "已启用" : "未启用"}</dd></div>
         <div><dt>本地 API Key 指纹</dt><dd>{health?.local_api_key_fingerprint ?? "暂不可用"}</dd></div>
         <div><dt>模型能力</dt><dd>{health?.models ? `已配置 ${health.models.length} 个模型` : "暂不可用"}</dd></div>
+        <div><dt>原生端点缓存</dt><dd>{formatNativeEndpointSummary(health?.native_endpoint_summary)}</dd></div>
         <div><dt>访客访问</dt><dd>{health?.visitor_feature_installed ? `访客访问：${health.visitor_access_enabled ? "已启用" : "未启用"}（${health.visitor_key_count ?? 0} 个 Key）` : "功能未安装"}</dd></div>
         <div><dt>请求超时</dt><dd>{metadata.request_timeout == null ? "未配置" : `${metadata.request_timeout} 秒`}</dd></div>
         <div><dt>流式首字节超时</dt><dd>{metadata.stream_first_byte_timeout == null ? "未配置" : `${metadata.stream_first_byte_timeout} 秒`}</dd></div>
