@@ -4,12 +4,16 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 const INSTALL_STATE_SCHEMA_VERSION: u32 = 1;
+const INSTALL_STATE_OWNER: &str = "com.keyloom.app";
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct InstallState {
     schema_version: u32,
+    owner: String,
+    python_version: String,
     amkr_version: String,
-    runtime_sha256: String,
+    amkr_wheel_sha256: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -23,10 +27,12 @@ pub struct RuntimeInstallationStatus {
     pub runtime_dir: String,
     pub state_path: String,
     pub python_available: bool,
+    pub pythonw_available: bool,
     pub amkr_package_available: bool,
     pub private_runtime_installed: bool,
+    pub python_version: Option<String>,
     pub amkr_version: Option<String>,
-    pub runtime_sha256: Option<String>,
+    pub amkr_wheel_sha256: Option<String>,
     pub diagnostic: Option<String>,
 }
 
@@ -40,26 +46,34 @@ pub fn install_paths(local_app_data: &Path) -> InstallPaths {
     }
 }
 
-pub fn default_install_paths() -> InstallPaths {
-    let local_app_data = std::env::var_os("LOCALAPPDATA")
-        .or_else(|| std::env::var_os("APPDATA"))
+pub fn default_install_paths() -> Option<InstallPaths> {
+    std::env::var_os("LOCALAPPDATA")
+        .filter(|value| !value.is_empty())
         .map(PathBuf::from)
-        .or_else(|| {
-            std::env::var_os("USERPROFILE")
-                .map(PathBuf::from)
-                .map(|home| home.join("AppData").join("Local"))
-        })
-        .unwrap_or_else(|| PathBuf::from("."));
-    install_paths(&local_app_data)
+        .map(|local_app_data| install_paths(&local_app_data))
 }
 
 pub fn get_runtime_installation_status() -> RuntimeInstallationStatus {
-    let paths = default_install_paths();
-    detect_private_runtime(&paths.runtime_dir, &paths.state_path)
+    match default_install_paths() {
+        Some(paths) => detect_private_runtime(&paths.runtime_dir, &paths.state_path),
+        None => RuntimeInstallationStatus {
+            runtime_dir: String::new(),
+            state_path: String::new(),
+            python_available: false,
+            pythonw_available: false,
+            amkr_package_available: false,
+            private_runtime_installed: false,
+            python_version: None,
+            amkr_version: None,
+            amkr_wheel_sha256: None,
+            diagnostic: Some("无法确定本机 LOCALAPPDATA 目录".to_owned()),
+        },
+    }
 }
 
 pub fn detect_private_runtime(runtime_dir: &Path, state_path: &Path) -> RuntimeInstallationStatus {
     let python_available = runtime_dir.join("python.exe").is_file();
+    let pythonw_available = runtime_dir.join("pythonw.exe").is_file();
     let amkr_package_available = runtime_dir
         .join("Lib")
         .join("site-packages")
@@ -70,15 +84,17 @@ pub fn detect_private_runtime(runtime_dir: &Path, state_path: &Path) -> RuntimeI
         runtime_dir: runtime_dir.to_string_lossy().into_owned(),
         state_path: state_path.to_string_lossy().into_owned(),
         python_available,
+        pythonw_available,
         amkr_package_available,
         private_runtime_installed: false,
+        python_version: None,
         amkr_version: None,
-        runtime_sha256: None,
+        amkr_wheel_sha256: None,
         diagnostic: None,
     };
 
-    if !python_available || !amkr_package_available {
-        if python_available || amkr_package_available || state_path.exists() {
+    if !python_available || !pythonw_available || !amkr_package_available {
+        if python_available || pythonw_available || amkr_package_available || state_path.exists() {
             status.diagnostic = Some("私有运行时文件不完整".to_owned());
         }
         return status;
@@ -98,12 +114,14 @@ pub fn detect_private_runtime(runtime_dir: &Path, state_path: &Path) -> RuntimeI
     let install_state = match serde_json::from_str::<InstallState>(&raw_state) {
         Ok(install_state)
             if install_state.schema_version == INSTALL_STATE_SCHEMA_VERSION
+                && install_state.owner == INSTALL_STATE_OWNER
+                && !install_state.python_version.trim().is_empty()
                 && !install_state.amkr_version.trim().is_empty()
-                && install_state.runtime_sha256.len() == 64
+                && install_state.amkr_wheel_sha256.len() == 64
                 && install_state
-                    .runtime_sha256
+                    .amkr_wheel_sha256
                     .bytes()
-                    .all(|byte| byte.is_ascii_hexdigit()) =>
+                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)) =>
         {
             install_state
         }
@@ -114,8 +132,9 @@ pub fn detect_private_runtime(runtime_dir: &Path, state_path: &Path) -> RuntimeI
     };
 
     status.private_runtime_installed = true;
+    status.python_version = Some(install_state.python_version);
     status.amkr_version = Some(install_state.amkr_version);
-    status.runtime_sha256 = Some(install_state.runtime_sha256.to_ascii_lowercase());
+    status.amkr_wheel_sha256 = Some(install_state.amkr_wheel_sha256);
     status
 }
 
@@ -151,6 +170,7 @@ mod tests {
         fs::create_dir_all(runtime.join("Lib/site-packages/auto_model_key_router")).unwrap();
         fs::create_dir_all(state.parent().unwrap()).unwrap();
         fs::write(runtime.join("python.exe"), b"placeholder").unwrap();
+        fs::write(runtime.join("pythonw.exe"), b"placeholder").unwrap();
         fs::write(
             runtime.join("Lib/site-packages/auto_model_key_router/__init__.py"),
             b"__version__ = '3.1.1'",
@@ -159,7 +179,7 @@ mod tests {
         fs::write(
             &state,
             format!(
-                r#"{{"schema_version":1,"amkr_version":"3.1.1","runtime_sha256":"{}","local_api_key":"secret"}}"#,
+                r#"{{"schema_version":1,"owner":"com.keyloom.app","python_version":"3.12.10","amkr_version":"3.1.1","amkr_wheel_sha256":"{}"}}"#,
                 "a".repeat(64)
             ),
         )
@@ -168,15 +188,16 @@ mod tests {
         let status = detect_private_runtime(&runtime, &state);
 
         assert!(status.python_available);
+        assert!(status.pythonw_available);
         assert!(status.amkr_package_available);
         assert!(status.private_runtime_installed);
+        assert_eq!(status.python_version.as_deref(), Some("3.12.10"));
         assert_eq!(status.amkr_version.as_deref(), Some("3.1.1"));
         assert_eq!(
-            status.runtime_sha256.as_deref(),
+            status.amkr_wheel_sha256.as_deref(),
             Some("a".repeat(64).as_str())
         );
         assert_eq!(status.diagnostic, None);
-        assert!(!serde_json::to_string(&status).unwrap().contains("secret"));
 
         fs::remove_dir_all(root).unwrap();
     }
@@ -199,8 +220,39 @@ mod tests {
         assert!(status.python_available);
         assert!(!status.amkr_package_available);
         assert!(!status.private_runtime_installed);
+        assert_eq!(status.python_version, None);
         assert_eq!(status.amkr_version, None);
-        assert_eq!(status.runtime_sha256, None);
+        assert_eq!(status.amkr_wheel_sha256, None);
+        assert_eq!(status.diagnostic.as_deref(), Some("私有运行时文件不完整"));
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn requires_the_windowless_python_entrypoint_for_service_startup() {
+        let root = temp_root("runtime-without-pythonw");
+        let runtime = root.join("runtime");
+        let state = root.join("install-state.json");
+        fs::create_dir_all(runtime.join("Lib/site-packages/auto_model_key_router")).unwrap();
+        fs::write(runtime.join("python.exe"), b"placeholder").unwrap();
+        fs::write(
+            runtime.join("Lib/site-packages/auto_model_key_router/__init__.py"),
+            b"",
+        )
+        .unwrap();
+        fs::write(
+            &state,
+            format!(
+                r#"{{"schema_version":1,"owner":"com.keyloom.app","python_version":"3.12.10","amkr_version":"3.1.1","amkr_wheel_sha256":"{}"}}"#,
+                "a".repeat(64)
+            ),
+        )
+        .unwrap();
+
+        let status = detect_private_runtime(&runtime, &state);
+
+        assert!(!status.pythonw_available);
+        assert!(!status.private_runtime_installed);
         assert_eq!(status.diagnostic.as_deref(), Some("私有运行时文件不完整"));
 
         fs::remove_dir_all(root).unwrap();
@@ -213,6 +265,7 @@ mod tests {
         let state = root.join("install-state.json");
         fs::create_dir_all(runtime.join("Lib/site-packages/auto_model_key_router")).unwrap();
         fs::write(runtime.join("python.exe"), b"placeholder").unwrap();
+        fs::write(runtime.join("pythonw.exe"), b"placeholder").unwrap();
         fs::write(
             runtime.join("Lib/site-packages/auto_model_key_router/__init__.py"),
             b"",
@@ -224,6 +277,37 @@ mod tests {
 
         assert!(!status.private_runtime_installed);
         assert_eq!(status.diagnostic.as_deref(), Some("安装状态文件无效"));
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rejects_install_state_with_unknown_fields_without_exposing_them() {
+        let root = temp_root("unexpected-runtime-state");
+        let runtime = root.join("runtime");
+        let state = root.join("install-state.json");
+        fs::create_dir_all(runtime.join("Lib/site-packages/auto_model_key_router")).unwrap();
+        fs::write(runtime.join("python.exe"), b"placeholder").unwrap();
+        fs::write(runtime.join("pythonw.exe"), b"placeholder").unwrap();
+        fs::write(
+            runtime.join("Lib/site-packages/auto_model_key_router/__init__.py"),
+            b"",
+        )
+        .unwrap();
+        fs::write(
+            &state,
+            format!(
+                r#"{{"schema_version":1,"owner":"com.keyloom.app","python_version":"3.12.10","amkr_version":"3.1.1","amkr_wheel_sha256":"{}","local_api_key":"secret"}}"#,
+                "a".repeat(64)
+            ),
+        )
+        .unwrap();
+
+        let status = detect_private_runtime(&runtime, &state);
+
+        assert!(!status.private_runtime_installed);
+        assert_eq!(status.diagnostic.as_deref(), Some("安装状态文件无效"));
+        assert!(!serde_json::to_string(&status).unwrap().contains("secret"));
 
         fs::remove_dir_all(root).unwrap();
     }

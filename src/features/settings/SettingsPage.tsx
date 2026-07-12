@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { exportAmkrConfig, getAmkrProviders, importAmkrConfig, type AmkrHealth, type AmkrMetadata } from "../../api/amkr";
+import { exportAmkrConfig, getAmkrProviders, getRuntimeInstallationStatus, importAmkrConfig, type AmkrHealth, type AmkrMetadata, type RuntimeInstallationStatus } from "../../api/amkr";
 
 type SettingsPageProps = {
   configPath: string | null;
@@ -22,7 +22,17 @@ export function SettingsPage({ configPath, metadata, health = null, onConfigPath
   const [transferAction, setTransferAction] = useState<"export" | "import" | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [runtimeStatus, setRuntimeStatus] = useState<RuntimeInstallationStatus | null>(null);
+  const [runtimeLoading, setRuntimeLoading] = useState(true);
+  const [runtimeError, setRuntimeError] = useState<string | null>(null);
   useEffect(() => setDraftConfigPath(configPath ?? metadata?.config_path ?? ""), [configPath, metadata?.config_path]);
+  const refreshRuntimeStatus = async () => {
+    setRuntimeLoading(true); setRuntimeError(null);
+    try { setRuntimeStatus(await getRuntimeInstallationStatus()); }
+    catch (reason) { setRuntimeError(reason instanceof Error ? reason.message : String(reason)); }
+    finally { setRuntimeLoading(false); }
+  };
+  useEffect(() => { void refreshRuntimeStatus(); }, []);
   const exportConfig = async () => {
     setTransferAction("export"); setNotice(null); setError(null);
     try { const result = await exportAmkrConfig(configPath); setTransfer(JSON.stringify(result.config, null, 2)); setNotice("已导出可迁移配置。"); }
@@ -51,6 +61,15 @@ export function SettingsPage({ configPath, metadata, health = null, onConfigPath
       <label>配置路径<input disabled={transferAction !== null} value={draftConfigPath} onChange={(event) => setDraftConfigPath(event.target.value)} placeholder="留空使用默认 AMKR 配置" /></label>
       <button type="submit" disabled={transferAction !== null}>使用配置</button>
     </form>
+    <section className="runtime-panel" aria-labelledby="runtime-heading">
+      <div className="card-heading"><h3 id="runtime-heading">Keyloom 私有运行时</h3><button type="button" disabled={runtimeLoading} onClick={() => void refreshRuntimeStatus()}>{runtimeLoading ? "正在检测" : "重新检测"}</button></div>
+      <dl className="settings-list">
+        <div><dt>状态</dt><dd className={runtimeStatus?.private_runtime_installed ? "status-good" : runtimeStatus?.diagnostic || runtimeError ? "status-warn" : "status-muted"}>{runtimeError ? `无法检测: ${runtimeError}` : runtimeLoading && !runtimeStatus ? "正在检测" : runtimeStatus?.private_runtime_installed ? `已安装 · AMKR ${runtimeStatus.amkr_version ?? "未知版本"}` : runtimeStatus?.diagnostic ?? "未安装"}</dd></div>
+        <div><dt>运行时目录</dt><dd>{runtimeStatus?.runtime_dir || "暂不可用"}</dd></div>
+        <div><dt>Python</dt><dd>{runtimeStatus?.python_version ?? (runtimeStatus?.python_available ? "已发现" : "未安装")}</dd></div>
+        <div><dt>AMKR wheel 校验</dt><dd>{runtimeStatus?.amkr_wheel_sha256 ? `${runtimeStatus.amkr_wheel_sha256.slice(0, 12)}…` : "暂不可用"}</dd></div>
+      </dl>
+    </section>
     {!metadata ? <p className="empty-state">正在查找本机 AMKR 配置。</p> : <>
       <dl className="settings-list">
         <div><dt>服务地址</dt><dd>{metadata.base_url}</dd></div>

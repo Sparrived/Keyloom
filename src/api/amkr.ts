@@ -140,6 +140,19 @@ export type AmkrIntegrationStatus = {
   backup_available: boolean;
   mode: string | null;
 };
+
+export type RuntimeInstallationStatus = {
+  runtime_dir: string;
+  state_path: string;
+  python_available: boolean;
+  pythonw_available: boolean;
+  amkr_package_available: boolean;
+  private_runtime_installed: boolean;
+  python_version: string | null;
+  amkr_version: string | null;
+  amkr_wheel_sha256: string | null;
+  diagnostic: string | null;
+};
 export type AmkrServiceAction = "start_amkr" | "stop_amkr" | "restart_amkr" | "install_user_amkr" | "uninstall_amkr" | "status_amkr";
 export type AmkrServiceCommandResult = { command: string[]; exit_code: number; stdout: string; stderr: string };
 
@@ -262,6 +275,10 @@ export function cancelAmkrProbe(probeId: string, configPath: string | null = nul
 
 export function getAgentIntegrationStatus(agent: AmkrIntegrationAgent) {
   return invoke<AmkrIntegrationStatus>("get_agent_integration_status", { agent });
+}
+
+export function getRuntimeInstallationStatus() {
+  return invoke<RuntimeInstallationStatus>("get_runtime_installation_status");
 }
 
 export function controlAmkr(

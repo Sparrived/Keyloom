@@ -34,8 +34,8 @@ describe("SettingsPage", () => {
     fireEvent.change(screen.getByLabelText("可迁移配置"), { target: { value: '{"providers":{},"models":{}}' } });
     fireEvent.click(screen.getByRole("button", { name: "导入配置" }));
 
-    await waitFor(() => expect(invokeMock).toHaveBeenNthCalledWith(1, "get_amkr_providers", { configPath: null }));
-    expect(invokeMock).toHaveBeenNthCalledWith(2, "import_amkr_config", {
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("get_amkr_providers", { configPath: null }));
+    expect(invokeMock).toHaveBeenCalledWith("import_amkr_config", {
       configPath: null,
       configRevision: "revision-latest",
       config: { providers: {}, models: {} },
@@ -50,7 +50,7 @@ describe("SettingsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "导入配置" }));
 
     expect(await screen.findByText("配置内容不是有效 JSON。")).toBeInTheDocument();
-    expect(invokeMock).not.toHaveBeenCalled();
+    expect(invokeMock).not.toHaveBeenCalledWith("import_amkr_config", expect.anything());
   });
 
   it("locks the selected instance while an import is in progress", async () => {
@@ -69,7 +69,7 @@ describe("SettingsPage", () => {
     expect(screen.getByLabelText("配置路径")).toBeDisabled();
     expect(screen.getByRole("button", { name: "使用配置" })).toBeDisabled();
     expect(screen.getByLabelText("可迁移配置")).toBeDisabled();
-    expect(invokeMock).toHaveBeenCalledTimes(1);
+    expect(invokeMock).toHaveBeenCalledWith("get_amkr_providers", { configPath: "C:/amkr.json" });
 
     releaseRevision?.({ config_revision: "revision-latest", providers: [] });
     expect(await screen.findByText("配置已导入，AMKR 已热重载。")).toBeInTheDocument();
@@ -132,5 +132,47 @@ describe("SettingsPage", () => {
       local_auth_enabled: true,
     }} onConfigPathChange={() => undefined} />);
     expect(screen.getByText("服务未提供")).toBeInTheDocument();
+  });
+
+  it("shows the managed private runtime even before an AMKR config is discovered", async () => {
+    invokeMock.mockImplementation(async (command) => command === "get_runtime_installation_status" ? {
+      runtime_dir: "C:/Users/test/AppData/Local/Programs/Keyloom/runtime",
+      state_path: "C:/Users/test/AppData/Local/Keyloom/install-state.json",
+      python_available: true,
+      pythonw_available: true,
+      amkr_package_available: true,
+      private_runtime_installed: true,
+      python_version: "3.12.10",
+      amkr_version: "3.1.1",
+      amkr_wheel_sha256: "a".repeat(64),
+      diagnostic: null,
+    } : undefined);
+
+    render(<SettingsPage configPath={null} metadata={null} onConfigPathChange={() => undefined} />);
+
+    expect(await screen.findByText("已安装 · AMKR 3.1.1")).toBeInTheDocument();
+    expect(screen.getByText("C:/Users/test/AppData/Local/Programs/Keyloom/runtime")).toBeInTheDocument();
+    expect(screen.getByText("aaaaaaaaaaaa…")).toBeInTheDocument();
+    expect(invokeMock).toHaveBeenCalledWith("get_runtime_installation_status");
+  });
+
+  it("reports an incomplete private runtime without hiding the selected CLI instance", async () => {
+    invokeMock.mockImplementation(async (command) => command === "get_runtime_installation_status" ? {
+      runtime_dir: "C:/Users/test/AppData/Local/Programs/Keyloom/runtime",
+      state_path: "C:/Users/test/AppData/Local/Keyloom/install-state.json",
+      python_available: true,
+      pythonw_available: false,
+      amkr_package_available: false,
+      private_runtime_installed: false,
+      python_version: null,
+      amkr_version: null,
+      amkr_wheel_sha256: null,
+      diagnostic: "私有运行时文件不完整",
+    } : undefined);
+
+    render(<SettingsPage configPath={null} metadata={metadata} onConfigPathChange={() => undefined} />);
+
+    expect(await screen.findByText("私有运行时文件不完整")).toBeInTheDocument();
+    expect(screen.getByText(metadata.base_url)).toBeInTheDocument();
   });
 });
