@@ -185,8 +185,8 @@ pub fn delete_amkr_route(selected_path: Option<&Path>, config_revision: &str, id
     amkr::client::delete_route(&instance.connection, config_revision, id)
 }
 
-pub fn export_amkr_config(selected_path: Option<&Path>) -> Result<amkr::client::AmkrConfigTransfer, String> { let instance = amkr::discover_from_paths(selected_path, &default_config_path()).map_err(|error| error.to_string())?; amkr::client::export_config(&instance.connection) }
-pub fn import_amkr_config(selected_path: Option<&Path>, config_revision: &str, config: serde_json::Value) -> Result<amkr::client::AmkrConfigTransfer, String> { let instance = amkr::discover_from_paths(selected_path, &default_config_path()).map_err(|error| error.to_string())?; amkr::client::import_config(&instance.connection, config_revision, config) }
+pub fn export_amkr_config(selected_path: Option<&Path>) -> Result<amkr::client::AmkrConfigExport, String> { let instance = amkr::discover_from_paths(selected_path, &default_config_path()).map_err(|error| error.to_string())?; amkr::client::export_config(&instance.connection) }
+pub fn import_amkr_config(selected_path: Option<&Path>, config_revision: &str, config: serde_json::Value) -> Result<amkr::client::AmkrConfigImportResult, String> { let instance = amkr::discover_from_paths(selected_path, &default_config_path()).map_err(|error| error.to_string())?; amkr::client::import_config(&instance.connection, config_revision, config) }
 
 pub fn get_amkr_metrics_from_paths(
     selected_path: Option<&Path>,

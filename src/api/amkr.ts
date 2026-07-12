@@ -95,7 +95,8 @@ export type AmkrUnifiedPlan = { primary: AmkrUnifiedTarget; fallback?: AmkrUnifi
 export type AmkrUnifiedModel = { default: AmkrUnifiedPlan; image?: AmkrUnifiedPlan | null };
 export type AmkrUnifiedModelResponse = { unified_model: AmkrUnifiedModel | null };
 
-export type AmkrConfigTransfer = { config_revision: string; config: unknown };
+export type AmkrConfigExport = { config_revision: string; config: unknown };
+export type AmkrConfigImportResult = { config_revision: string; imported: boolean };
 export type AmkrServiceAction = "start_amkr" | "stop_amkr" | "restart_amkr" | "install_user_amkr" | "uninstall_amkr" | "status_amkr";
 export type AmkrServiceCommandResult = { command: string[]; exit_code: number; stdout: string; stderr: string };
 
@@ -193,8 +194,8 @@ export function updateAmkrRoute(configRevision: string, routeId: string, id: str
   return invoke("update_amkr_route", { configPath, configRevision, routeId, id, targets, aliases, routingMode });
 }
 
-export function exportAmkrConfig(configPath: string | null = null) { return invoke<AmkrConfigTransfer>("export_amkr_config", { configPath }); }
-export function importAmkrConfig(configRevision: string, config: unknown, configPath: string | null = null) { return invoke<AmkrConfigTransfer>("import_amkr_config", { configPath, configRevision, config }); }
+export function exportAmkrConfig(configPath: string | null = null) { return invoke<AmkrConfigExport>("export_amkr_config", { configPath }); }
+export function importAmkrConfig(configRevision: string, config: Record<string, unknown>, configPath: string | null = null) { return invoke<AmkrConfigImportResult>("import_amkr_config", { configPath, configRevision, config }); }
 
 export function controlAmkr(
   action: AmkrServiceAction,

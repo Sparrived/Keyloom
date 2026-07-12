@@ -550,7 +550,7 @@ fn transfers_config_with_local_authentication_and_revision() {
     let server = thread::spawn(move || {
         for (expected_path, response_body) in [
             ("POST /api/config/export HTTP/1.1", r#"{"config_revision":"revision-a","config":{"providers":{}}}"#),
-            ("POST /api/config/import HTTP/1.1", r#"{"config_revision":"revision-b","config":{"providers":{}}}"#),
+            ("POST /api/config/import HTTP/1.1", r#"{"config_revision":"revision-b","imported":true}"#),
         ] {
             let (mut stream, _) = listener.accept().unwrap();
             let mut buffer = [0_u8; 2048];
@@ -570,5 +570,6 @@ fn transfers_config_with_local_authentication_and_revision() {
     assert_eq!(exported.config_revision, "revision-a");
     let imported = import_config(&connection, &exported.config_revision, exported.config).unwrap();
     assert_eq!(imported.config_revision, "revision-b");
+    assert!(imported.imported);
     server.join().unwrap();
 }

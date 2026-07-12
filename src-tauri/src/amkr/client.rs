@@ -198,9 +198,15 @@ pub struct AmkrRoutesResponse {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-pub struct AmkrConfigTransfer {
+pub struct AmkrConfigExport {
     pub config_revision: String,
     pub config: serde_json::Value,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct AmkrConfigImportResult {
+    pub config_revision: String,
+    pub imported: bool,
 }
 
 pub fn get_health(connection: &AmkrConnection) -> Result<AmkrHealth, String> {
@@ -438,8 +444,8 @@ pub fn create_route(connection: &AmkrConnection, config_revision: &str, id: &str
     request_empty(connection, "POST", "/api/routes", "创建模型路由", serde_json::json!({ "config_revision": config_revision, "id": id, "targets": [{ "provider": provider, "pool": pool, "upstream_model": upstream_model }], "aliases": aliases, "routing_mode": routing_mode }), &[201])
 }
 
-pub fn export_config(connection: &AmkrConnection) -> Result<AmkrConfigTransfer, String> { request_json(connection, "POST", "/api/config/export", "导出配置", None, &[200]) }
-pub fn import_config(connection: &AmkrConnection, config_revision: &str, config: serde_json::Value) -> Result<AmkrConfigTransfer, String> { request_json(connection, "POST", "/api/config/import", "导入配置", Some(serde_json::json!({"config_revision": config_revision, "config": config})), &[200]) }
+pub fn export_config(connection: &AmkrConnection) -> Result<AmkrConfigExport, String> { request_json(connection, "POST", "/api/config/export", "导出配置", None, &[200]) }
+pub fn import_config(connection: &AmkrConnection, config_revision: &str, config: serde_json::Value) -> Result<AmkrConfigImportResult, String> { request_json(connection, "POST", "/api/config/import", "导入配置", Some(serde_json::json!({"config_revision": config_revision, "config": config})), &[200]) }
 
 pub fn delete_route(connection: &AmkrConnection, config_revision: &str, id: &str) -> Result<(), String> {
     request_empty(connection, "DELETE", &format!("/api/routes/{}", encode_path_segment(id)), "删除模型路由", serde_json::json!({ "config_revision": config_revision }), &[204])

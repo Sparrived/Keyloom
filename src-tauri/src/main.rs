@@ -146,9 +146,9 @@ fn delete_amkr_route(config_path: Option<String>, config_revision: String, id: S
 }
 
 #[tauri::command]
-fn export_amkr_config(config_path: Option<String>) -> Result<keyloom_core::amkr::client::AmkrConfigTransfer, String> { keyloom_core::export_amkr_config(config_path.as_deref().map(Path::new)) }
+fn export_amkr_config(config_path: Option<String>) -> Result<keyloom_core::amkr::client::AmkrConfigExport, String> { keyloom_core::export_amkr_config(config_path.as_deref().map(Path::new)) }
 #[tauri::command]
-fn import_amkr_config(config_path: Option<String>, config_revision: String, config: serde_json::Value) -> Result<keyloom_core::amkr::client::AmkrConfigTransfer, String> { keyloom_core::import_amkr_config(config_path.as_deref().map(Path::new), &config_revision, config) }
+fn import_amkr_config(config_path: Option<String>, config_revision: String, config: serde_json::Value) -> Result<keyloom_core::amkr::client::AmkrConfigImportResult, String> { keyloom_core::import_amkr_config(config_path.as_deref().map(Path::new), &config_revision, config) }
 
 fn run_amkr_service_action(
     action: keyloom_core::windows_service::ServiceAction,
