@@ -3,6 +3,12 @@ import { invoke } from "@tauri-apps/api/core";
 export type AmkrMetadata = {
   config_path: string;
   base_url: string;
+  host?: string;
+  port?: number;
+  request_timeout?: number | null;
+  stream_first_byte_timeout?: number | null;
+  stream_idle_timeout?: number | null;
+  max_retries?: number | null;
   metrics_db_path: string | null;
   log_file_path: string | null;
   auth_enabled: boolean;

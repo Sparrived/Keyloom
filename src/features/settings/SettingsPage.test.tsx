@@ -75,4 +75,27 @@ describe("SettingsPage", () => {
     expect(await screen.findByText("配置已导入，AMKR 已热重载。")).toBeInTheDocument();
     expect(screen.getByLabelText("配置路径")).toBeEnabled();
   });
+
+  it("shows discovered runtime timeout settings", async () => {
+    render(<SettingsPage configPath={null} metadata={{
+      ...metadata,
+      host: "127.0.0.1",
+      port: 18900,
+      request_timeout: 42.5,
+      stream_first_byte_timeout: 55,
+      stream_idle_timeout: 91.5,
+      max_retries: 4,
+    }} onConfigPathChange={() => undefined} />);
+
+    expect(screen.getByText("监听地址")).toBeInTheDocument();
+    expect(screen.getByText("127.0.0.1:18900")).toBeInTheDocument();
+    expect(screen.getByText("请求超时")).toBeInTheDocument();
+    expect(screen.getByText("42.5 秒")).toBeInTheDocument();
+    expect(screen.getByText("流式首字节超时")).toBeInTheDocument();
+    expect(screen.getByText("55 秒")).toBeInTheDocument();
+    expect(screen.getByText("流式空闲超时")).toBeInTheDocument();
+    expect(screen.getByText("91.5 秒")).toBeInTheDocument();
+    expect(screen.getByText("最大重试")).toBeInTheDocument();
+    expect(screen.getByText("4 次")).toBeInTheDocument();
+  });
 });

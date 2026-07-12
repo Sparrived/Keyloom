@@ -42,6 +42,20 @@ export function SettingsPage({ configPath, metadata, onConfigPathChange }: Setti
       <label>配置路径<input disabled={transferAction !== null} value={draftConfigPath} onChange={(event) => setDraftConfigPath(event.target.value)} placeholder="留空使用默认 AMKR 配置" /></label>
       <button type="submit" disabled={transferAction !== null}>使用配置</button>
     </form>
-    {!metadata ? <p className="empty-state">正在查找本机 AMKR 配置。</p> : <><dl className="settings-list"><div><dt>服务地址</dt><dd>{metadata.base_url}</dd></div><div><dt>配置文件</dt><dd>{metadata.config_path}</dd></div><div><dt>本地鉴权</dt><dd>{metadata.auth_enabled ? "已启用" : "未启用"}</dd></div><div><dt>指标数据库</dt><dd>{metadata.metrics_db_path ?? "未配置"}</dd></div><div><dt>日志文件</dt><dd>{metadata.log_file_path ?? "未配置"}</dd></div></dl><section className="transfer-panel" aria-labelledby="transfer-heading"><div className="card-heading"><h3 id="transfer-heading">配置迁移</h3><button type="button" disabled={transferAction !== null} onClick={() => void exportConfig()}>{transferAction === "export" ? "正在导出" : "导出"}</button></div><textarea aria-label="可迁移配置" disabled={transferAction !== null} value={transfer} onChange={(event) => setTransfer(event.target.value)} placeholder="导出后在此显示，或粘贴可迁移配置以导入。" /><div className="transfer-actions"><button type="button" disabled={transferAction !== null || !transfer.trim()} onClick={() => void importConfig()}>{transferAction === "import" ? "正在导入" : "导入配置"}</button>{notice ? <span className="status-good">{notice}</span> : null}{error ? <span className="service-action-error">{error}</span> : null}</div></section></>}
+    {!metadata ? <p className="empty-state">正在查找本机 AMKR 配置。</p> : <>
+      <dl className="settings-list">
+        <div><dt>服务地址</dt><dd>{metadata.base_url}</dd></div>
+        <div><dt>监听地址</dt><dd>{metadata.host && metadata.port ? `${metadata.host}:${metadata.port}` : "未读取"}</dd></div>
+        <div><dt>配置文件</dt><dd>{metadata.config_path}</dd></div>
+        <div><dt>本地鉴权</dt><dd>{metadata.auth_enabled ? "已启用" : "未启用"}</dd></div>
+        <div><dt>请求超时</dt><dd>{metadata.request_timeout == null ? "未配置" : `${metadata.request_timeout} 秒`}</dd></div>
+        <div><dt>流式首字节超时</dt><dd>{metadata.stream_first_byte_timeout == null ? "未配置" : `${metadata.stream_first_byte_timeout} 秒`}</dd></div>
+        <div><dt>流式空闲超时</dt><dd>{metadata.stream_idle_timeout == null ? "未配置" : `${metadata.stream_idle_timeout} 秒`}</dd></div>
+        <div><dt>最大重试</dt><dd>{metadata.max_retries == null ? "未配置" : `${metadata.max_retries} 次`}</dd></div>
+        <div><dt>指标数据库</dt><dd>{metadata.metrics_db_path ?? "未配置"}</dd></div>
+        <div><dt>日志文件</dt><dd>{metadata.log_file_path ?? "未配置"}</dd></div>
+      </dl>
+      <section className="transfer-panel" aria-labelledby="transfer-heading"><div className="card-heading"><h3 id="transfer-heading">配置迁移</h3><button type="button" disabled={transferAction !== null} onClick={() => void exportConfig()}>{transferAction === "export" ? "正在导出" : "导出"}</button></div><textarea aria-label="可迁移配置" disabled={transferAction !== null} value={transfer} onChange={(event) => setTransfer(event.target.value)} placeholder="导出后在此显示，或粘贴可迁移配置以导入。" /><div className="transfer-actions"><button type="button" disabled={transferAction !== null || !transfer.trim()} onClick={() => void importConfig()}>{transferAction === "import" ? "正在导入" : "导入配置"}</button>{notice ? <span className="status-good">{notice}</span> : null}{error ? <span className="service-action-error">{error}</span> : null}</div></section>
+    </>}
   </section>;
 }

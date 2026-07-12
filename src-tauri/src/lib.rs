@@ -2,19 +2,40 @@ pub mod amkr;
 pub mod tray;
 pub mod windows_service;
 
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, PartialEq, Eq, Serialize)]
+#[derive(Debug, PartialEq, Serialize)]
 pub struct AmkrMetadata {
     pub config_path: String,
     pub base_url: String,
+    pub host: String,
+    pub port: u16,
+    pub request_timeout: Option<f64>,
+    pub stream_first_byte_timeout: Option<f64>,
+    pub stream_idle_timeout: Option<f64>,
+    pub max_retries: Option<u32>,
     pub metrics_db_path: Option<String>,
     pub log_file_path: Option<String>,
     pub auth_enabled: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct RuntimeSettings {
+    host: Option<String>,
+    port: Option<u16>,
+    request_timeout: Option<f64>,
+    stream_first_byte_timeout: Option<f64>,
+    stream_idle_timeout: Option<f64>,
+    max_retries: Option<u32>,
+}
+
+fn read_runtime_settings(path: &Path) -> Result<RuntimeSettings, String> {
+    let raw = fs::read_to_string(path).map_err(|error| format!("无法读取 AMKR 配置: {error}"))?;
+    serde_json::from_str(&raw).map_err(|error| format!("AMKR 配置不是有效 JSON: {error}"))
 }
 
 pub fn default_config_path() -> PathBuf {
@@ -42,10 +63,17 @@ pub fn discover_amkr_from_paths(
 ) -> Result<AmkrMetadata, String> {
     let instance = amkr::discover_from_paths(selected_path, default_path)
         .map_err(|error| error.to_string())?;
+    let settings = read_runtime_settings(&instance.config_path)?;
 
     Ok(AmkrMetadata {
         config_path: instance.config_path.to_string_lossy().into_owned(),
         base_url: instance.connection.base_url,
+        host: settings.host.unwrap_or_else(|| "127.0.0.1".to_owned()),
+        port: settings.port.unwrap_or(8000),
+        request_timeout: settings.request_timeout,
+        stream_first_byte_timeout: settings.stream_first_byte_timeout,
+        stream_idle_timeout: settings.stream_idle_timeout,
+        max_retries: settings.max_retries,
         metrics_db_path: instance.connection.metrics_db_path,
         log_file_path: instance.connection.log_file_path,
         auth_enabled: instance.connection.local_api_key.is_some(),

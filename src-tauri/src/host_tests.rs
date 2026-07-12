@@ -32,6 +32,34 @@ fn discover_amkr_returns_connection_metadata_without_the_api_key() {
 }
 
 #[test]
+fn discovers_runtime_settings_without_returning_the_local_api_key() {
+    let path = std::env::temp_dir().join("keyloom-runtime-settings-config.json");
+    fs::write(
+        &path,
+        r#"{
+          "host": "127.0.0.3",
+          "port": 19001,
+          "local_api_key": "secret-not-returned",
+          "request_timeout": 42.5,
+          "stream_first_byte_timeout": 55,
+          "stream_idle_timeout": 91.5,
+          "max_retries": 4
+        }"#,
+    )
+    .unwrap();
+
+    let metadata = crate::discover_amkr_from_paths(Some(&path), &path).unwrap();
+
+    assert_eq!(metadata.host, "127.0.0.3");
+    assert_eq!(metadata.port, 19001);
+    assert_eq!(metadata.request_timeout, Some(42.5));
+    assert_eq!(metadata.stream_first_byte_timeout, Some(55.0));
+    assert_eq!(metadata.stream_idle_timeout, Some(91.5));
+    assert_eq!(metadata.max_retries, Some(4));
+    fs::remove_file(path).unwrap();
+}
+
+#[test]
 fn exposes_a_default_config_location_under_local_app_data() {
     let path = crate::default_config_path();
 
