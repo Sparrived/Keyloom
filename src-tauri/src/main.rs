@@ -150,6 +150,26 @@ fn export_amkr_config(config_path: Option<String>) -> Result<keyloom_core::amkr:
 #[tauri::command]
 fn import_amkr_config(config_path: Option<String>, config_revision: String, config: serde_json::Value) -> Result<keyloom_core::amkr::client::AmkrConfigImportResult, String> { keyloom_core::import_amkr_config(config_path.as_deref().map(Path::new), &config_revision, config) }
 
+#[tauri::command]
+fn probe_amkr_keys(config_path: Option<String>, provider_id: String, keys: Vec<String>, timeout_seconds: f64) -> Result<keyloom_core::amkr::client::AmkrProbeStart, String> {
+    keyloom_core::probe_amkr_keys(config_path.as_deref().map(Path::new), &provider_id, keys, timeout_seconds)
+}
+
+#[tauri::command]
+fn probe_amkr_pools(config_path: Option<String>, provider_id: String, pools: Vec<String>, timeout_seconds: f64) -> Result<keyloom_core::amkr::client::AmkrProbeStart, String> {
+    keyloom_core::probe_amkr_pools(config_path.as_deref().map(Path::new), &provider_id, pools, timeout_seconds)
+}
+
+#[tauri::command]
+fn get_amkr_probe(config_path: Option<String>, probe_id: String) -> Result<keyloom_core::amkr::client::AmkrProbe, String> {
+    keyloom_core::get_amkr_probe(config_path.as_deref().map(Path::new), &probe_id)
+}
+
+#[tauri::command]
+fn cancel_amkr_probe(config_path: Option<String>, probe_id: String) -> Result<keyloom_core::amkr::client::AmkrProbe, String> {
+    keyloom_core::cancel_amkr_probe(config_path.as_deref().map(Path::new), &probe_id)
+}
+
 fn run_amkr_service_action(
     action: keyloom_core::windows_service::ServiceAction,
     config_path: Option<String>,
@@ -289,6 +309,10 @@ fn main() {
             delete_amkr_route,
             export_amkr_config,
             import_amkr_config,
+            probe_amkr_keys,
+            probe_amkr_pools,
+            get_amkr_probe,
+            cancel_amkr_probe,
             start_amkr,
             stop_amkr,
             restart_amkr,

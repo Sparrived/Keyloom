@@ -209,6 +209,37 @@ pub struct AmkrConfigImportResult {
     pub imported: bool,
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+pub struct AmkrProbeStart {
+    pub probe_id: String,
+    pub status: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct AmkrProbeResult {
+    pub status: String,
+    pub provider: String,
+    pub key: String,
+    pub endpoint: String,
+    #[serde(default)]
+    pub models: Vec<String>,
+    #[serde(default)]
+    pub latency_ms: Option<u64>,
+    #[serde(default)]
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct AmkrProbe {
+    pub probe_id: String,
+    pub status: String,
+    pub provider: String,
+    #[serde(default)]
+    pub results: Vec<AmkrProbeResult>,
+    #[serde(default)]
+    pub error: Option<String>,
+}
+
 pub fn get_health(connection: &AmkrConnection) -> Result<AmkrHealth, String> {
     get_json(connection, "/health", "健康状态")
 }
@@ -446,6 +477,65 @@ pub fn create_route(connection: &AmkrConnection, config_revision: &str, id: &str
 
 pub fn export_config(connection: &AmkrConnection) -> Result<AmkrConfigExport, String> { request_json(connection, "POST", "/api/config/export", "导出配置", None, &[200]) }
 pub fn import_config(connection: &AmkrConnection, config_revision: &str, config: serde_json::Value) -> Result<AmkrConfigImportResult, String> { request_json(connection, "POST", "/api/config/import", "导入配置", Some(serde_json::json!({"config_revision": config_revision, "config": config})), &[200]) }
+
+pub fn probe_keys(
+    connection: &AmkrConnection,
+    provider_id: &str,
+    keys: Vec<String>,
+    timeout_seconds: f64,
+) -> Result<AmkrProbeStart, String> {
+    request_json(
+        connection,
+        "POST",
+        "/api/probes/keys",
+        "探测 Key",
+        Some(serde_json::json!({
+            "provider_id": provider_id,
+            "keys": keys,
+            "timeout_seconds": timeout_seconds,
+        })),
+        &[202],
+    )
+}
+
+pub fn probe_pools(
+    connection: &AmkrConnection,
+    provider_id: &str,
+    pools: Vec<String>,
+    timeout_seconds: f64,
+) -> Result<AmkrProbeStart, String> {
+    request_json(
+        connection,
+        "POST",
+        "/api/probes/pools",
+        "探测模型池",
+        Some(serde_json::json!({
+            "provider_id": provider_id,
+            "pools": pools,
+            "timeout_seconds": timeout_seconds,
+        })),
+        &[202],
+    )
+}
+
+pub fn get_probe(connection: &AmkrConnection, probe_id: &str) -> Result<AmkrProbe, String> {
+    get_json(
+        connection,
+        &format!("/api/probes/{}", encode_path_segment(probe_id)),
+        "探测状态",
+    )
+}
+
+pub fn cancel_probe(connection: &AmkrConnection, probe_id: &str) -> Result<AmkrProbe, String> {
+    request_json(
+        connection,
+        "POST",
+        &format!("/api/probes/{}/cancel", encode_path_segment(probe_id)),
+        "取消探测",
+        None,
+        &[200],
+    )
+}
 
 pub fn delete_route(connection: &AmkrConnection, config_revision: &str, id: &str) -> Result<(), String> {
     request_empty(connection, "DELETE", &format!("/api/routes/{}", encode_path_segment(id)), "删除模型路由", serde_json::json!({ "config_revision": config_revision }), &[204])

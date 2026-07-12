@@ -97,6 +97,23 @@ export type AmkrUnifiedModelResponse = { unified_model: AmkrUnifiedModel | null 
 
 export type AmkrConfigExport = { config_revision: string; config: unknown };
 export type AmkrConfigImportResult = { config_revision: string; imported: boolean };
+export type AmkrProbeStart = { probe_id: string; status: string };
+export type AmkrProbeResult = {
+  status: string;
+  provider: string;
+  key: string;
+  endpoint: string;
+  models: string[];
+  latency_ms: number | null;
+  error: string | null;
+};
+export type AmkrProbe = {
+  probe_id: string;
+  status: string;
+  provider: string;
+  results: AmkrProbeResult[];
+  error: string | null;
+};
 export type AmkrServiceAction = "start_amkr" | "stop_amkr" | "restart_amkr" | "install_user_amkr" | "uninstall_amkr" | "status_amkr";
 export type AmkrServiceCommandResult = { command: string[]; exit_code: number; stdout: string; stderr: string };
 
@@ -196,6 +213,22 @@ export function updateAmkrRoute(configRevision: string, routeId: string, id: str
 
 export function exportAmkrConfig(configPath: string | null = null) { return invoke<AmkrConfigExport>("export_amkr_config", { configPath }); }
 export function importAmkrConfig(configRevision: string, config: Record<string, unknown>, configPath: string | null = null) { return invoke<AmkrConfigImportResult>("import_amkr_config", { configPath, configRevision, config }); }
+
+export function probeAmkrKeys(providerId: string, keys: string[], timeoutSeconds = 15, configPath: string | null = null) {
+  return invoke<AmkrProbeStart>("probe_amkr_keys", { configPath, providerId, keys, timeoutSeconds });
+}
+
+export function probeAmkrPools(providerId: string, pools: string[], timeoutSeconds = 15, configPath: string | null = null) {
+  return invoke<AmkrProbeStart>("probe_amkr_pools", { configPath, providerId, pools, timeoutSeconds });
+}
+
+export function getAmkrProbe(probeId: string, configPath: string | null = null) {
+  return invoke<AmkrProbe>("get_amkr_probe", { configPath, probeId });
+}
+
+export function cancelAmkrProbe(probeId: string, configPath: string | null = null) {
+  return invoke<AmkrProbe>("cancel_amkr_probe", { configPath, probeId });
+}
 
 export function controlAmkr(
   action: AmkrServiceAction,

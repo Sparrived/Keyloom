@@ -4,10 +4,11 @@ use std::thread;
 
 use super::client::{
     create_provider, create_provider_key, delete_pool, delete_provider_key, delete_route,
-    delete_unified_model, export_config, get_health, get_models, get_providers, get_routes,
-    get_unified_model, import_config, update_pool, update_provider, update_provider_key,
-    update_route, update_unified_model, AmkrHealth, AmkrRouteTarget, AmkrUnifiedModel,
-    AmkrUnifiedPlan, AmkrUnifiedTarget, AmkrUsageStats,
+    delete_unified_model, export_config, get_health, get_models, get_probe, get_providers,
+    get_routes, get_unified_model, import_config, probe_keys, probe_pools, update_pool,
+    update_provider, update_provider_key, update_route, update_unified_model, cancel_probe,
+    AmkrHealth, AmkrRouteTarget, AmkrUnifiedModel, AmkrUnifiedPlan, AmkrUnifiedTarget,
+    AmkrUsageStats,
 };
 use super::AmkrConnection;
 
@@ -571,5 +572,75 @@ fn transfers_config_with_local_authentication_and_revision() {
     let imported = import_config(&connection, &exported.config_revision, exported.config).unwrap();
     assert_eq!(imported.config_revision, "revision-b");
     assert!(imported.imported);
+    server.join().unwrap();
+}
+
+#[test]
+fn starts_polls_and_cancels_key_and_pool_probes_without_leaking_secrets() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = thread::spawn(move || {
+        for (expected, status, body) in [
+            (
+                "POST /api/probes/keys HTTP/1.1",
+                "202 Accepted",
+                r#"{"probe_id":"probe-keys","status":"pending"}"#,
+            ),
+            (
+                "POST /api/probes/pools HTTP/1.1",
+                "202 Accepted",
+                r#"{"probe_id":"probe-pools","status":"pending"}"#,
+            ),
+            (
+                "GET /api/probes/probe-keys HTTP/1.1",
+                "200 OK",
+                r#"{"probe_id":"probe-keys","status":"complete","provider":"openai","results":[{"status":"ok","provider":"openai","key":"main","endpoint":"https://api.openai.com/v1/models","models":["gpt-4o"],"latency_ms":123,"error":null}],"error":null}"#,
+            ),
+            (
+                "POST /api/probes/probe-keys/cancel HTTP/1.1",
+                "200 OK",
+                r#"{"probe_id":"probe-keys","status":"cancelled","provider":"openai","results":[],"error":null}"#,
+            ),
+        ] {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buffer = [0_u8; 4096];
+            let read = stream.read(&mut buffer).unwrap();
+            let request = String::from_utf8_lossy(&buffer[..read]);
+            assert!(request.starts_with(expected));
+            assert!(request.contains("Authorization: Bearer local-api-key"));
+            if expected.starts_with("POST /api/probes/keys") {
+                assert!(request.contains("\"provider_id\":\"openai\""));
+                assert!(request.contains("\"keys\":[\"main\"]"));
+                assert!(request.contains("\"timeout_seconds\":7.5"));
+            }
+            if expected.starts_with("POST /api/probes/pools") {
+                assert!(request.contains("\"pools\":[\"default\"]"));
+            }
+            assert!(!request.contains("upstream-secret"));
+            write!(
+                stream,
+                "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            )
+            .unwrap();
+        }
+    });
+    let connection = AmkrConnection {
+        base_url: format!("http://{address}"),
+        local_api_key: Some("local-api-key".to_owned()),
+        metrics_db_path: None,
+        log_file_path: None,
+    };
+
+    let started = probe_keys(&connection, "openai", vec!["main".to_owned()], 7.5).unwrap();
+    assert_eq!(started.probe_id, "probe-keys");
+    let pool_started = probe_pools(&connection, "openai", vec!["default".to_owned()], 15.0).unwrap();
+    assert_eq!(pool_started.status, "pending");
+    let completed = get_probe(&connection, "probe-keys").unwrap();
+    assert_eq!(completed.results[0].endpoint, "https://api.openai.com/v1/models");
+    assert_eq!(completed.results[0].models, ["gpt-4o"]);
+    let cancelled = cancel_probe(&connection, "probe-keys").unwrap();
+    assert_eq!(cancelled.status, "cancelled");
     server.join().unwrap();
 }

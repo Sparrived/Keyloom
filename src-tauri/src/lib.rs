@@ -188,6 +188,46 @@ pub fn delete_amkr_route(selected_path: Option<&Path>, config_revision: &str, id
 pub fn export_amkr_config(selected_path: Option<&Path>) -> Result<amkr::client::AmkrConfigExport, String> { let instance = amkr::discover_from_paths(selected_path, &default_config_path()).map_err(|error| error.to_string())?; amkr::client::export_config(&instance.connection) }
 pub fn import_amkr_config(selected_path: Option<&Path>, config_revision: &str, config: serde_json::Value) -> Result<amkr::client::AmkrConfigImportResult, String> { let instance = amkr::discover_from_paths(selected_path, &default_config_path()).map_err(|error| error.to_string())?; amkr::client::import_config(&instance.connection, config_revision, config) }
 
+pub fn probe_amkr_keys(
+    selected_path: Option<&Path>,
+    provider_id: &str,
+    keys: Vec<String>,
+    timeout_seconds: f64,
+) -> Result<amkr::client::AmkrProbeStart, String> {
+    let instance = amkr::discover_from_paths(selected_path, &default_config_path())
+        .map_err(|error| error.to_string())?;
+    amkr::client::probe_keys(&instance.connection, provider_id, keys, timeout_seconds)
+}
+
+pub fn probe_amkr_pools(
+    selected_path: Option<&Path>,
+    provider_id: &str,
+    pools: Vec<String>,
+    timeout_seconds: f64,
+) -> Result<amkr::client::AmkrProbeStart, String> {
+    let instance = amkr::discover_from_paths(selected_path, &default_config_path())
+        .map_err(|error| error.to_string())?;
+    amkr::client::probe_pools(&instance.connection, provider_id, pools, timeout_seconds)
+}
+
+pub fn get_amkr_probe(
+    selected_path: Option<&Path>,
+    probe_id: &str,
+) -> Result<amkr::client::AmkrProbe, String> {
+    let instance = amkr::discover_from_paths(selected_path, &default_config_path())
+        .map_err(|error| error.to_string())?;
+    amkr::client::get_probe(&instance.connection, probe_id)
+}
+
+pub fn cancel_amkr_probe(
+    selected_path: Option<&Path>,
+    probe_id: &str,
+) -> Result<amkr::client::AmkrProbe, String> {
+    let instance = amkr::discover_from_paths(selected_path, &default_config_path())
+        .map_err(|error| error.to_string())?;
+    amkr::client::cancel_probe(&instance.connection, probe_id)
+}
+
 pub fn get_amkr_metrics_from_paths(
     selected_path: Option<&Path>,
     default_path: &Path,
