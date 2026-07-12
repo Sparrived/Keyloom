@@ -220,6 +220,13 @@ export function UnifiedModelPanel({ configPath, onChange, refreshToken = 0 }: Un
           {routingChoice === "key" ? <label>Key<select aria-label="Key" disabled={saving} value={selectedKey} onChange={(event) => setSelectedKey(event.target.value)}>
             {enabledKeys.map((key) => <option key={key.name} value={key.name}>{key.name}</option>)}
           </select></label> : null}
+          {selectedModelDetails ? <div className="unified-model-summary" aria-label="模型能力">
+            <span>路由策略：{selectedModelDetails.routing_mode}</span>
+            <span>推理强度：{selectedModelDetails.reasoning_effort ?? "默认"}</span>
+            <span>{selectedModelDetails.visitor_available ? "访客可用" : "仅本地 Key"}</span>
+            <span>启用 Key：{enabledKeys.length}</span>
+            {selectedModelDetails.aliases.length ? <span>别名：{selectedModelDetails.aliases.join(", ")}</span> : null}
+          </div> : null}
           <fieldset className="unified-model-plan">
             <legend>回退目标</legend>
             <label className="checkbox-label"><input aria-label="启用回退目标" checked={fallbackEnabled} disabled={saving || models.length < 2} type="checkbox" onChange={(event) => toggleFallback(event.target.checked)} />启用回退目标</label>

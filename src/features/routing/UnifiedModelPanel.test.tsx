@@ -155,4 +155,28 @@ describe("UnifiedModelPanel", () => {
       image: { primary: { model: "model-b", key: null } },
     }));
   });
+
+  it("shows the selected model capabilities without exposing key material", async () => {
+    invokeMock.mockImplementation(async (command) => {
+      if (command === "get_amkr_models") return {
+        models: [{
+          id: "model-a",
+          aliases: ["fast-a"],
+          routing_mode: "only_first",
+          reasoning_effort: "high",
+          visitor_available: true,
+          keys: [{ name: "key-a", base_url: "https://a.example.test", enabled: true, allow_visitor: true, api_key_fingerprint: "fingerprint-a" }],
+        }],
+      };
+      if (command === "get_amkr_unified_model") return { unified_model: null };
+      return undefined;
+    });
+    render(<UnifiedModelPanel configPath={null} />);
+
+    expect(await screen.findByText("路由策略：only_first")).toBeInTheDocument();
+    expect(screen.getByText("推理强度：high")).toBeInTheDocument();
+    expect(screen.getByText("访客可用")).toBeInTheDocument();
+    expect(screen.getByText("别名：fast-a")).toBeInTheDocument();
+    expect(screen.queryByText("fingerprint-a")).not.toBeInTheDocument();
+  });
 });

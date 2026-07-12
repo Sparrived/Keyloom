@@ -101,7 +101,7 @@ export function RoutingPage({ configPath, onUnifiedModelChange }: RoutingPagePro
       <label>模型池<input required value={pool} onChange={(event) => setPool(event.target.value)} /></label>
       <label>上游模型<input required value={model} onChange={(event) => setModel(event.target.value)} /></label>
       <label>别名<input value={aliases} placeholder="逗号分隔" onChange={(event) => setAliases(event.target.value)} /></label>
-      <label>模式<select value={mode} onChange={(event) => setMode(event.target.value)}><option value="round_robin">轮询</option><option value="priority">优先级</option></select></label>
+      <label>模式<select value={mode} onChange={(event) => setMode(event.target.value)}><option value="round_robin">轮询</option><option value="priority">优先级</option><option value="only_first">首 Key</option></select></label>
       <button type="submit" disabled={!data || loading}>添加路由</button>
     </form>
     {loading ? <p className="empty-state">正在读取模型路由。</p> : null}
@@ -119,7 +119,7 @@ export function RoutingPage({ configPath, onUnifiedModelChange }: RoutingPagePro
         <label>编辑模型池<input required value={editing.targets[0].pool} onChange={(event) => updatePrimaryTarget("pool", event.target.value)} /></label>
         <label>编辑上游模型<input required value={editing.targets[0].upstream_model} onChange={(event) => updatePrimaryTarget("upstream_model", event.target.value)} /></label>
         <label>编辑别名<input value={editing.aliases} onChange={(event) => setEditing({ ...editing, aliases: event.target.value })} /></label>
-        <label>编辑模式<select value={editing.mode} onChange={(event) => setEditing({ ...editing, mode: event.target.value })}><option value="round_robin">轮询</option><option value="priority">优先级</option></select></label>
+        <label>编辑模式<select value={editing.mode} onChange={(event) => setEditing({ ...editing, mode: event.target.value })}><option value="round_robin">轮询</option><option value="priority">优先级</option><option value="only_first">首 Key</option></select></label>
         <button type="submit">保存路由</button>
         <button className="secondary-button" type="button" onClick={() => setEditing(null)}>取消</button>
       </form> : null}

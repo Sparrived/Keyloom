@@ -28,6 +28,7 @@ describe("RoutingPage", () => {
   it("edits an existing route with one mutation", async () => {
     render(<RoutingPage configPath="C:/amkr.json" />);
     await screen.findByText("model-a");
+    expect(screen.getByRole("option", { name: "首 Key" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "编辑路由 model-a" }));
     fireEvent.change(screen.getByLabelText("编辑模型 ID"), { target: { value: "model-b" } });
