@@ -1,5 +1,7 @@
+use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
@@ -32,6 +34,7 @@ pub struct RuntimeInstallationStatus {
     pub pythonw_available: bool,
     pub amkr_package_available: bool,
     pub private_runtime_installed: bool,
+    pub rollback_available: bool,
     pub python_version: Option<String>,
     pub amkr_version: Option<String>,
     pub amkr_wheel_sha256: Option<String>,
@@ -57,7 +60,9 @@ pub fn default_install_paths() -> Option<InstallPaths> {
 
 pub fn get_runtime_installation_status() -> RuntimeInstallationStatus {
     match default_install_paths() {
-        Some(paths) => detect_private_runtime(&paths.runtime_dir, &paths.state_path),
+        Some(paths) => {
+            runtime_installation_status_from_paths(&paths.runtime_dir, &paths.state_path)
+        }
         None => RuntimeInstallationStatus {
             runtime_dir: String::new(),
             state_path: String::new(),
@@ -65,12 +70,100 @@ pub fn get_runtime_installation_status() -> RuntimeInstallationStatus {
             pythonw_available: false,
             amkr_package_available: false,
             private_runtime_installed: false,
+            rollback_available: false,
             python_version: None,
             amkr_version: None,
             amkr_wheel_sha256: None,
             diagnostic: Some("无法确定本机 LOCALAPPDATA 目录".to_owned()),
         },
     }
+}
+
+pub fn runtime_installation_status_from_paths(
+    runtime_dir: &Path,
+    state_path: &Path,
+) -> RuntimeInstallationStatus {
+    let mut status = detect_private_runtime(runtime_dir, state_path);
+    status.rollback_available =
+        detect_private_runtime(&previous_path(runtime_dir), &previous_path(state_path))
+            .private_runtime_installed;
+    status
+}
+
+pub fn rollback_private_runtime() -> Result<RuntimeInstallationStatus, String> {
+    let paths =
+        default_install_paths().ok_or_else(|| "无法确定本机 LOCALAPPDATA 目录".to_owned())?;
+    rollback_private_runtime_from_paths(&paths.runtime_dir, &paths.state_path)
+}
+
+pub fn rollback_private_runtime_from_paths(
+    runtime_dir: &Path,
+    state_path: &Path,
+) -> Result<RuntimeInstallationStatus, String> {
+    if !detect_private_runtime(runtime_dir, state_path).private_runtime_installed {
+        return Err("当前 Keyloom 私有运行时不完整，无法执行安全回退".to_owned());
+    }
+    let previous_runtime = previous_path(runtime_dir);
+    let previous_state = previous_path(state_path);
+    if !detect_private_runtime(&previous_runtime, &previous_state).private_runtime_installed {
+        return Err("没有可用的私有运行时回退版本".to_owned());
+    }
+
+    let token = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| format!("无法创建回退事务标识: {error}"))?
+        .as_nanos();
+    let displaced_runtime = transaction_path(runtime_dir, token);
+    let displaced_state = transaction_path(state_path, token);
+    let operations = [
+        (runtime_dir.to_path_buf(), displaced_runtime.clone()),
+        (state_path.to_path_buf(), displaced_state.clone()),
+        (previous_runtime.clone(), runtime_dir.to_path_buf()),
+        (previous_state.clone(), state_path.to_path_buf()),
+        (displaced_runtime, previous_runtime),
+        (displaced_state, previous_state),
+    ];
+    let mut completed = Vec::new();
+    for (source, destination) in operations {
+        if let Err(error) = fs::rename(&source, &destination) {
+            let rollback_errors = completed
+                .iter()
+                .rev()
+                .filter_map(|(original, moved_to): &(PathBuf, PathBuf)| {
+                    fs::rename(moved_to, original).err()
+                })
+                .map(|rollback_error| rollback_error.to_string())
+                .collect::<Vec<_>>();
+            let suffix = if rollback_errors.is_empty() {
+                String::new()
+            } else {
+                format!("；恢复原路径时失败: {}", rollback_errors.join("；"))
+            };
+            return Err(format!(
+                "无法交换私有运行时 {} -> {}: {error}{suffix}",
+                source.display(),
+                destination.display()
+            ));
+        }
+        completed.push((source, destination));
+    }
+
+    Ok(runtime_installation_status_from_paths(
+        runtime_dir,
+        state_path,
+    ))
+}
+
+fn transaction_path(path: &Path, token: u128) -> PathBuf {
+    let mut value = OsString::from(path.as_os_str());
+    value.push(format!(".rollback-{token}"));
+    PathBuf::from(value)
+}
+
+fn previous_path(path: &Path) -> PathBuf {
+    let mut value = OsString::from(path.as_os_str());
+    value.push(".previous");
+    PathBuf::from(value)
 }
 
 pub fn private_runtime_service_program() -> Result<ServiceProgram, String> {
@@ -111,6 +204,7 @@ pub fn detect_private_runtime(runtime_dir: &Path, state_path: &Path) -> RuntimeI
         pythonw_available,
         amkr_package_available,
         private_runtime_installed: false,
+        rollback_available: false,
         python_version: None,
         amkr_version: None,
         amkr_wheel_sha256: None,
@@ -167,11 +261,38 @@ mod tests {
     use std::fs;
 
     use super::{
-        detect_private_runtime, install_paths, private_runtime_service_program_from_paths,
+        detect_private_runtime, install_paths, previous_path,
+        private_runtime_service_program_from_paths, rollback_private_runtime_from_paths,
+        runtime_installation_status_from_paths,
     };
 
     fn temp_root(name: &str) -> std::path::PathBuf {
         std::env::temp_dir().join(format!("keyloom-{name}-{}", std::process::id()))
+    }
+
+    fn write_runtime(
+        runtime: &std::path::Path,
+        state: &std::path::Path,
+        version: &str,
+        hash: char,
+    ) {
+        fs::create_dir_all(runtime.join("Lib/site-packages/auto_model_key_router")).unwrap();
+        fs::create_dir_all(state.parent().unwrap()).unwrap();
+        fs::write(runtime.join("python.exe"), b"placeholder").unwrap();
+        fs::write(runtime.join("pythonw.exe"), b"placeholder").unwrap();
+        fs::write(
+            runtime.join("Lib/site-packages/auto_model_key_router/__init__.py"),
+            b"",
+        )
+        .unwrap();
+        fs::write(
+            state,
+            format!(
+                r#"{{"schema_version":1,"owner":"com.keyloom.app","python_version":"3.12.10","amkr_version":"{version}","amkr_wheel_sha256":"{}"}}"#,
+                hash.to_string().repeat(64)
+            ),
+        )
+        .unwrap();
     }
 
     #[test]
@@ -369,6 +490,51 @@ mod tests {
         assert!(private_runtime_service_program_from_paths(&runtime, &state)
             .unwrap_err()
             .contains("私有运行时文件不完整"));
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn reports_and_atomically_swaps_the_previous_private_runtime() {
+        let root = temp_root("runtime-rollback");
+        let runtime = root.join("runtime");
+        let state = root.join("install-state.json");
+        let previous_runtime = previous_path(&runtime);
+        let previous_state = previous_path(&state);
+        write_runtime(&runtime, &state, "3.1.1", 'a');
+        write_runtime(&previous_runtime, &previous_state, "3.1.0", 'b');
+
+        let before = runtime_installation_status_from_paths(&runtime, &state);
+        assert!(before.rollback_available);
+
+        let after = rollback_private_runtime_from_paths(&runtime, &state).unwrap();
+
+        assert_eq!(after.amkr_version.as_deref(), Some("3.1.0"));
+        assert!(after.rollback_available);
+        let swapped_backup = detect_private_runtime(&previous_runtime, &previous_state);
+        assert_eq!(swapped_backup.amkr_version.as_deref(), Some("3.1.1"));
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn leaves_the_current_runtime_untouched_when_no_valid_rollback_exists() {
+        let root = temp_root("runtime-without-rollback");
+        let runtime = root.join("runtime");
+        let state = root.join("install-state.json");
+        write_runtime(&runtime, &state, "3.1.1", 'a');
+        let original_state = fs::read(&state).unwrap();
+
+        let error = rollback_private_runtime_from_paths(&runtime, &state).unwrap_err();
+
+        assert!(error.contains("没有可用的私有运行时回退版本"));
+        assert_eq!(fs::read(&state).unwrap(), original_state);
+        assert_eq!(
+            detect_private_runtime(&runtime, &state)
+                .amkr_version
+                .as_deref(),
+            Some("3.1.1")
+        );
 
         fs::remove_dir_all(root).unwrap();
     }

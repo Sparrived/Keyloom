@@ -174,6 +174,11 @@ fn get_runtime_installation_status() -> keyloom_core::installer::RuntimeInstalla
 }
 
 #[tauri::command]
+fn rollback_private_runtime() -> Result<keyloom_core::installer::RuntimeInstallationStatus, String> {
+    keyloom_core::installer::rollback_private_runtime()
+}
+
+#[tauri::command]
 fn probe_amkr_keys(config_path: Option<String>, provider_id: String, keys: Vec<String>, timeout_seconds: f64) -> Result<keyloom_core::amkr::client::AmkrProbeStart, String> {
     keyloom_core::probe_amkr_keys(config_path.as_deref().map(Path::new), &provider_id, keys, timeout_seconds)
 }
@@ -335,6 +340,7 @@ fn main() {
             import_amkr_config,
             get_agent_integration_status,
             get_runtime_installation_status,
+            rollback_private_runtime,
             probe_amkr_keys,
             probe_amkr_pools,
             get_amkr_probe,

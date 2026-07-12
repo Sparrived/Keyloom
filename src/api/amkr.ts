@@ -148,6 +148,7 @@ export type RuntimeInstallationStatus = {
   pythonw_available: boolean;
   amkr_package_available: boolean;
   private_runtime_installed: boolean;
+  rollback_available: boolean;
   python_version: string | null;
   amkr_version: string | null;
   amkr_wheel_sha256: string | null;
@@ -279,6 +280,10 @@ export function getAgentIntegrationStatus(agent: AmkrIntegrationAgent) {
 
 export function getRuntimeInstallationStatus() {
   return invoke<RuntimeInstallationStatus>("get_runtime_installation_status");
+}
+
+export function rollbackPrivateRuntime() {
+  return invoke<RuntimeInstallationStatus>("rollback_private_runtime");
 }
 
 export function controlAmkr(

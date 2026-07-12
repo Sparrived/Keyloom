@@ -142,6 +142,7 @@ describe("SettingsPage", () => {
       pythonw_available: true,
       amkr_package_available: true,
       private_runtime_installed: true,
+      rollback_available: false,
       python_version: "3.12.10",
       amkr_version: "3.1.1",
       amkr_wheel_sha256: "a".repeat(64),
@@ -164,6 +165,7 @@ describe("SettingsPage", () => {
       pythonw_available: false,
       amkr_package_available: false,
       private_runtime_installed: false,
+      rollback_available: false,
       python_version: null,
       amkr_version: null,
       amkr_wheel_sha256: null,
@@ -174,5 +176,43 @@ describe("SettingsPage", () => {
 
     expect(await screen.findByText("私有运行时文件不完整")).toBeInTheDocument();
     expect(screen.getByText(metadata.base_url)).toBeInTheDocument();
+  });
+
+  it("rolls back to the previous private runtime only after confirmation", async () => {
+    invokeMock.mockImplementation(async (command) => {
+      if (command === "get_runtime_installation_status") return {
+        runtime_dir: "C:/Users/test/AppData/Local/Programs/Keyloom/runtime",
+        state_path: "C:/Users/test/AppData/Local/Keyloom/install-state.json",
+        python_available: true,
+        pythonw_available: true,
+        amkr_package_available: true,
+        private_runtime_installed: true,
+        rollback_available: true,
+        python_version: "3.12.10",
+        amkr_version: "3.1.1",
+        amkr_wheel_sha256: "a".repeat(64),
+        diagnostic: null,
+      };
+      if (command === "rollback_private_runtime") return {
+        runtime_dir: "C:/Users/test/AppData/Local/Programs/Keyloom/runtime",
+        state_path: "C:/Users/test/AppData/Local/Keyloom/install-state.json",
+        python_available: true,
+        pythonw_available: true,
+        amkr_package_available: true,
+        private_runtime_installed: true,
+        rollback_available: true,
+        python_version: "3.12.10",
+        amkr_version: "3.1.0",
+        amkr_wheel_sha256: "b".repeat(64),
+        diagnostic: null,
+      };
+      return undefined;
+    });
+    render(<SettingsPage configPath={null} metadata={metadata} health={null} onConfigPathChange={() => undefined} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "回退运行时" }));
+
+    expect(await screen.findByText("已安装 · AMKR 3.1.0")).toBeInTheDocument();
+    expect(invokeMock).toHaveBeenCalledWith("rollback_private_runtime");
   });
 });
