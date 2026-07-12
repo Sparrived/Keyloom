@@ -31,9 +31,11 @@ function safeEndpoint(value: string) {
     const url = new URL(value);
     url.search = "";
     url.hash = "";
+    url.username = "";
+    url.password = "";
     return url.toString();
   } catch {
-    return value.split(/[?#]/, 1)[0];
+    return value.replace(/\/\/[^/@\s]+@/, "//").split(/[?#]/, 1)[0];
   }
 }
 
@@ -52,6 +54,7 @@ export function ProbePanel({ configPath, providerId, keys, pools }: ProbePanelPr
   const [error, setError] = useState<string | null>(null);
   const timerRef = useRef<number | null>(null);
   const generationRef = useRef(0);
+  const pollVersionRef = useRef(0);
   const activeProbeRef = useRef<string | null>(null);
 
   const clearTimer = () => {
@@ -62,26 +65,30 @@ export function ProbePanel({ configPath, providerId, keys, pools }: ProbePanelPr
   };
 
   useEffect(() => {
-    const generation = ++generationRef.current;
+    ++generationRef.current;
     clearTimer();
+    ++pollVersionRef.current;
+    const previousProbe = activeProbeRef.current;
     activeProbeRef.current = null;
     setProbe(null);
     setBusy(false);
     setCancelBusy(false);
     setError(null);
+    if (previousProbe) void cancelAmkrProbe(previousProbe, configPath).catch(() => undefined);
     return () => {
-      if (generationRef.current === generation) {
-        generationRef.current += 1;
-        clearTimer();
-        activeProbeRef.current = null;
-      }
+      ++generationRef.current;
+      ++pollVersionRef.current;
+      clearTimer();
+      const probeId = activeProbeRef.current;
+      activeProbeRef.current = null;
+      if (probeId) void cancelAmkrProbe(probeId, configPath).catch(() => undefined);
     };
   }, [configPath]);
 
-  async function poll(probeId: string, generation: number) {
+  async function poll(probeId: string, generation: number, pollVersion: number) {
     try {
       const result = await getAmkrProbe(probeId, configPath);
-      if (generationRef.current !== generation || activeProbeRef.current !== probeId) return;
+      if (generationRef.current !== generation || pollVersionRef.current !== pollVersion || activeProbeRef.current !== probeId) return;
       setProbe(result);
       if (terminalStatuses.has(result.status)) {
         activeProbeRef.current = null;
@@ -89,10 +96,10 @@ export function ProbePanel({ configPath, providerId, keys, pools }: ProbePanelPr
         setCancelBusy(false);
         clearTimer();
       } else {
-        timerRef.current = window.setTimeout(() => void poll(probeId, generation), pollIntervalMs);
+        timerRef.current = window.setTimeout(() => void poll(probeId, generation, pollVersion), pollIntervalMs);
       }
     } catch (reason) {
-      if (generationRef.current !== generation || activeProbeRef.current !== probeId) return;
+      if (generationRef.current !== generation || pollVersionRef.current !== pollVersion || activeProbeRef.current !== probeId) return;
       activeProbeRef.current = null;
       setBusy(false);
       setCancelBusy(false);
@@ -110,6 +117,8 @@ export function ProbePanel({ configPath, providerId, keys, pools }: ProbePanelPr
     }
     clearTimer();
     const generation = ++generationRef.current;
+    const pollVersion = ++pollVersionRef.current;
+    activeProbeRef.current = null;
     setBusy(true);
     setCancelBusy(false);
     setError(null);
@@ -127,7 +136,7 @@ export function ProbePanel({ configPath, providerId, keys, pools }: ProbePanelPr
         results: [],
         error: null,
       });
-      void poll(started.probe_id, generation);
+      void poll(started.probe_id, generation, pollVersion);
     } catch (reason) {
       if (generationRef.current !== generation) return;
       setBusy(false);
@@ -138,6 +147,9 @@ export function ProbePanel({ configPath, providerId, keys, pools }: ProbePanelPr
   async function cancel() {
     const probeId = activeProbeRef.current;
     if (!probeId || cancelBusy) return;
+    const generation = generationRef.current;
+    ++pollVersionRef.current;
+    clearTimer();
     setCancelBusy(true);
     setError(null);
     try {
@@ -150,8 +162,8 @@ export function ProbePanel({ configPath, providerId, keys, pools }: ProbePanelPr
         setCancelBusy(false);
         clearTimer();
       } else {
-        clearTimer();
-        timerRef.current = window.setTimeout(() => void poll(probeId, generationRef.current), pollIntervalMs);
+        const nextPollVersion = ++pollVersionRef.current;
+        timerRef.current = window.setTimeout(() => void poll(probeId, generation, nextPollVersion), pollIntervalMs);
         setCancelBusy(false);
       }
     } catch (reason) {

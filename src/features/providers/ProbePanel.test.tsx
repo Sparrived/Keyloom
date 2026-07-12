@@ -104,4 +104,40 @@ describe("ProbePanel", () => {
     }));
     expect(await screen.findByText("已取消")).toBeInTheDocument();
   });
+
+  it("cancels and stops an in-flight probe when the panel unmounts", async () => {
+    let resolveStatus: ((value: unknown) => void) | undefined;
+    const statusPromise = new Promise((resolve) => { resolveStatus = resolve; });
+    invokeMock.mockImplementation(async (command) => {
+      if (command === "probe_amkr_keys") return { probe_id: "probe-unmount", status: "pending" };
+      if (command === "get_amkr_probe") return statusPromise;
+      if (command === "cancel_amkr_probe") return {
+        probe_id: "probe-unmount",
+        status: "cancelled",
+        provider: "a.example.test",
+        results: [],
+        error: null,
+      };
+      return undefined;
+    });
+
+    const { unmount } = render(<ProbePanel configPath={null} providerId="a.example.test" keys={["key-a"]} pools={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: "探测 Key key-a" }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("get_amkr_probe", {
+      configPath: null,
+      probeId: "probe-unmount",
+    }));
+    unmount();
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("cancel_amkr_probe", {
+      configPath: null,
+      probeId: "probe-unmount",
+    }));
+    resolveStatus?.({
+      probe_id: "probe-unmount",
+      status: "running",
+      provider: "a.example.test",
+      results: [],
+      error: null,
+    });
+  });
 });
