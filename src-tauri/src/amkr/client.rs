@@ -317,6 +317,21 @@ pub fn get_models(connection: &AmkrConnection) -> Result<AmkrModelsResponse, Str
     get_json(connection, "/api/models", "模型")
 }
 
+pub fn update_model_reasoning_effort(
+    connection: &AmkrConnection,
+    model_id: &str,
+    reasoning_effort: Option<&str>,
+) -> Result<AmkrModel, String> {
+    request_json(
+        connection,
+        "PUT",
+        &format!("/api/models/{}", encode_path_segment(model_id)),
+        "更新模型推理强度",
+        Some(serde_json::json!({ "reasoning_effort": reasoning_effort })),
+        &[200],
+    )
+}
+
 pub fn get_unified_model(connection: &AmkrConnection) -> Result<AmkrUnifiedModelResponse, String> {
     get_json(connection, "/api/unified-model", "统一模型")
 }

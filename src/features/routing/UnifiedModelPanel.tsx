@@ -3,6 +3,7 @@ import {
   deleteAmkrUnifiedModel,
   getAmkrModels,
   getAmkrUnifiedModel,
+  updateAmkrModelReasoningEffort,
   updateAmkrUnifiedModel,
   type AmkrModel,
   type AmkrUnifiedModel,
@@ -15,6 +16,7 @@ type UnifiedModelPanelProps = {
 };
 
 type RoutingChoice = "auto" | "key";
+const reasoningEfforts = ["none", "minimal", "low", "medium", "high", "xhigh"] as const;
 
 const errorMessage = (reason: unknown) => reason instanceof Error ? reason.message : String(reason);
 
@@ -30,6 +32,7 @@ export function UnifiedModelPanel({ configPath, onChange, refreshToken = 0 }: Un
   const [selectedModel, setSelectedModel] = useState("");
   const [routingChoice, setRoutingChoice] = useState<RoutingChoice>("auto");
   const [selectedKey, setSelectedKey] = useState("");
+  const [reasoningEffort, setReasoningEffort] = useState("");
   const [fallbackEnabled, setFallbackEnabled] = useState(false);
   const [fallbackModel, setFallbackModel] = useState("");
   const [fallbackKey, setFallbackKey] = useState("");
@@ -55,11 +58,13 @@ export function UnifiedModelPanel({ configPath, onChange, refreshToken = 0 }: Un
         const nextModels = modelsResponse?.models ?? [];
         const nextUnifiedModel = unifiedResponse?.unified_model ?? null;
         const target = nextUnifiedModel?.default.primary;
+        const targetModel = nextModels.find((model) => model.id === (target?.model ?? nextModels[0]?.id));
         setModels(nextModels);
         setUnifiedModel(nextUnifiedModel);
         setSelectedModel(target?.model ?? nextModels[0]?.id ?? "");
         setRoutingChoice(target?.key ? "key" : "auto");
         setSelectedKey(target?.key ?? "");
+        setReasoningEffort(targetModel?.reasoning_effort ?? "");
         setFallbackEnabled(Boolean(nextUnifiedModel?.default.fallback));
         setFallbackModel(nextUnifiedModel?.default.fallback?.model ?? "");
         setFallbackKey(nextUnifiedModel?.default.fallback?.key ?? "");
@@ -91,6 +96,7 @@ export function UnifiedModelPanel({ configPath, onChange, refreshToken = 0 }: Un
     setSelectedModel(model);
     const nextModel = models.find((item) => item.id === model);
     const nextEnabledKeys = nextModel?.keys.filter((key) => key.enabled) ?? [];
+    setReasoningEffort(nextModel?.reasoning_effort ?? "");
     if (!nextEnabledKeys.some((key) => key.name === selectedKey)) {
       setSelectedKey(nextEnabledKeys[0]?.name ?? "");
     }
@@ -157,6 +163,13 @@ export function UnifiedModelPanel({ configPath, onChange, refreshToken = 0 }: Un
       } else {
         nextDraft.image = null;
       }
+      const nextReasoningEffort = reasoningEffort || null;
+      const currentReasoningEffort = selectedModelDetails?.reasoning_effort ?? null;
+      let updatedModel: AmkrModel | null = null;
+      if (selectedModelDetails && nextReasoningEffort !== currentReasoningEffort) {
+        updatedModel = await updateAmkrModelReasoningEffort(selectedModel, nextReasoningEffort, configPath);
+        setModels((current) => current.map((model) => model.id === updatedModel?.id ? updatedModel : model));
+      }
       const response = await updateAmkrUnifiedModel(nextDraft, configPath);
       const nextUnifiedModel = response?.unified_model ?? null;
       setUnifiedModel(nextUnifiedModel);
@@ -165,6 +178,7 @@ export function UnifiedModelPanel({ configPath, onChange, refreshToken = 0 }: Un
         setSelectedModel(target.model);
         setRoutingChoice(target.key ? "key" : "auto");
         setSelectedKey(target.key ?? "");
+        setReasoningEffort(updatedModel?.reasoning_effort ?? nextReasoningEffort ?? "");
       }
       setFallbackEnabled(Boolean(nextUnifiedModel?.default.fallback));
       setFallbackModel(nextUnifiedModel?.default.fallback?.model ?? "");
@@ -220,6 +234,10 @@ export function UnifiedModelPanel({ configPath, onChange, refreshToken = 0 }: Un
           {routingChoice === "key" ? <label>Key<select aria-label="Key" disabled={saving} value={selectedKey} onChange={(event) => setSelectedKey(event.target.value)}>
             {enabledKeys.map((key) => <option key={key.name} value={key.name}>{key.name}</option>)}
           </select></label> : null}
+          <label>推理强度<select aria-label="推理强度" disabled={saving} value={reasoningEffort} onChange={(event) => setReasoningEffort(event.target.value)}>
+            <option value="">默认</option>
+            {reasoningEfforts.map((effort) => <option key={effort} value={effort}>{effort}</option>)}
+          </select></label>
           {selectedModelDetails ? <div className="unified-model-summary" aria-label="模型能力">
             <span>路由策略：{selectedModelDetails.routing_mode}</span>
             <span>推理强度：{selectedModelDetails.reasoning_effort ?? "默认"}</span>

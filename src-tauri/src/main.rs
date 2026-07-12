@@ -53,6 +53,19 @@ fn get_amkr_models(
 }
 
 #[tauri::command]
+fn update_amkr_model_reasoning_effort(
+    config_path: Option<String>,
+    model_id: String,
+    reasoning_effort: Option<String>,
+) -> Result<keyloom_core::amkr::client::AmkrModel, String> {
+    keyloom_core::update_amkr_model_reasoning_effort(
+        config_path.as_deref().map(Path::new),
+        &model_id,
+        reasoning_effort.as_deref(),
+    )
+}
+
+#[tauri::command]
 fn get_amkr_unified_model(
     config_path: Option<String>,
 ) -> Result<keyloom_core::amkr::client::AmkrUnifiedModelResponse, String> {
@@ -297,6 +310,7 @@ fn main() {
             get_amkr_providers,
             get_amkr_routes,
             get_amkr_models,
+            update_amkr_model_reasoning_effort,
             get_amkr_unified_model,
             update_amkr_unified_model,
             delete_amkr_unified_model,

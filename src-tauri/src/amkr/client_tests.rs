@@ -6,7 +6,8 @@ use super::client::{
     create_provider, create_provider_key, delete_pool, delete_provider_key, delete_route,
     delete_unified_model, export_config, get_health, get_models, get_probe, get_providers,
     get_routes, get_unified_model, import_config, probe_keys, probe_pools, update_pool,
-    update_provider, update_provider_key, update_route, update_unified_model, cancel_probe,
+    update_model_reasoning_effort, update_provider, update_provider_key, update_route,
+    update_unified_model, cancel_probe,
     AmkrHealth, AmkrRouteTarget, AmkrUnifiedModel, AmkrUnifiedPlan, AmkrUnifiedTarget,
     AmkrUsageStats,
 };
@@ -447,6 +448,45 @@ fn sends_provider_configuration_updates_with_the_current_revision() {
     )
     .unwrap();
 
+    server.join().unwrap();
+}
+
+#[test]
+fn updates_model_reasoning_effort_with_an_encoded_model_id() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let mut buffer = [0_u8; 4096];
+        let read = stream.read(&mut buffer).unwrap();
+        let request = String::from_utf8_lossy(&buffer[..read]);
+        assert!(request.starts_with("PUT /api/models/model%2Fa HTTP/1.1"));
+        assert!(request.contains("Authorization: Bearer local-api-key"));
+        assert!(request.contains("\"reasoning_effort\":\"high\""));
+        let body = r#"{"id":"model/a","aliases":[],"routing_mode":"round_robin","reasoning_effort":"high","visitor_available":false,"keys":[]}"#;
+        write!(
+            stream,
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            body.len(),
+            body
+        )
+        .unwrap();
+    });
+
+    let response = update_model_reasoning_effort(
+        &AmkrConnection {
+            base_url: format!("http://{address}"),
+            local_api_key: Some("local-api-key".to_owned()),
+            metrics_db_path: None,
+            log_file_path: None,
+        },
+        "model/a",
+        Some("high"),
+    )
+    .unwrap();
+
+    assert_eq!(response.id, "model/a");
+    assert_eq!(response.reasoning_effort.as_deref(), Some("high"));
     server.join().unwrap();
 }
 

@@ -171,6 +171,10 @@ export function getAmkrModels(configPath: string | null = null) {
   return invoke<AmkrModelsResponse>("get_amkr_models", { configPath });
 }
 
+export function updateAmkrModelReasoningEffort(modelId: string, reasoningEffort: string | null, configPath: string | null = null) {
+  return invoke<AmkrModel>("update_amkr_model_reasoning_effort", { configPath, modelId, reasoningEffort });
+}
+
 export function getAmkrUnifiedModel(configPath: string | null = null) {
   return invoke<AmkrUnifiedModelResponse>("get_amkr_unified_model", { configPath });
 }

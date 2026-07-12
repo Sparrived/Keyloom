@@ -130,6 +130,20 @@ pub fn get_amkr_models(
     amkr::client::get_models(&instance.connection)
 }
 
+pub fn update_amkr_model_reasoning_effort(
+    selected_path: Option<&Path>,
+    model_id: &str,
+    reasoning_effort: Option<&str>,
+) -> Result<amkr::client::AmkrModel, String> {
+    let instance = amkr::discover_from_paths(selected_path, &default_config_path())
+        .map_err(|error| error.to_string())?;
+    amkr::client::update_model_reasoning_effort(
+        &instance.connection,
+        model_id,
+        reasoning_effort,
+    )
+}
+
 pub fn get_amkr_unified_model(
     selected_path: Option<&Path>,
 ) -> Result<amkr::client::AmkrUnifiedModelResponse, String> {

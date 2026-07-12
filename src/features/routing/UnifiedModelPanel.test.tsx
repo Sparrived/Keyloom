@@ -179,4 +179,46 @@ describe("UnifiedModelPanel", () => {
     expect(screen.getByText("别名：fast-a")).toBeInTheDocument();
     expect(screen.queryByText("fingerprint-a")).not.toBeInTheDocument();
   });
+
+  it("updates the selected model reasoning effort", async () => {
+    invokeMock.mockImplementation(async (command) => {
+      if (command === "get_amkr_models") return { models: [{ ...models.models[0], reasoning_effort: null }] };
+      if (command === "get_amkr_unified_model") return { unified_model: { default: { primary: { model: "model-a", key: null } } } };
+      if (command === "update_amkr_model_reasoning_effort") return { ...models.models[0], reasoning_effort: "high" };
+      if (command === "update_amkr_unified_model") return { unified_model: { default: { primary: { model: "model-a", key: null } } } };
+      return undefined;
+    });
+    render(<UnifiedModelPanel configPath="C:/amkr.json" />);
+
+    await screen.findByRole("option", { name: "model-a" });
+    fireEvent.change(screen.getByLabelText("推理强度"), { target: { value: "high" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存统一模型" }));
+
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_amkr_model_reasoning_effort", {
+      configPath: "C:/amkr.json",
+      modelId: "model-a",
+      reasoningEffort: "high",
+    }));
+  });
+
+  it("sends null when clearing a model reasoning override", async () => {
+    invokeMock.mockImplementation(async (command) => {
+      if (command === "get_amkr_models") return { models: [{ ...models.models[0], reasoning_effort: "high" }] };
+      if (command === "get_amkr_unified_model") return { unified_model: { default: { primary: { model: "model-a", key: null } } } };
+      if (command === "update_amkr_model_reasoning_effort") return { ...models.models[0], reasoning_effort: null };
+      if (command === "update_amkr_unified_model") return { unified_model: { default: { primary: { model: "model-a", key: null } } } };
+      return undefined;
+    });
+    render(<UnifiedModelPanel configPath={null} />);
+
+    await screen.findByRole("option", { name: "model-a" });
+    fireEvent.change(screen.getByLabelText("推理强度"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存统一模型" }));
+
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_amkr_model_reasoning_effort", {
+      configPath: null,
+      modelId: "model-a",
+      reasoningEffort: null,
+    }));
+  });
 });
