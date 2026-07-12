@@ -259,7 +259,7 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
   }
 
   return (
-    <main className="app-shell">
+    <div className="app-shell">
       <aside aria-label="主导航" className="sidebar">
         <div className="brand-block">
           <h1>Keyloom</h1>
@@ -293,7 +293,7 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
           </p>
         </div>
       </aside>
-      <section className="content" aria-live="polite">
+      <main className="content" aria-live="polite">
         {activePage === "概览" && metadata ? (
           <>
             <header className="overview-header">
@@ -368,7 +368,7 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
         ) : activePage === "供应商" ? <ProvidersPage configPath={selectedConfigPath} /> : activePage === "模型路由" ? <RoutingPage configPath={selectedConfigPath} onUnifiedModelChange={applyUnifiedModel} /> : activePage === "活动" ? <ActivityPage configPath={selectedConfigPath} history={metricHistory} />
           : activePage === "集成" ? <IntegrationsPage configPath={selectedConfigPath} baseUrl={metadata?.base_url ?? null} authEnabled={metadata?.auth_enabled ?? false} />
           : <SettingsPage configPath={selectedConfigPath} metadata={metadata} health={health} onConfigPathChange={applyConfigPath} />}
-      </section>
-    </main>
+      </main>
+    </div>
   );
 }

@@ -41,6 +41,14 @@ describe("Keyloom application shell", () => {
     }
   });
 
+  it("keeps navigation outside the main content landmark", () => {
+    render(<App />);
+
+    const main = screen.getByRole("main");
+    expect(main).not.toContainElement(screen.getByRole("navigation"));
+    expect(main).toContainElement(screen.getByRole("heading", { name: "概览" }));
+  });
+
   it("shows the documented service workspace with discovered local details", async () => {
     render(<App />);
 
