@@ -9,3 +9,5 @@ src-tauri/gen/
 *.exe
 src-tauri/runtime-bundle/*
 !src-tauri/runtime-bundle/.gitkeep
+test-results/
+playwright-report/
