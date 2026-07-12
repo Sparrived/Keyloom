@@ -129,16 +129,138 @@ pub fn create_provider(
     )
 }
 
+pub fn update_provider(
+    connection: &AmkrConnection,
+    config_revision: &str,
+    provider_id: &str,
+    id: &str,
+    base_url: &str,
+) -> Result<(), String> {
+    request_empty(
+        connection,
+        "PUT",
+        &format!("/api/providers/{}", encode_path_segment(provider_id)),
+        "更新供应商",
+        serde_json::json!({
+            "config_revision": config_revision,
+            "id": id,
+            "base_url": base_url,
+        }),
+        &[200],
+    )
+}
+
 pub fn delete_provider(connection: &AmkrConnection, config_revision: &str, id: &str) -> Result<(), String> {
-    request_empty(connection, "DELETE", &format!("/api/providers/{id}"), "删除供应商", serde_json::json!({ "config_revision": config_revision }), &[204])
+    request_empty(connection, "DELETE", &format!("/api/providers/{}", encode_path_segment(id)), "删除供应商", serde_json::json!({ "config_revision": config_revision }), &[204])
 }
 
 pub fn create_provider_key(connection: &AmkrConnection, config_revision: &str, provider_id: &str, name: &str, api_key: &str, allow_visitor: bool) -> Result<(), String> {
-    request_empty(connection, "POST", &format!("/api/providers/{provider_id}/keys"), "创建 Key", serde_json::json!({ "config_revision": config_revision, "name": name, "api_key": api_key, "allow_visitor": allow_visitor }), &[201])
+    request_empty(connection, "POST", &format!("/api/providers/{}/keys", encode_path_segment(provider_id)), "创建 Key", serde_json::json!({ "config_revision": config_revision, "name": name, "api_key": api_key, "allow_visitor": allow_visitor }), &[201])
+}
+
+pub fn update_provider_key(
+    connection: &AmkrConnection,
+    config_revision: &str,
+    provider_id: &str,
+    key_name: &str,
+    name: &str,
+    api_key: Option<&str>,
+    enabled: bool,
+    allow_visitor: bool,
+) -> Result<(), String> {
+    let mut payload = serde_json::json!({
+        "config_revision": config_revision,
+        "name": name,
+        "enabled": enabled,
+        "allow_visitor": allow_visitor,
+    });
+    if let Some(api_key) = api_key.filter(|value| !value.is_empty()) {
+        payload["api_key"] = serde_json::Value::String(api_key.to_owned());
+    }
+    request_empty(
+        connection,
+        "PUT",
+        &format!(
+            "/api/providers/{}/keys/{}",
+            encode_path_segment(provider_id),
+            encode_path_segment(key_name)
+        ),
+        "更新 Key",
+        payload,
+        &[200],
+    )
+}
+
+pub fn delete_provider_key(
+    connection: &AmkrConnection,
+    config_revision: &str,
+    provider_id: &str,
+    key_name: &str,
+) -> Result<(), String> {
+    request_empty(
+        connection,
+        "DELETE",
+        &format!(
+            "/api/providers/{}/keys/{}",
+            encode_path_segment(provider_id),
+            encode_path_segment(key_name)
+        ),
+        "删除 Key",
+        serde_json::json!({ "config_revision": config_revision }),
+        &[204],
+    )
 }
 
 pub fn create_pool(connection: &AmkrConnection, config_revision: &str, provider_id: &str, name: &str, keys: Vec<String>, models: Vec<String>) -> Result<(), String> {
-    request_empty(connection, "POST", &format!("/api/providers/{provider_id}/pools"), "创建模型池", serde_json::json!({ "config_revision": config_revision, "name": name, "keys": keys, "models": models }), &[201])
+    request_empty(connection, "POST", &format!("/api/providers/{}/pools", encode_path_segment(provider_id)), "创建模型池", serde_json::json!({ "config_revision": config_revision, "name": name, "keys": keys, "models": models }), &[201])
+}
+
+pub fn update_pool(
+    connection: &AmkrConnection,
+    config_revision: &str,
+    provider_id: &str,
+    pool_name: &str,
+    name: &str,
+    keys: Vec<String>,
+    models: Vec<String>,
+) -> Result<(), String> {
+    request_empty(
+        connection,
+        "PUT",
+        &format!(
+            "/api/providers/{}/pools/{}",
+            encode_path_segment(provider_id),
+            encode_path_segment(pool_name)
+        ),
+        "更新模型池",
+        serde_json::json!({
+            "config_revision": config_revision,
+            "name": name,
+            "keys": keys,
+            "models": models,
+        }),
+        &[200],
+    )
+}
+
+pub fn delete_pool(
+    connection: &AmkrConnection,
+    config_revision: &str,
+    provider_id: &str,
+    pool_name: &str,
+) -> Result<(), String> {
+    request_empty(
+        connection,
+        "DELETE",
+        &format!(
+            "/api/providers/{}/pools/{}",
+            encode_path_segment(provider_id),
+            encode_path_segment(pool_name)
+        ),
+        "删除模型池",
+        serde_json::json!({ "config_revision": config_revision }),
+        &[204],
+    )
 }
 
 pub fn create_route(connection: &AmkrConnection, config_revision: &str, id: &str, provider: &str, pool: &str, upstream_model: &str, aliases: Vec<String>, routing_mode: Option<String>) -> Result<(), String> {
@@ -149,7 +271,47 @@ pub fn export_config(connection: &AmkrConnection) -> Result<AmkrConfigTransfer, 
 pub fn import_config(connection: &AmkrConnection, config_revision: &str, config: serde_json::Value) -> Result<AmkrConfigTransfer, String> { request_json(connection, "POST", "/api/config/import", "导入配置", Some(serde_json::json!({"config_revision": config_revision, "config": config})), &[200]) }
 
 pub fn delete_route(connection: &AmkrConnection, config_revision: &str, id: &str) -> Result<(), String> {
-    request_empty(connection, "DELETE", &format!("/api/routes/{id}"), "删除模型路由", serde_json::json!({ "config_revision": config_revision }), &[204])
+    request_empty(connection, "DELETE", &format!("/api/routes/{}", encode_path_segment(id)), "删除模型路由", serde_json::json!({ "config_revision": config_revision }), &[204])
+}
+
+pub fn update_route(
+    connection: &AmkrConnection,
+    config_revision: &str,
+    route_id: &str,
+    id: &str,
+    targets: Vec<AmkrRouteTarget>,
+    aliases: Vec<String>,
+    routing_mode: Option<String>,
+) -> Result<(), String> {
+    request_empty(
+        connection,
+        "PUT",
+        &format!("/api/routes/{}", encode_path_segment(route_id)),
+        "更新模型路由",
+        serde_json::json!({
+            "config_revision": config_revision,
+            "id": id,
+            "targets": targets,
+            "aliases": aliases,
+            "routing_mode": routing_mode,
+        }),
+        &[200],
+    )
+}
+
+fn encode_path_segment(value: &str) -> String {
+    const HEX: &[u8; 16] = b"0123456789ABCDEF";
+    let mut encoded = String::with_capacity(value.len());
+    for byte in value.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~') {
+            encoded.push(char::from(byte));
+        } else {
+            encoded.push('%');
+            encoded.push(char::from(HEX[(byte >> 4) as usize]));
+            encoded.push(char::from(HEX[(byte & 0x0f) as usize]));
+        }
+    }
+    encoded
 }
 
 fn get_json<T: DeserializeOwned>(
@@ -226,7 +388,16 @@ fn request_json<T: DeserializeOwned>(
         .nth(1)
         .and_then(|value| value.parse::<u16>().ok());
     if !status_code.is_some_and(|status| success_statuses.contains(&status)) {
-        return Err(format!("AMKR {label} 未返回成功状态"));
+        let detail = serde_json::from_str::<serde_json::Value>(body)
+            .ok()
+            .and_then(|value| value.get("detail")?.as_str().map(str::to_owned));
+        let status = status_code
+            .map(|status| status.to_string())
+            .unwrap_or_else(|| "未知".to_owned());
+        return Err(match detail {
+            Some(detail) => format!("AMKR {label} 请求失败（HTTP {status}）: {detail}"),
+            None => format!("AMKR {label} 请求失败（HTTP {status}）"),
+        });
     }
 
     if body.trim().is_empty() {

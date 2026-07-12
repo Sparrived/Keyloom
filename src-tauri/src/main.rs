@@ -51,6 +51,11 @@ fn create_amkr_provider(config_path: Option<String>, config_revision: String, id
 }
 
 #[tauri::command]
+fn update_amkr_provider(config_path: Option<String>, config_revision: String, provider_id: String, id: String, base_url: String) -> Result<(), String> {
+    keyloom_core::update_amkr_provider(config_path.as_deref().map(Path::new), &config_revision, &provider_id, &id, &base_url)
+}
+
+#[tauri::command]
 fn delete_amkr_provider(config_path: Option<String>, config_revision: String, id: String) -> Result<(), String> {
     keyloom_core::delete_amkr_provider(config_path.as_deref().map(Path::new), &config_revision, &id)
 }
@@ -61,13 +66,38 @@ fn create_amkr_provider_key(config_path: Option<String>, config_revision: String
 }
 
 #[tauri::command]
+fn update_amkr_provider_key(config_path: Option<String>, config_revision: String, provider_id: String, key_name: String, name: String, api_key: Option<String>, enabled: bool, allow_visitor: bool) -> Result<(), String> {
+    keyloom_core::update_amkr_provider_key(config_path.as_deref().map(Path::new), &config_revision, &provider_id, &key_name, &name, api_key.as_deref(), enabled, allow_visitor)
+}
+
+#[tauri::command]
+fn delete_amkr_provider_key(config_path: Option<String>, config_revision: String, provider_id: String, key_name: String) -> Result<(), String> {
+    keyloom_core::delete_amkr_provider_key(config_path.as_deref().map(Path::new), &config_revision, &provider_id, &key_name)
+}
+
+#[tauri::command]
 fn create_amkr_pool(config_path: Option<String>, config_revision: String, provider_id: String, name: String, keys: Vec<String>, models: Vec<String>) -> Result<(), String> {
     keyloom_core::create_amkr_pool(config_path.as_deref().map(Path::new), &config_revision, &provider_id, &name, keys, models)
 }
 
 #[tauri::command]
+fn update_amkr_pool(config_path: Option<String>, config_revision: String, provider_id: String, pool_name: String, name: String, keys: Vec<String>, models: Vec<String>) -> Result<(), String> {
+    keyloom_core::update_amkr_pool(config_path.as_deref().map(Path::new), &config_revision, &provider_id, &pool_name, &name, keys, models)
+}
+
+#[tauri::command]
+fn delete_amkr_pool(config_path: Option<String>, config_revision: String, provider_id: String, pool_name: String) -> Result<(), String> {
+    keyloom_core::delete_amkr_pool(config_path.as_deref().map(Path::new), &config_revision, &provider_id, &pool_name)
+}
+
+#[tauri::command]
 fn create_amkr_route(config_path: Option<String>, config_revision: String, id: String, provider: String, pool: String, upstream_model: String, aliases: Vec<String>, routing_mode: Option<String>) -> Result<(), String> {
     keyloom_core::create_amkr_route(config_path.as_deref().map(Path::new), &config_revision, &id, &provider, &pool, &upstream_model, aliases, routing_mode)
+}
+
+#[tauri::command]
+fn update_amkr_route(config_path: Option<String>, config_revision: String, route_id: String, id: String, targets: Vec<keyloom_core::amkr::client::AmkrRouteTarget>, aliases: Vec<String>, routing_mode: Option<String>) -> Result<(), String> {
+    keyloom_core::update_amkr_route(config_path.as_deref().map(Path::new), &config_revision, &route_id, &id, targets, aliases, routing_mode)
 }
 
 #[tauri::command]
@@ -202,10 +232,16 @@ fn main() {
             get_amkr_providers,
             get_amkr_routes,
             create_amkr_provider,
+            update_amkr_provider,
             delete_amkr_provider,
             create_amkr_provider_key,
+            update_amkr_provider_key,
+            delete_amkr_provider_key,
             create_amkr_pool,
+            update_amkr_pool,
+            delete_amkr_pool,
             create_amkr_route,
+            update_amkr_route,
             delete_amkr_route,
             export_amkr_config,
             import_amkr_config,

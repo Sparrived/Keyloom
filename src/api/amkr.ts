@@ -104,12 +104,32 @@ export function deleteAmkrProvider(configRevision: string, id: string, configPat
   return invoke("delete_amkr_provider", { configPath, configRevision, id });
 }
 
+export function updateAmkrProvider(configRevision: string, providerId: string, id: string, baseUrl: string, configPath: string | null = null) {
+  return invoke("update_amkr_provider", { configPath, configRevision, providerId, id, baseUrl });
+}
+
 export function createAmkrProviderKey(configRevision: string, providerId: string, name: string, apiKey: string, allowVisitor: boolean, configPath: string | null = null) {
   return invoke("create_amkr_provider_key", { configPath, configRevision, providerId, name, apiKey, allowVisitor });
 }
 
+export function updateAmkrProviderKey(configRevision: string, providerId: string, keyName: string, name: string, apiKey: string | null, enabled: boolean, allowVisitor: boolean, configPath: string | null = null) {
+  return invoke("update_amkr_provider_key", { configPath, configRevision, providerId, keyName, name, apiKey, enabled, allowVisitor });
+}
+
+export function deleteAmkrProviderKey(configRevision: string, providerId: string, keyName: string, configPath: string | null = null) {
+  return invoke("delete_amkr_provider_key", { configPath, configRevision, providerId, keyName });
+}
+
 export function createAmkrPool(configRevision: string, providerId: string, name: string, keys: string[], models: string[], configPath: string | null = null) {
   return invoke("create_amkr_pool", { configPath, configRevision, providerId, name, keys, models });
+}
+
+export function updateAmkrPool(configRevision: string, providerId: string, poolName: string, name: string, keys: string[], models: string[], configPath: string | null = null) {
+  return invoke("update_amkr_pool", { configPath, configRevision, providerId, poolName, name, keys, models });
+}
+
+export function deleteAmkrPool(configRevision: string, providerId: string, poolName: string, configPath: string | null = null) {
+  return invoke("delete_amkr_pool", { configPath, configRevision, providerId, poolName });
 }
 
 export function createAmkrRoute(configRevision: string, id: string, provider: string, pool: string, upstreamModel: string, aliases: string[], routingMode: string | null, configPath: string | null = null) {
@@ -118,6 +138,10 @@ export function createAmkrRoute(configRevision: string, id: string, provider: st
 
 export function deleteAmkrRoute(configRevision: string, id: string, configPath: string | null = null) {
   return invoke("delete_amkr_route", { configPath, configRevision, id });
+}
+
+export function updateAmkrRoute(configRevision: string, routeId: string, id: string, targets: AmkrRouteTarget[], aliases: string[], routingMode: string | null, configPath: string | null = null) {
+  return invoke("update_amkr_route", { configPath, configRevision, routeId, id, targets, aliases, routingMode });
 }
 
 export function exportAmkrConfig(configPath: string | null = null) { return invoke<AmkrConfigTransfer>("export_amkr_config", { configPath }); }

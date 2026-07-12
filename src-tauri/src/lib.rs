@@ -99,6 +99,11 @@ pub fn create_amkr_provider(selected_path: Option<&Path>, config_revision: &str,
     amkr::client::create_provider(&instance.connection, config_revision, id, base_url)
 }
 
+pub fn update_amkr_provider(selected_path: Option<&Path>, config_revision: &str, provider_id: &str, id: &str, base_url: &str) -> Result<(), String> {
+    let instance = amkr::discover_from_paths(selected_path, &default_config_path()).map_err(|error| error.to_string())?;
+    amkr::client::update_provider(&instance.connection, config_revision, provider_id, id, base_url)
+}
+
 pub fn delete_amkr_provider(selected_path: Option<&Path>, config_revision: &str, id: &str) -> Result<(), String> {
     let instance = amkr::discover_from_paths(selected_path, &default_config_path()).map_err(|error| error.to_string())?;
     amkr::client::delete_provider(&instance.connection, config_revision, id)
@@ -109,14 +114,39 @@ pub fn create_amkr_provider_key(selected_path: Option<&Path>, config_revision: &
     amkr::client::create_provider_key(&instance.connection, config_revision, provider_id, name, api_key, allow_visitor)
 }
 
+pub fn update_amkr_provider_key(selected_path: Option<&Path>, config_revision: &str, provider_id: &str, key_name: &str, name: &str, api_key: Option<&str>, enabled: bool, allow_visitor: bool) -> Result<(), String> {
+    let instance = amkr::discover_from_paths(selected_path, &default_config_path()).map_err(|error| error.to_string())?;
+    amkr::client::update_provider_key(&instance.connection, config_revision, provider_id, key_name, name, api_key, enabled, allow_visitor)
+}
+
+pub fn delete_amkr_provider_key(selected_path: Option<&Path>, config_revision: &str, provider_id: &str, key_name: &str) -> Result<(), String> {
+    let instance = amkr::discover_from_paths(selected_path, &default_config_path()).map_err(|error| error.to_string())?;
+    amkr::client::delete_provider_key(&instance.connection, config_revision, provider_id, key_name)
+}
+
 pub fn create_amkr_pool(selected_path: Option<&Path>, config_revision: &str, provider_id: &str, name: &str, keys: Vec<String>, models: Vec<String>) -> Result<(), String> {
     let instance = amkr::discover_from_paths(selected_path, &default_config_path()).map_err(|error| error.to_string())?;
     amkr::client::create_pool(&instance.connection, config_revision, provider_id, name, keys, models)
 }
 
+pub fn update_amkr_pool(selected_path: Option<&Path>, config_revision: &str, provider_id: &str, pool_name: &str, name: &str, keys: Vec<String>, models: Vec<String>) -> Result<(), String> {
+    let instance = amkr::discover_from_paths(selected_path, &default_config_path()).map_err(|error| error.to_string())?;
+    amkr::client::update_pool(&instance.connection, config_revision, provider_id, pool_name, name, keys, models)
+}
+
+pub fn delete_amkr_pool(selected_path: Option<&Path>, config_revision: &str, provider_id: &str, pool_name: &str) -> Result<(), String> {
+    let instance = amkr::discover_from_paths(selected_path, &default_config_path()).map_err(|error| error.to_string())?;
+    amkr::client::delete_pool(&instance.connection, config_revision, provider_id, pool_name)
+}
+
 pub fn create_amkr_route(selected_path: Option<&Path>, config_revision: &str, id: &str, provider: &str, pool: &str, upstream_model: &str, aliases: Vec<String>, routing_mode: Option<String>) -> Result<(), String> {
     let instance = amkr::discover_from_paths(selected_path, &default_config_path()).map_err(|error| error.to_string())?;
     amkr::client::create_route(&instance.connection, config_revision, id, provider, pool, upstream_model, aliases, routing_mode)
+}
+
+pub fn update_amkr_route(selected_path: Option<&Path>, config_revision: &str, route_id: &str, id: &str, targets: Vec<amkr::client::AmkrRouteTarget>, aliases: Vec<String>, routing_mode: Option<String>) -> Result<(), String> {
+    let instance = amkr::discover_from_paths(selected_path, &default_config_path()).map_err(|error| error.to_string())?;
+    amkr::client::update_route(&instance.connection, config_revision, route_id, id, targets, aliases, routing_mode)
 }
 
 pub fn delete_amkr_route(selected_path: Option<&Path>, config_revision: &str, id: &str) -> Result<(), String> {

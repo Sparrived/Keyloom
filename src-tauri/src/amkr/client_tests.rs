@@ -2,7 +2,11 @@ use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::thread;
 
-use super::client::{create_provider, create_provider_key, export_config, get_health, get_providers, get_routes, import_config};
+use super::client::{
+    create_provider, create_provider_key, delete_pool, delete_provider_key, delete_route,
+    export_config, get_health, get_providers, get_routes, import_config, update_pool,
+    update_provider, update_provider_key, update_route, AmkrRouteTarget,
+};
 use super::AmkrConnection;
 
 #[test]
@@ -176,6 +180,219 @@ fn creates_a_provider_key_with_local_authentication_and_revision() {
         &AmkrConnection { base_url: format!("http://{address}"), local_api_key: Some("local-api-key".to_owned()), metrics_db_path: None, log_file_path: None },
         "revision-a", "a.example.test", "key-b", "upstream-secret", true,
     ).unwrap();
+    server.join().unwrap();
+}
+
+#[test]
+fn sends_provider_configuration_updates_with_the_current_revision() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = thread::spawn(move || {
+        for (expected_path, expected_body) in [
+            (
+                "PUT /api/providers/a.example.test HTTP/1.1",
+                vec![
+                    "\"config_revision\":\"revision-a\"",
+                    "\"id\":\"b.example.test\"",
+                    "\"base_url\":\"https://b.example.test\"",
+                ],
+            ),
+            (
+                "PUT /api/providers/b.example.test/keys/key-a HTTP/1.1",
+                vec![
+                    "\"name\":\"key-b\"",
+                    "\"enabled\":false",
+                    "\"allow_visitor\":true",
+                    "\"api_key\":\"replacement-secret\"",
+                ],
+            ),
+            (
+                "PUT /api/providers/b.example.test/pools/pool-a HTTP/1.1",
+                vec![
+                    "\"name\":\"pool-b\"",
+                    "\"keys\":[\"key-b\"]",
+                    "\"models\":[\"model-b\"]",
+                ],
+            ),
+            (
+                "PUT /api/routes/model-a HTTP/1.1",
+                vec![
+                    "\"id\":\"model-b\"",
+                    "\"aliases\":[\"alias-b\"]",
+                    "\"routing_mode\":\"priority\"",
+                    "\"provider\":\"b.example.test\"",
+                ],
+            ),
+        ] {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buffer = [0_u8; 4096];
+            let read = stream.read(&mut buffer).unwrap();
+            let request = String::from_utf8_lossy(&buffer[..read]);
+            assert!(request.starts_with(expected_path));
+            assert!(request.contains("Authorization: Bearer local-api-key"));
+            for fragment in expected_body {
+                assert!(request.contains(fragment), "missing {fragment} in {request}");
+            }
+            write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{{}}").unwrap();
+        }
+    });
+    let connection = AmkrConnection {
+        base_url: format!("http://{address}"),
+        local_api_key: Some("local-api-key".to_owned()),
+        metrics_db_path: None,
+        log_file_path: None,
+    };
+
+    update_provider(&connection, "revision-a", "a.example.test", "b.example.test", "https://b.example.test").unwrap();
+    update_provider_key(&connection, "revision-a", "b.example.test", "key-a", "key-b", Some("replacement-secret"), false, true).unwrap();
+    update_pool(&connection, "revision-a", "b.example.test", "pool-a", "pool-b", vec!["key-b".to_owned()], vec!["model-b".to_owned()]).unwrap();
+    update_route(
+        &connection,
+        "revision-a",
+        "model-a",
+        "model-b",
+        vec![AmkrRouteTarget {
+            provider: "b.example.test".to_owned(),
+            pool: "pool-b".to_owned(),
+            upstream_model: "upstream-b".to_owned(),
+        }],
+        vec!["alias-b".to_owned()],
+        Some("priority".to_owned()),
+    )
+    .unwrap();
+
+    server.join().unwrap();
+}
+
+#[test]
+fn sends_key_and_pool_deletions_with_the_current_revision() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = thread::spawn(move || {
+        for expected_path in [
+            "DELETE /api/providers/a.example.test/keys/key-a HTTP/1.1",
+            "DELETE /api/providers/a.example.test/pools/pool-a HTTP/1.1",
+        ] {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buffer = [0_u8; 2048];
+            let read = stream.read(&mut buffer).unwrap();
+            let request = String::from_utf8_lossy(&buffer[..read]);
+            assert!(request.starts_with(expected_path));
+            assert!(request.contains("\"config_revision\":\"revision-a\""));
+            write!(stream, "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").unwrap();
+        }
+    });
+    let connection = AmkrConnection {
+        base_url: format!("http://{address}"),
+        local_api_key: None,
+        metrics_db_path: None,
+        log_file_path: None,
+    };
+
+    delete_provider_key(&connection, "revision-a", "a.example.test", "key-a").unwrap();
+    delete_pool(&connection, "revision-a", "a.example.test", "pool-a").unwrap();
+
+    server.join().unwrap();
+}
+
+#[test]
+fn encodes_dynamic_route_ids_as_single_path_segments() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let mut buffer = [0_u8; 2048];
+        let read = stream.read(&mut buffer).unwrap();
+        let request = String::from_utf8_lossy(&buffer[..read]);
+        assert!(request.starts_with("DELETE /api/routes/model%2Fvision%20latest HTTP/1.1"));
+        write!(stream, "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").unwrap();
+    });
+
+    delete_route(
+        &AmkrConnection {
+            base_url: format!("http://{address}"),
+            local_api_key: None,
+            metrics_db_path: None,
+            log_file_path: None,
+        },
+        "revision-a",
+        "model/vision latest",
+    )
+    .unwrap();
+    server.join().unwrap();
+}
+
+#[test]
+fn reports_http_status_and_safe_api_detail_for_conflicts() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let mut buffer = [0_u8; 2048];
+        stream.read(&mut buffer).unwrap();
+        let body = r#"{"detail":"配置已被其他客户端修改"}"#;
+        write!(
+            stream,
+            "HTTP/1.1 409 Conflict\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            body.len(),
+            body
+        )
+        .unwrap();
+    });
+
+    let error = create_provider(
+        &AmkrConnection {
+            base_url: format!("http://{address}"),
+            local_api_key: None,
+            metrics_db_path: None,
+            log_file_path: None,
+        },
+        "stale-revision",
+        "a.example.test",
+        "https://a.example.test",
+    )
+    .unwrap_err();
+
+    assert!(error.contains("409"));
+    assert!(error.contains("配置已被其他客户端修改"));
+    server.join().unwrap();
+}
+
+#[test]
+fn never_reports_structured_validation_details_that_can_echo_api_keys() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let mut buffer = [0_u8; 2048];
+        stream.read(&mut buffer).unwrap();
+        let body = r#"{"detail":[{"loc":["body","api_key"],"input":"upstream-secret"}]}"#;
+        write!(
+            stream,
+            "HTTP/1.1 422 Unprocessable Entity\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            body.len(),
+            body
+        )
+        .unwrap();
+    });
+
+    let error = create_provider_key(
+        &AmkrConnection {
+            base_url: format!("http://{address}"),
+            local_api_key: None,
+            metrics_db_path: None,
+            log_file_path: None,
+        },
+        "revision-a",
+        "a.example.test",
+        "key-a",
+        "upstream-secret",
+        false,
+    )
+    .unwrap_err();
+
+    assert!(error.contains("422"));
+    assert!(!error.contains("upstream-secret"));
     server.join().unwrap();
 }
 
