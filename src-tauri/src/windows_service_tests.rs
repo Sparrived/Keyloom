@@ -104,3 +104,29 @@ fn executes_restart_as_stop_then_start_and_returns_each_command_result() {
     assert_eq!(seen, task_commands(ServiceAction::Restart, Path::new("amkr.exe"), Path::new("C:/router-config.json")));
     assert!(results.iter().all(|result| result.exit_code == 0));
 }
+
+
+#[test]
+fn rejects_nonzero_task_results_after_collecting_diagnostics() {
+    let mut seen = Vec::new();
+
+    let error = execute_task_commands(
+        ServiceAction::Restart,
+        Path::new("amkr.exe"),
+        Path::new("C:/router-config.json"),
+        |command| {
+            seen.push(command.to_vec());
+            Ok(TaskCommandResult {
+                command: command.to_vec(),
+                exit_code: if seen.len() == 1 { 1 } else { 0 },
+                stdout: String::new(),
+                stderr: if seen.len() == 1 { "Access is denied".to_owned() } else { String::new() },
+            })
+        },
+    )
+    .unwrap_err();
+
+    assert_eq!(seen, task_commands(ServiceAction::Restart, Path::new("amkr.exe"), Path::new("C:/router-config.json")));
+    assert!(error.contains("退出码 1"));
+    assert!(error.contains("Access is denied"));
+}

@@ -80,10 +80,28 @@ pub fn execute_task_commands<F>(
 where
     F: FnMut(&[String]) -> Result<TaskCommandResult, String>,
 {
-    task_commands(action, executable, config_path)
+    let results = task_commands(action, executable, config_path)
         .into_iter()
         .map(|command| runner(&command))
-        .collect()
+        .collect::<Result<Vec<_>, _>>()?;
+
+    if let Some(failed) = results.iter().find(|result| result.exit_code != 0) {
+        let diagnostic = if !failed.stderr.is_empty() {
+            failed.stderr.as_str()
+        } else if !failed.stdout.is_empty() {
+            failed.stdout.as_str()
+        } else {
+            "无命令输出"
+        };
+        return Err(format!(
+            "计划任务命令失败（退出码 {}）: {}: {}",
+            failed.exit_code,
+            failed.command.join(" "),
+            diagnostic
+        ));
+    }
+
+    Ok(results)
 }
 
 

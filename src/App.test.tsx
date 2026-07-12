@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -11,6 +11,11 @@ import { invoke } from "@tauri-apps/api/core";
 const invokeMock = vi.mocked(invoke);
 
 describe("Keyloom application shell", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
   beforeEach(() => {
     localStorage.clear();
     invokeMock.mockReset();
@@ -77,7 +82,69 @@ describe("Keyloom application shell", () => {
     });
   });
 
+  it("treats a successful stop as stopped without requiring health to respond", async () => {
+    invokeMock.mockReset();
+    let healthReads = 0;
+    invokeMock.mockImplementation(async (command) => {
+      if (command === "discover_amkr") return { config_path: "C:/config.json", base_url: "http://127.0.0.1:18900", metrics_db_path: null, log_file_path: null, auth_enabled: true };
+      if (command === "get_amkr_health") { healthReads += 1; return { status: "ok", local_auth_enabled: true }; }
+      if (command === "get_amkr_metrics") return { total: { requests: 0, total_tokens: 0, cached_token_rate: 0, avg_duration_ms: 0 } };
+      if (command === "stop_amkr") return [{ command: ["schtasks"], exit_code: 0, stdout: "SUCCESS", stderr: "" }];
+      return undefined;
+    });
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "服务状态" }));
+    expect(screen.getByRole("button", { name: "启动服务" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "停止服务" }));
+
+    expect(await screen.findByText("服务已停止。")).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "服务状态" })).toHaveTextContent("服务未运行");
+    expect(screen.getByRole("button", { name: "停止服务" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "启动服务" })).toBeEnabled();
+    expect(screen.queryByText(/服务操作失败/)).not.toBeInTheDocument();
+    expect(healthReads).toBe(1);
+  });
+
+  it("retries health while a started service becomes ready", async () => {
+    vi.useFakeTimers();
+    invokeMock.mockReset();
+    let healthReads = 0;
+    invokeMock.mockImplementation(async (command) => {
+      if (command === "discover_amkr") return { config_path: "C:/config.json", base_url: "http://127.0.0.1:18900", metrics_db_path: null, log_file_path: null, auth_enabled: true };
+      if (command === "get_amkr_health") {
+        healthReads += 1;
+        if (healthReads < 4) throw new Error("connection refused");
+        return { status: "ok", local_auth_enabled: true };
+      }
+      if (command === "get_amkr_metrics") return { total: { requests: 0, total_tokens: 0, cached_token_rate: 0, avg_duration_ms: 0 } };
+      if (command === "start_amkr") return [];
+      return undefined;
+    });
+
+    render(<App />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    fireEvent.click(screen.getByRole("button", { name: "服务状态" }));
+    fireEvent.click(screen.getByRole("button", { name: "启动服务" }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_001); });
+
+    expect(screen.getByText("服务已启动。")).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "服务状态" })).toHaveTextContent("服务运行中");
+    expect(healthReads).toBe(4);
+  });
+
+  it("requires confirmation before removing the login task", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "服务状态" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "取消注册" }));
+
+    expect(invokeMock).not.toHaveBeenCalledWith("uninstall_amkr", expect.anything());
+  });
+
   it("manages the user startup task through fixed IPC commands", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
     invokeMock.mockReset();
     invokeMock.mockImplementation(async (command) => {
       if (command === "discover_amkr") return { config_path: "C:/config.json", base_url: "http://127.0.0.1:18900", metrics_db_path: null, log_file_path: null, auth_enabled: true };

@@ -133,8 +133,33 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
       ? "服务未运行"
       : "正在查找服务";
   const serviceTone = health?.status === "ok" ? "good" : healthError || discoveryError ? "bad" : "muted";
+  const serviceRunning = health?.status === "ok";
   const unifiedModel = health?.unified_model?.default?.primary?.model ?? "未设置";
   const latestSnapshot = metricHistory.at(-1);
+
+  async function waitForServiceHealth() {
+    let lastError: unknown = new Error("服务未在预期时间内就绪");
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      try {
+        return await getAmkrHealth(selectedConfigPath);
+      } catch (error: unknown) {
+        lastError = error;
+        if (attempt < 4) await new Promise<void>((resolve) => window.setTimeout(resolve, 500));
+      }
+    }
+    throw lastError;
+  }
+
+  function serviceNotice(action: AmkrServiceAction) {
+    return {
+      start_amkr: "服务已启动。",
+      stop_amkr: "服务已停止。",
+      restart_amkr: "服务已重启。",
+      install_user_amkr: "登录启动任务已注册。",
+      status_amkr: "任务状态已查询。",
+      uninstall_amkr: "登录启动任务已取消。",
+    }[action];
+  }
 
   async function runServiceAction(action: AmkrServiceAction) {
     setServiceAction(action);
@@ -143,14 +168,25 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
     setServiceCommandOutput("");
     try {
       const results = await controlAmkr(action, selectedConfigPath);
-      setHealth(await getAmkrHealth(selectedConfigPath));
-      setServiceActionNotice(action === "status_amkr" ? "任务状态已查询。" : "服务命令已执行。");
+      if (action === "start_amkr" || action === "restart_amkr") {
+        setHealth(await waitForServiceHealth());
+        setHealthError(null);
+      } else if (action === "stop_amkr" || action === "uninstall_amkr") {
+        setHealth(null);
+        setHealthError(null);
+      }
+      setServiceActionNotice(serviceNotice(action));
       setServiceCommandOutput(formatServiceCommandResults(results));
     } catch (error: unknown) {
       setServiceActionError(error instanceof Error ? error.message : String(error));
     } finally {
       setServiceAction(null);
     }
+  }
+
+  function requestServiceAction(action: AmkrServiceAction) {
+    if (action === "uninstall_amkr" && !window.confirm("取消登录启动任务？正在运行的服务也会停止。")) return;
+    void runServiceAction(action);
   }
 
   function formatServiceCommandResults(results: AmkrServiceCommandResult[]) {
@@ -262,12 +298,12 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
             <header className="page-header">
               <div><h2 id="service-heading">服务状态</h2><p>{serviceState}</p></div>
               <div className="service-controls" aria-label="服务控制">
-                <button type="button" disabled={serviceAction !== null} onClick={() => void runServiceAction("start_amkr")}>{serviceAction === "start_amkr" ? "正在启动" : "启动服务"}</button>
-                <button type="button" disabled={serviceAction !== null} onClick={() => void runServiceAction("stop_amkr")}>{serviceAction === "stop_amkr" ? "正在停止" : "停止服务"}</button>
-                <button type="button" disabled={serviceAction !== null} onClick={() => void runServiceAction("restart_amkr")}>{serviceAction === "restart_amkr" ? "正在重启" : "重启服务"}</button>
-                <button type="button" disabled={serviceAction !== null} onClick={() => void runServiceAction("install_user_amkr")}>{serviceAction === "install_user_amkr" ? "正在注册" : "注册登录启动"}</button>
-                <button type="button" disabled={serviceAction !== null} onClick={() => void runServiceAction("status_amkr")}>{serviceAction === "status_amkr" ? "正在查询" : "查询任务"}</button>
-                <button type="button" disabled={serviceAction !== null} onClick={() => void runServiceAction("uninstall_amkr")}>{serviceAction === "uninstall_amkr" ? "正在取消" : "取消注册"}</button>
+                <button type="button" disabled={serviceAction !== null || serviceRunning} onClick={() => requestServiceAction("start_amkr")}>{serviceAction === "start_amkr" ? "正在启动" : "启动服务"}</button>
+                <button type="button" disabled={serviceAction !== null || !serviceRunning} onClick={() => requestServiceAction("stop_amkr")}>{serviceAction === "stop_amkr" ? "正在停止" : "停止服务"}</button>
+                <button type="button" disabled={serviceAction !== null || !serviceRunning} onClick={() => requestServiceAction("restart_amkr")}>{serviceAction === "restart_amkr" ? "正在重启" : "重启服务"}</button>
+                <button type="button" disabled={serviceAction !== null} onClick={() => requestServiceAction("install_user_amkr")}>{serviceAction === "install_user_amkr" ? "正在注册" : "注册登录启动"}</button>
+                <button type="button" disabled={serviceAction !== null} onClick={() => requestServiceAction("status_amkr")}>{serviceAction === "status_amkr" ? "正在查询" : "查询任务"}</button>
+                <button type="button" disabled={serviceAction !== null} onClick={() => requestServiceAction("uninstall_amkr")}>{serviceAction === "uninstall_amkr" ? "正在取消" : "取消注册"}</button>
               </div>
             </header>
             {metadata ? <dl className="connection-summary"><div><dt>本机服务</dt><dd>{metadata.base_url}</dd></div><div><dt>配置文件</dt><dd>{metadata.config_path}</dd></div><div><dt>本地鉴权</dt><dd>{metadata.auth_enabled ? "已启用" : "未启用"}</dd></div></dl> : <p className="empty-state">正在查找本机 AMKR 配置。</p>}
