@@ -243,7 +243,10 @@ describe("Keyloom application shell", () => {
         status: "ok",
         local_auth_enabled: true,
         unified_model: {
-          default: { primary: { model: "gpt-5.5", key: null } },
+          default: {
+            primary: { model: "gpt-5.5", key: null },
+            fallback: { model: "gpt-5.4", key: null },
+          },
         },
       })
       .mockResolvedValueOnce({
@@ -264,6 +267,8 @@ describe("Keyloom application shell", () => {
 
     expect(await screen.findByText("统一模型")).toBeInTheDocument();
     expect(screen.getByText("gpt-5.5")).toBeInTheDocument();
+    expect(screen.getByText("自动路由 · 2 个目标")).toBeInTheDocument();
+    expect(screen.getByText("已启用")).toBeInTheDocument();
     expect(screen.getByText("数据总览")).toBeInTheDocument();
     expect(screen.getAllByText("1,428").length).toBeGreaterThan(0);
     expect(screen.getByText("2.84M")).toBeInTheDocument();
@@ -300,7 +305,24 @@ describe("Keyloom application shell", () => {
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_amkr_unified_model", { configPath: null, model: "model-a", key: "key-a", fallback: null, image: null }));
     fireEvent.click(screen.getByRole("button", { name: "概览" }));
 
-    expect(screen.getByText("固定 Key · key-a")).toBeInTheDocument();
+    expect(screen.getByText("固定 Key · key-a · 1 个目标")).toBeInTheDocument();
+  });
+
+  it("keeps the unified model status separate from a running service", async () => {
+    invokeMock.mockReset();
+    invokeMock.mockImplementation(async (command) => {
+      if (command === "discover_amkr") return { config_path: "C:/config.json", base_url: "http://127.0.0.1:18900", metrics_db_path: null, log_file_path: null, auth_enabled: true };
+      if (command === "get_amkr_health") return { status: "ok", local_auth_enabled: true, unified_model: null };
+      if (command === "get_amkr_metrics") return { total: { requests: 0, total_tokens: 0, cached_token_rate: 0, avg_duration_ms: 0 } };
+      return undefined;
+    });
+
+    render(<App />);
+
+    expect(await screen.findByText("尚未配置统一路由")).toBeInTheDocument();
+    expect(screen.getByText("未设置")).toBeInTheDocument();
+    expect(screen.getByText("未启用")).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "服务状态" })).toHaveTextContent("服务运行中");
   });
 
   it("shows real metric snapshots on the activity page", async () => {

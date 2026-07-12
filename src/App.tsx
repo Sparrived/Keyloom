@@ -176,9 +176,14 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
       : "正在查找服务";
   const serviceTone = serviceUnavailable ? "bad" : health?.status === "ok" ? configMismatch ? "warn" : "good" : "muted";
   const serviceRunning = health?.status === "ok";
-  const unifiedTarget = health?.unified_model?.default?.primary;
+  const unifiedPlan = health?.unified_model?.default;
+  const unifiedTarget = unifiedPlan?.primary;
+  const unifiedTargetCount = unifiedPlan ? 1 + (unifiedPlan.fallback ? 1 : 0) : 0;
   const unifiedModel = unifiedTarget?.model ?? "未设置";
-  const unifiedModelRouting = unifiedTarget?.key ? `固定 Key · ${unifiedTarget.key}` : unifiedTarget ? "自动路由" : "尚未配置统一路由";
+  const unifiedModelRouting = unifiedTarget
+    ? `${unifiedTarget.key ? `固定 Key · ${unifiedTarget.key}` : "自动路由"} · ${unifiedTargetCount} 个目标`
+    : "尚未配置统一路由";
+  const unifiedModelStatus = unifiedTarget ? "已启用" : "未启用";
   const latestSnapshot = metricHistory.at(-1);
 
   async function waitForServiceHealth() {
@@ -308,7 +313,7 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
                 <div className="card-heading"><h3 id="unified-model-heading">统一模型</h3><button type="button" onClick={() => setActivePage("模型路由")}>切换</button></div>
                 <strong>{unifiedModel}</strong>
                 <p>{unifiedModelRouting}</p>
-                <span className={`status-${serviceTone}`}>{serviceState}</span>
+                <span className={unifiedTarget ? "status-good" : "status-muted"}>{unifiedModelStatus}</span>
               </section>
               <section className="overview-card" aria-labelledby="metrics-heading">
                 <div className="card-heading"><h3 id="metrics-heading">数据总览</h3>{metricsError && metrics ? <span aria-label="指标数据状态" className="status-warn" role="status">上次成功数据</span> : <span>最近 60 分钟</span>}</div>
