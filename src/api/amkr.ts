@@ -19,8 +19,13 @@ export type AmkrHealth = {
 export type AmkrMetrics = {
   total: {
     requests: number;
+    successes?: number | null;
+    failures?: number | null;
+    prompt_tokens?: number | null;
+    completion_tokens?: number | null;
     total_tokens: number;
     cached_token_rate: number;
+    cached_tokens?: number | null;
     avg_duration_ms: number;
   };
 };

@@ -25,7 +25,7 @@ export function ActivityPage({ configPath, history }: ActivityPageProps) {
   }, [configPath]);
   return <section className="activity-page" aria-labelledby="activity-heading">
     <header className="page-header"><div><h2 id="activity-heading">活动</h2><p>本次运行期间从 AMKR 获取的真实用量快照。</p></div><span className="config-revision">{history.length} 个快照</span></header>
-    {snapshots.length === 0 ? <p className="empty-state">尚未获取到可用的服务指标。</p> : <ol className="activity-list">{snapshots.map((snapshot) => <li key={snapshot.timestamp}><time dateTime={snapshot.timestamp}>{formatTime(snapshot.timestamp)}</time><div><strong>{snapshot.requests.toLocaleString("zh-CN")} 个请求</strong><span>{snapshot.total_tokens.toLocaleString("zh-CN")} Token，缓存 {snapshot.cached_tokens.toLocaleString("zh-CN")} Token，平均延迟 {snapshot.avg_duration_ms}ms</span></div></li>)}</ol>}
+    {snapshots.length === 0 ? <p className="empty-state">尚未获取到可用的服务指标。</p> : <ol className="activity-list">{snapshots.map((snapshot) => <li key={snapshot.timestamp}><time dateTime={snapshot.timestamp}>{formatTime(snapshot.timestamp)}</time><div><strong>{snapshot.requests.toLocaleString("zh-CN")} 个请求</strong><span>{snapshot.total_tokens.toLocaleString("zh-CN")} Token，缓存 {snapshot.cached_tokens === null ? "暂不可用" : `${snapshot.cached_tokens.toLocaleString("zh-CN")} Token`}，平均延迟 {snapshot.avg_duration_ms}ms</span></div></li>)}</ol>}
     <section className="log-panel" aria-labelledby="log-heading"><div className="card-heading"><h3 id="log-heading">服务日志</h3><span>最近 64 KiB</span></div>{logError ? <p className="empty-state">日志暂不可用: {logError}</p> : logTail ? <pre>{logTail}</pre> : <p className="empty-state">正在读取服务日志。</p>}</section>
   </section>;
 }

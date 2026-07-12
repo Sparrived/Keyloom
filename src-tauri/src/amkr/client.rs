@@ -18,7 +18,17 @@ pub struct AmkrHealth {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct AmkrUsageStats {
     pub requests: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub successes: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failures: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt_tokens: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completion_tokens: Option<u64>,
     pub total_tokens: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cached_tokens: Option<u64>,
     pub cached_token_rate: f64,
     pub avg_duration_ms: u64,
 }

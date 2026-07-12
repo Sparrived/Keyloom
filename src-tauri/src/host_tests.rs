@@ -79,7 +79,7 @@ fn returns_metrics_for_the_discovered_instance() {
         let mut buffer = [0_u8; 1024];
         stream.read(&mut buffer).unwrap();
         assert!(String::from_utf8_lossy(&buffer).starts_with("GET /metrics"));
-        let body = r#"{"total":{"requests":1428,"total_tokens":2840000,"cached_token_rate":0.68,"avg_duration_ms":1200}}"#;
+        let body = r#"{"total":{"requests":1428,"successes":1400,"failures":28,"prompt_tokens":1840000,"completion_tokens":1000000,"total_tokens":2840000,"cached_tokens":1251200,"cached_token_rate":0.68,"avg_duration_ms":1200}}"#;
         write!(
             stream,
             "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -98,7 +98,12 @@ fn returns_metrics_for_the_discovered_instance() {
     let metrics = crate::get_amkr_metrics_from_paths(Some(&path), &path).unwrap();
 
     assert_eq!(metrics.total.requests, 1428);
+    assert_eq!(metrics.total.successes, Some(1400));
+    assert_eq!(metrics.total.failures, Some(28));
+    assert_eq!(metrics.total.prompt_tokens, Some(1_840_000));
+    assert_eq!(metrics.total.completion_tokens, Some(1_000_000));
     assert_eq!(metrics.total.total_tokens, 2_840_000);
+    assert_eq!(metrics.total.cached_tokens, Some(1_251_200));
     assert_eq!(metrics.total.cached_token_rate, 0.68);
     assert_eq!(metrics.total.avg_duration_ms, 1200);
     server.join().unwrap();

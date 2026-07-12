@@ -187,7 +187,12 @@ describe("Keyloom application shell", () => {
       .mockResolvedValueOnce({
         total: {
           requests: 1428,
+          successes: 1400,
+          failures: 28,
+          prompt_tokens: 1_840_000,
+          completion_tokens: 1_000_000,
           total_tokens: 2_840_000,
+          cached_tokens: 1_251_200,
           cached_token_rate: 0.68,
           avg_duration_ms: 1200,
         },
@@ -204,6 +209,10 @@ describe("Keyloom application shell", () => {
     expect(screen.getByText("1.2s")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "打开服务" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "请求" })).toBeInTheDocument();
+    expect(screen.getByLabelText("所选用量快照")).toHaveTextContent("输入 Token 1,840,000");
+    expect(screen.getByLabelText("所选用量快照")).toHaveTextContent("输出 Token 1,000,000");
+    expect(screen.getByLabelText("所选用量快照")).toHaveTextContent("成功率 98.0%");
+    expect(screen.getByText("1.25M tokens")).toBeInTheDocument();
     expect(invokeMock).toHaveBeenCalledWith("get_amkr_metrics", { configPath: null });
   });
 

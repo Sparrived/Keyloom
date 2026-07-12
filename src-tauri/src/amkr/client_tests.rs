@@ -5,7 +5,7 @@ use std::thread;
 use super::client::{
     create_provider, create_provider_key, delete_pool, delete_provider_key, delete_route,
     export_config, get_health, get_providers, get_routes, import_config, update_pool,
-    update_provider, update_provider_key, update_route, AmkrRouteTarget,
+    update_provider, update_provider_key, update_route, AmkrRouteTarget, AmkrUsageStats,
 };
 use super::AmkrConnection;
 
@@ -42,6 +42,20 @@ fn reads_a_healthy_local_amkr_response_without_exposing_the_auth_key() {
     assert_eq!(health.status, "ok");
     assert!(health.local_auth_enabled);
     server.join().unwrap();
+}
+
+#[test]
+fn keeps_new_metric_fields_optional_for_older_amkr_responses() {
+    let stats: AmkrUsageStats = serde_json::from_str(
+        r#"{"requests":12,"total_tokens":1001,"cached_token_rate":0.325,"avg_duration_ms":450}"#,
+    )
+    .unwrap();
+
+    assert_eq!(stats.successes, None);
+    assert_eq!(stats.failures, None);
+    assert_eq!(stats.prompt_tokens, None);
+    assert_eq!(stats.completion_tokens, None);
+    assert_eq!(stats.cached_tokens, None);
 }
 
 #[test]

@@ -285,7 +285,7 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
               {latestSnapshot ? (
                 <div className="recent-activity-grid">
                   <div><span className="status-good">●</span> 指标采样成功 <b>{formatCount(latestSnapshot.requests)} 请求</b></div>
-                  <div><span className="status-warn">●</span> 缓存命中 <b>{formatTokens(latestSnapshot.cached_tokens)} tokens</b></div>
+                  <div><span className="status-warn">●</span> 缓存命中 <b>{latestSnapshot.cached_tokens === null ? "缓存数据暂不可用" : `${formatTokens(latestSnapshot.cached_tokens)} tokens`}</b></div>
                 </div>
               ) : <p className="empty-state">暂无来自服务的近期活动。</p>}
             </section>
