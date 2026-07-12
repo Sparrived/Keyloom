@@ -2,8 +2,12 @@
 name = "keyloom-core"
 version = "0.1.0"
 edition = "2021"
+description = "Keyloom desktop control plane for Auto Model Key Router"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-
+tauri = { version = "2", features = ["tray-icon"] }
