@@ -138,4 +138,24 @@ describe("ProvidersPage", () => {
 
     expect(invokeMock).not.toHaveBeenCalledWith("delete_amkr_provider", expect.anything());
   });
+
+  it("shows visitor permission and copies only the key fingerprint", async () => {
+    const clipboard = { writeText: vi.fn().mockResolvedValue(undefined) };
+    Object.assign(navigator, { clipboard });
+    invokeMock.mockResolvedValue({
+      ...response,
+      providers: [{
+        ...response.providers[0],
+        keys: [{ ...response.providers[0].keys[0], allow_visitor: true }],
+      }],
+    });
+    render(<ProvidersPage configPath={null} />);
+    await screen.findByText("key-a");
+
+    expect(screen.getByText("允许访客")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "复制 Key 指纹 key-a" }));
+
+    await waitFor(() => expect(clipboard.writeText).toHaveBeenCalledWith("65bbff9a6cb9"));
+    expect(await screen.findByText("已复制")).toBeInTheDocument();
+  });
 });

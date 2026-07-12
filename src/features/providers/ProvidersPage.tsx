@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   createAmkrPool,
   createAmkrProvider,
@@ -47,7 +47,13 @@ function ProviderCard({ configPath, provider, revision, refresh }: ProviderCardP
   const [poolName, setPoolName] = useState("");
   const [poolKeys, setPoolKeys] = useState("");
   const [poolModels, setPoolModels] = useState("");
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const copyTimer = useRef<number | null>(null);
+
+  useEffect(() => () => {
+    if (copyTimer.current !== null) window.clearTimeout(copyTimer.current);
+  }, []);
 
   const mutate = async (operation: () => Promise<unknown>) => {
     setError(null);
@@ -78,6 +84,21 @@ function ProviderCard({ configPath, provider, revision, refresh }: ProviderCardP
     setPoolEditModels(pool.models.join(", "));
   };
 
+  const copyFingerprint = async (key: AmkrProviderKey) => {
+    if (!navigator.clipboard?.writeText) {
+      setError("当前环境不支持复制指纹。");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(key.api_key_fingerprint);
+      setCopiedKey(key.name);
+      if (copyTimer.current !== null) window.clearTimeout(copyTimer.current);
+      copyTimer.current = window.setTimeout(() => setCopiedKey(null), 1500);
+    } catch (reason) {
+      setError(errorMessage(reason));
+    }
+  };
+
   return <article className="provider-item">
     <header>
       <div><h3>{provider.id}</h3><p>{provider.base_url}</p></div>
@@ -100,7 +121,9 @@ function ProviderCard({ configPath, provider, revision, refresh }: ProviderCardP
         {provider.keys.length ? <ul>{provider.keys.map((key) => <li key={key.name}>
           <span>{key.name}</span><code>{key.api_key_fingerprint}</code>
           <span className={key.enabled ? "status-good" : "status-muted"}>{key.enabled ? "已启用" : "已停用"}</span>
+          <span className={key.allow_visitor ? "status-good" : "status-muted"}>{key.allow_visitor ? "允许访客" : "仅本地"}</span>
           <div className="row-actions">
+            <button aria-label={`复制 Key 指纹 ${key.name}`} className="secondary-button" type="button" onClick={() => void copyFingerprint(key)}>{copiedKey === key.name ? "已复制" : "复制指纹"}</button>
             <button aria-label={`编辑 Key ${key.name}`} className="secondary-button" type="button" onClick={() => beginKeyEdit(key)}>编辑</button>
             <button aria-label={`删除 Key ${key.name}`} className="danger-button" type="button" onClick={() => { if (window.confirm(`删除 Key ${key.name}？`)) void mutate(() => deleteAmkrProviderKey(revision, provider.id, key.name, configPath)); }}>删除</button>
           </div>
