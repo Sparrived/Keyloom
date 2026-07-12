@@ -7,6 +7,7 @@ import {
   type AmkrHealth,
   type AmkrMetrics,
   type AmkrMetadata,
+  type AmkrServiceCommandResult,
   type AmkrServiceAction,
 } from "./api/amkr";
 import { UsageChart, type UsageMetric } from "./features/overview/UsageChart";
@@ -49,6 +50,7 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
   const [serviceAction, setServiceAction] = useState<AmkrServiceAction | null>(null);
   const [serviceActionError, setServiceActionError] = useState<string | null>(null);
   const [serviceActionNotice, setServiceActionNotice] = useState<string | null>(null);
+  const [serviceCommandOutput, setServiceCommandOutput] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -137,15 +139,23 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
     setServiceAction(action);
     setServiceActionError(null);
     setServiceActionNotice(null);
+    setServiceCommandOutput("");
     try {
-      await controlAmkr(action, selectedConfigPath);
+      const results = await controlAmkr(action, selectedConfigPath);
       setHealth(await getAmkrHealth(selectedConfigPath));
       setServiceActionNotice(action === "status_amkr" ? "任务状态已查询。" : "服务命令已执行。");
+      setServiceCommandOutput(formatServiceCommandResults(results));
     } catch (error: unknown) {
       setServiceActionError(error instanceof Error ? error.message : String(error));
     } finally {
       setServiceAction(null);
     }
+  }
+
+  function formatServiceCommandResults(results: AmkrServiceCommandResult[]) {
+    return results
+      .flatMap((result) => [result.stdout, result.stderr].map((value) => value.trim()).filter(Boolean))
+      .join("\n\n");
   }
 
   return (
@@ -251,6 +261,7 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
             </header>
             {metadata ? <dl className="connection-summary"><div><dt>本机服务</dt><dd>{metadata.base_url}</dd></div><div><dt>配置文件</dt><dd>{metadata.config_path}</dd></div><div><dt>本地鉴权</dt><dd>{metadata.auth_enabled ? "已启用" : "未启用"}</dd></div></dl> : <p className="empty-state">正在查找本机 AMKR 配置。</p>}
             {serviceActionNotice ? <p className="status-good">{serviceActionNotice}</p> : null}
+            {serviceCommandOutput ? <pre className="service-command-output">{serviceCommandOutput}</pre> : null}
             {serviceActionError ? <p className="service-action-error">服务操作失败: {serviceActionError}</p> : null}
           </section>
         ) : activePage === "供应商" ? <ProvidersPage configPath={selectedConfigPath} /> : activePage === "模型路由" ? <RoutingPage configPath={selectedConfigPath} /> : activePage === "活动" ? <ActivityPage configPath={selectedConfigPath} history={metricHistory} />

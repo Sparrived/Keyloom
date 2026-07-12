@@ -82,6 +82,7 @@ describe("Keyloom application shell", () => {
       if (command === "discover_amkr") return { config_path: "C:/config.json", base_url: "http://127.0.0.1:18900", metrics_db_path: null, log_file_path: null, auth_enabled: true };
       if (command === "get_amkr_health") return { status: "ok", local_auth_enabled: true };
       if (command === "get_amkr_metrics") return { total: { requests: 0, total_tokens: 0, cached_token_rate: 0, avg_duration_ms: 0 } };
+      if (command === "status_amkr") return [{ command: ["schtasks"], exit_code: 0, stdout: "Status: Ready", stderr: "" }];
       return [];
     });
 
@@ -92,6 +93,7 @@ describe("Keyloom application shell", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "查询任务" }));
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("status_amkr", { configPath: null }));
+    expect(await screen.findByText("Status: Ready")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "取消注册" }));
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("uninstall_amkr", { configPath: null }));
