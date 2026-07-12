@@ -4,12 +4,15 @@ import {
   discoverAmkr,
   getAmkrHealth,
   getAmkrMetrics,
+  getRuntimeInstallationStatus,
+  initializeDefaultAmkrConfig,
   type AmkrHealth,
   type AmkrMetrics,
   type AmkrMetadata,
   type AmkrServiceCommandResult,
   type AmkrServiceAction,
   type AmkrUnifiedModel,
+  type RuntimeInstallationStatus,
 } from "./api/amkr";
 import { UsageChart, type UsageMetric } from "./features/overview/UsageChart";
 import { appendMetricSnapshot, type MetricSnapshot } from "./features/overview/useMetricHistory";
@@ -61,6 +64,10 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
   const [serviceActionError, setServiceActionError] = useState<string | null>(null);
   const [serviceActionNotice, setServiceActionNotice] = useState<string | null>(null);
   const [serviceCommandOutput, setServiceCommandOutput] = useState("");
+  const [runtimeStatus, setRuntimeStatus] = useState<RuntimeInstallationStatus | null>(null);
+  const [runtimeStatusLoading, setRuntimeStatusLoading] = useState(false);
+  const [runtimeStatusError, setRuntimeStatusError] = useState<string | null>(null);
+  const [initializationInProgress, setInitializationInProgress] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -121,6 +128,19 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
           setMetadata(null);
           setHealth(null);
           setDiscoveryError(error instanceof Error ? error.message : String(error));
+          setRuntimeStatusLoading(true);
+          setRuntimeStatusError(null);
+        }
+        try {
+          const status = await getRuntimeInstallationStatus();
+          if (!cancelled) setRuntimeStatus(status);
+        } catch (runtimeError: unknown) {
+          if (!cancelled) {
+            setRuntimeStatus(null);
+            setRuntimeStatusError(runtimeError instanceof Error ? runtimeError.message : String(runtimeError));
+          }
+        } finally {
+          if (!cancelled) setRuntimeStatusLoading(false);
         }
       }
     }
@@ -186,11 +206,11 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
   const unifiedModelStatus = unifiedTarget ? "已启用" : "未启用";
   const latestSnapshot = metricHistory.at(-1);
 
-  async function waitForServiceHealth() {
+  async function waitForServiceHealth(configPath = selectedConfigPath) {
     let lastError: unknown = new Error("服务未在预期时间内就绪");
     for (let attempt = 0; attempt < 5; attempt += 1) {
       try {
-        return await getAmkrHealth(selectedConfigPath);
+        return await getAmkrHealth(configPath);
       } catch (error: unknown) {
         lastError = error;
         if (attempt < 4) await new Promise<void>((resolve) => window.setTimeout(resolve, 500));
@@ -256,6 +276,27 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
 
   function applyUnifiedModel(unifiedModel: AmkrUnifiedModel | null) {
     setHealth((current) => current ? { ...current, unified_model: unifiedModel } : current);
+  }
+
+  async function initializeLocalInstance() {
+    setInitializationInProgress(true);
+    setServiceActionError(null);
+    setServiceActionNotice(null);
+    try {
+      const initialized = await initializeDefaultAmkrConfig();
+      applyConfigPath(initialized.config_path);
+      await controlAmkr("install_user_amkr", initialized.config_path);
+      await controlAmkr("start_amkr", initialized.config_path);
+      setMetadata(initialized);
+      setHealth(await waitForServiceHealth(initialized.config_path));
+      setHealthError(null);
+      setDiscoveryError(null);
+      setServiceActionNotice("默认配置已创建，服务已启动并注册登录启动。");
+    } catch (error: unknown) {
+      setServiceActionError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setInitializationInProgress(false);
+    }
   }
 
   return (
@@ -345,16 +386,42 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
             {serviceActionError ? <p className="service-action-error">服务操作失败: {serviceActionError}</p> : null}
           </>
         ) : activePage === "概览" ? (
-          <><h2>概览</h2><p>{discoveryError ? "未找到可用的 AMKR 配置。" : "正在查找本机 AMKR 服务。"}</p></>
+          discoveryError ? (
+            <section className="onboarding-page" aria-labelledby="onboarding-heading">
+              <h2 id="onboarding-heading">开始使用 Keyloom</h2>
+              <p className="empty-state" role="alert">未找到可用的 AMKR 配置。</p>
+              <p className={runtimeStatus?.private_runtime_installed ? "status-good" : "status-muted"} role="status">
+                {runtimeStatusLoading
+                  ? "正在检查 Keyloom 私有运行时"
+                  : runtimeStatus?.private_runtime_installed
+                    ? "私有运行时已就绪"
+                    : "未检测到 Keyloom 私有运行时"}
+              </p>
+              {runtimeStatus?.private_runtime_installed ? <code>{runtimeStatus.runtime_dir}</code> : null}
+              {runtimeStatusError ? <p className="service-action-error" role="alert">运行时状态读取失败: {runtimeStatusError}</p> : null}
+              {serviceActionError ? <p className="service-action-error" role="alert">初始化失败: {serviceActionError}</p> : null}
+              <div className="onboarding-actions">
+                <button
+                  className="primary-action"
+                  type="button"
+                  disabled={runtimeStatusLoading || !runtimeStatus?.private_runtime_installed || initializationInProgress}
+                  onClick={() => void initializeLocalInstance()}
+                >
+                  {initializationInProgress ? "正在创建并启动" : "创建默认配置并启动"}
+                </button>
+                <button className="secondary-button" type="button" onClick={() => setActivePage("设置")}>选择已有配置</button>
+              </div>
+            </section>
+          ) : <><h2>概览</h2><p role="status">正在查找本机 AMKR 服务。</p></>
         ) : activePage === "服务状态" ? (
           <section className="service-page" aria-labelledby="service-heading">
             <header className="page-header">
               <div><h2 id="service-heading">服务状态</h2><p>{serviceState}</p></div>
               <div className="service-controls" aria-label="服务控制">
-                <button type="button" disabled={serviceAction !== null || serviceRunning} onClick={() => requestServiceAction("start_amkr")}>{serviceAction === "start_amkr" ? "正在启动" : "启动服务"}</button>
+                <button type="button" disabled={serviceAction !== null || serviceRunning || !metadata} onClick={() => requestServiceAction("start_amkr")}>{serviceAction === "start_amkr" ? "正在启动" : "启动服务"}</button>
                 <button type="button" disabled={serviceAction !== null || !serviceRunning} onClick={() => requestServiceAction("stop_amkr")}>{serviceAction === "stop_amkr" ? "正在停止" : "停止服务"}</button>
                 <button type="button" disabled={serviceAction !== null || !serviceRunning} onClick={() => requestServiceAction("restart_amkr")}>{serviceAction === "restart_amkr" ? "正在重启" : "重启服务"}</button>
-                <button type="button" disabled={serviceAction !== null} onClick={() => requestServiceAction("install_user_amkr")}>{serviceAction === "install_user_amkr" ? "正在注册" : "注册登录启动"}</button>
+                <button type="button" disabled={serviceAction !== null || !metadata} onClick={() => requestServiceAction("install_user_amkr")}>{serviceAction === "install_user_amkr" ? "正在注册" : "注册登录启动"}</button>
                 <button type="button" disabled={serviceAction !== null} onClick={() => requestServiceAction("status_amkr")}>{serviceAction === "status_amkr" ? "正在查询" : "查询任务"}</button>
                 <button type="button" disabled={serviceAction !== null} onClick={() => requestServiceAction("uninstall_amkr")}>{serviceAction === "uninstall_amkr" ? "正在取消" : "取消注册"}</button>
               </div>

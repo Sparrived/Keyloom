@@ -290,6 +290,28 @@ button {
   cursor: pointer;
 }
 
+.primary-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.onboarding-page {
+  max-width: 42rem;
+}
+
+.onboarding-page code {
+  display: block;
+  overflow-wrap: anywhere;
+  color: #6e6e73;
+}
+
+.onboarding-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 1.25rem;
+}
+
 .service-action-error {
   color: #b42318;
 }

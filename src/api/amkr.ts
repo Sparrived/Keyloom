@@ -163,6 +163,10 @@ export function discoverAmkr(configPath: string | null = null) {
   return invoke<AmkrMetadata>("discover_amkr", { configPath });
 }
 
+export function initializeDefaultAmkrConfig() {
+  return invoke<AmkrMetadata>("initialize_default_amkr_config");
+}
+
 export function getAmkrHealth(configPath: string | null = null) {
   return invoke<AmkrHealth>("get_amkr_health", { configPath });
 }
