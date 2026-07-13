@@ -51,6 +51,14 @@ jobs:
       - name: Verify native Windows contracts
         shell: pwsh
         run: ./tests/windows-subsystem-contract.ps1
+      - name: Verify release version contract
+        shell: pwsh
+        run: |
+          $tag = if ($env:GITHUB_REF -like 'refs/tags/v*') { $env:GITHUB_REF_NAME } else { '' }
+          ./tests/release-version-contract.ps1 -Tag $tag
+      - name: Verify runtime packaging contracts
+        shell: pwsh
+        run: ./tests/runtime-contract.ps1
 
       - name: Prepare pinned private runtime
         if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
@@ -72,6 +80,8 @@ jobs:
           $wheels = @(Get-ChildItem $wheelhouse -Filter 'auto_model_key_router-*.whl')
           if ($wheels.Count -ne 1) { throw "Expected one AMKR wheel, found $($wheels.Count)" }
           $wheel = $wheels[0].FullName
+          python -m pip download --disable-pip-version-check --only-binary=:all: --dest $wheelhouse "$($wheel)[visitor]"
+          if ($LASTEXITCODE -ne 0) { throw 'AMKR visitor wheelhouse download failed' }
           ./scripts/prepare-amkr-runtime.ps1 `
             -PythonEmbedArchive $archive `
             -PythonArchiveSha256 $env:PYTHON_EMBED_SHA256 `
