@@ -45,6 +45,7 @@ describe("Keyloom application shell", () => {
     render(<App />);
 
     const main = screen.getByRole("main");
+    expect(main).not.toHaveAttribute("aria-live");
     expect(main).not.toContainElement(screen.getByRole("navigation"));
     expect(main).toContainElement(screen.getByRole("heading", { name: "概览" }));
   });
@@ -205,6 +206,86 @@ describe("Keyloom application shell", () => {
     expect(await screen.findByText("未检测到 Keyloom 私有运行时")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "创建默认配置并启动" })).toBeDisabled();
     expect(invokeMock).not.toHaveBeenCalledWith("initialize_default_amkr_config");
+  });
+
+  it("does not rediscover the new config while its startup task is still being prepared", async () => {
+    invokeMock.mockReset();
+    const configPath = "C:/Users/test/AppData/Local/AutoModelKeyRouter/router-config.json";
+    let configCreated = false;
+    let releaseStart!: () => void;
+    const startGate = new Promise<void>((resolve) => { releaseStart = resolve; });
+    invokeMock.mockImplementation(async (command) => {
+      if (command === "discover_amkr") {
+        if (!configCreated) throw new Error("configuration not found");
+        return { config_path: configPath, base_url: "http://127.0.0.1:8000", metrics_db_path: null, log_file_path: null, auth_enabled: true };
+      }
+      if (command === "get_runtime_installation_status") return { private_runtime_installed: true, runtime_dir: "C:/runtime" };
+      if (command === "initialize_default_amkr_config") {
+        configCreated = true;
+        return { config_path: configPath, base_url: "http://127.0.0.1:8000", metrics_db_path: null, log_file_path: null, auth_enabled: true };
+      }
+      if (command === "install_user_amkr") return [];
+      if (command === "start_amkr") { await startGate; return []; }
+      if (command === "get_amkr_health") return { status: "ok", local_auth_enabled: true, config_path: configPath };
+      if (command === "get_amkr_metrics") return { total: { requests: 0, total_tokens: 0, cached_token_rate: 0, avg_duration_ms: 0 } };
+      return undefined;
+    });
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "创建默认配置并启动" }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("start_amkr", { configPath }));
+
+    expect(localStorage.getItem("keyloom.configPath")).toBeNull();
+    expect(invokeMock).not.toHaveBeenCalledWith("discover_amkr", { configPath });
+    expect(screen.getByRole("button", { name: "选择已有配置" })).toBeDisabled();
+
+    await act(async () => { releaseStart(); });
+    await waitFor(() => expect(localStorage.getItem("keyloom.configPath")).toBe(configPath));
+  });
+
+  it("offers recovery from the service page when no AMKR config is available", async () => {
+    invokeMock.mockReset();
+    invokeMock.mockImplementation(async (command) => {
+      if (command === "discover_amkr") throw new Error("configuration not found");
+      if (command === "get_runtime_installation_status") return { private_runtime_installed: true, runtime_dir: "C:/runtime" };
+      return undefined;
+    });
+
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "服务状态" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("未找到可用的 AMKR 配置");
+    fireEvent.click(screen.getByRole("button", { name: "返回首次设置" }));
+
+    expect(screen.getByRole("heading", { name: "开始使用 Keyloom" })).toBeInTheDocument();
+  });
+
+  it("keeps a newly created config recoverable when task registration fails", async () => {
+    invokeMock.mockReset();
+    const configPath = "C:/Users/test/AppData/Local/AutoModelKeyRouter/router-config.json";
+    let configCreated = false;
+    invokeMock.mockImplementation(async (command) => {
+      if (command === "discover_amkr") {
+        if (!configCreated) throw new Error("configuration not found");
+        return { config_path: configPath, base_url: "http://127.0.0.1:8000", metrics_db_path: null, log_file_path: null, auth_enabled: true };
+      }
+      if (command === "get_runtime_installation_status") return { private_runtime_installed: true, runtime_dir: "C:/runtime" };
+      if (command === "initialize_default_amkr_config") {
+        configCreated = true;
+        return { config_path: configPath, base_url: "http://127.0.0.1:8000", metrics_db_path: null, log_file_path: null, auth_enabled: true };
+      }
+      if (command === "install_user_amkr") throw new Error("task registration failed");
+      if (command === "get_amkr_health") throw new Error("service is stopped");
+      if (command === "get_amkr_metrics") throw new Error("service is stopped");
+      return undefined;
+    });
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "创建默认配置并启动" }));
+
+    expect(await screen.findByText("服务操作失败: task registration failed")).toBeInTheDocument();
+    expect(localStorage.getItem("keyloom.configPath")).toBe(configPath);
+    expect(invokeMock).not.toHaveBeenCalledWith("start_amkr", expect.anything());
   });
 
   it("restarts the discovered AMKR task through the fixed IPC command", async () => {

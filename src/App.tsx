@@ -282,9 +282,9 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
     setInitializationInProgress(true);
     setServiceActionError(null);
     setServiceActionNotice(null);
+    let initialized: AmkrMetadata | null = null;
     try {
-      const initialized = await initializeDefaultAmkrConfig();
-      applyConfigPath(initialized.config_path);
+      initialized = await initializeDefaultAmkrConfig();
       await controlAmkr("install_user_amkr", initialized.config_path);
       await controlAmkr("start_amkr", initialized.config_path);
       setMetadata(initialized);
@@ -295,6 +295,7 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
     } catch (error: unknown) {
       setServiceActionError(error instanceof Error ? error.message : String(error));
     } finally {
+      if (initialized) applyConfigPath(initialized.config_path);
       setInitializationInProgress(false);
     }
   }
@@ -334,7 +335,7 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
           </p>
         </div>
       </aside>
-      <main className="content" aria-live="polite">
+      <main className="content">
         {activePage === "概览" && metadata ? (
           <>
             <header className="overview-header">
@@ -387,7 +388,7 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
           </>
         ) : activePage === "概览" ? (
           discoveryError ? (
-            <section className="onboarding-page" aria-labelledby="onboarding-heading">
+            <section className="onboarding-page" aria-busy={initializationInProgress} aria-labelledby="onboarding-heading">
               <h2 id="onboarding-heading">开始使用 Keyloom</h2>
               <p className="empty-state" role="alert">未找到可用的 AMKR 配置。</p>
               <p className={runtimeStatus?.private_runtime_installed ? "status-good" : "status-muted"} role="status">
@@ -409,7 +410,7 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
                 >
                   {initializationInProgress ? "正在创建并启动" : "创建默认配置并启动"}
                 </button>
-                <button className="secondary-button" type="button" onClick={() => setActivePage("设置")}>选择已有配置</button>
+                <button className="secondary-button" type="button" disabled={initializationInProgress} onClick={() => setActivePage("设置")}>选择已有配置</button>
               </div>
             </section>
           ) : <><h2>概览</h2><p role="status">正在查找本机 AMKR 服务。</p></>
@@ -426,7 +427,15 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
                 <button type="button" disabled={serviceAction !== null} onClick={() => requestServiceAction("uninstall_amkr")}>{serviceAction === "uninstall_amkr" ? "正在取消" : "取消注册"}</button>
               </div>
             </header>
-            {metadata ? <dl className="connection-summary"><div><dt>本机服务</dt><dd>{metadata.base_url}</dd></div><div><dt>选择配置</dt><dd>{metadata.config_path}</dd></div>{configMismatch ? <div><dt>运行配置</dt><dd>{health?.config_path}</dd></div> : null}<div><dt>本地鉴权</dt><dd>{metadata.auth_enabled ? "已启用" : "未启用"}</dd></div></dl> : <p className="empty-state">正在查找本机 AMKR 配置。</p>}
+            {metadata ? <dl className="connection-summary"><div><dt>本机服务</dt><dd>{metadata.base_url}</dd></div><div><dt>选择配置</dt><dd>{metadata.config_path}</dd></div>{configMismatch ? <div><dt>运行配置</dt><dd>{health?.config_path}</dd></div> : null}<div><dt>本地鉴权</dt><dd>{metadata.auth_enabled ? "已启用" : "未启用"}</dd></div></dl> : discoveryError ? (
+              <>
+                <p className="empty-state" role="alert">未找到可用的 AMKR 配置。</p>
+                <div className="onboarding-actions">
+                  <button className="primary-action" type="button" onClick={() => setActivePage("概览")}>返回首次设置</button>
+                  <button className="secondary-button" type="button" onClick={() => setActivePage("设置")}>选择已有配置</button>
+                </div>
+              </>
+            ) : <p className="empty-state">正在查找本机 AMKR 配置。</p>}
             {configMismatch ? <p className="status-warn" role="alert">当前服务使用的配置与 Keyloom 选择的配置不一致。请重启服务以应用当前配置。</p> : null}
             {serviceActionNotice ? <p className="status-good">{serviceActionNotice}</p> : null}
             {serviceCommandOutput ? <pre className="service-command-output">{serviceCommandOutput}</pre> : null}
