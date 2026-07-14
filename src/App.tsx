@@ -21,7 +21,7 @@ import { UsageChart, type UsageMetric } from "./features/overview/UsageChart";
 import { appendMetricSnapshot, type MetricSnapshot } from "./features/overview/useMetricHistory";
 import { ActivityPage } from "./features/activity/ActivityPage";
 import { IntegrationsPage } from "./features/integrations/IntegrationsPage";
-import { SettingsPage } from "./features/settings/SettingsPage";
+import { SettingsPage, type CloseBehavior } from "./features/settings/SettingsPage";
 import { ProvidersPage } from "./features/providers/ProvidersPage";
 import { RoutingPage } from "./features/routing/RoutingPage";
 
@@ -29,6 +29,13 @@ const primaryNavigation = ["概览", "供应商", "模型路由", "活动", "集
 const navigation = [...primaryNavigation, "服务状态"] as const;
 type NavigationItem = (typeof navigation)[number];
 const configPathStorageKey = "keyloom.configPath";
+const closeBehaviorStorageKey = "keyloom.closeBehavior";
+
+function readCloseBehavior(): CloseBehavior {
+  const stored = localStorage.getItem(closeBehaviorStorageKey);
+  return stored === "quit" || stored === "tray" ? stored : "ask";
+}
+
 function formatCount(value: number) {
   return new Intl.NumberFormat("zh-CN").format(value);
 }
@@ -55,6 +62,9 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
   const activePageRef = useRef<NavigationItem>(activePage);
   activePageRef.current = activePage;
   const [selectedConfigPath, setSelectedConfigPath] = useState<string | null>(() => localStorage.getItem(configPathStorageKey));
+  const [closeBehavior, setCloseBehavior] = useState<CloseBehavior>(readCloseBehavior);
+  const [closePromptOpen, setClosePromptOpen] = useState(false);
+  const [rememberCloseChoice, setRememberCloseChoice] = useState(false);
   const [trendMetric, setTrendMetric] = useState<UsageMetric>("请求");
   const [metadata, setMetadata] = useState<AmkrMetadata | null>(null);
   const [health, setHealth] = useState<AmkrHealth | null>(null);
@@ -291,6 +301,29 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
     setHealth((current) => current ? { ...current, unified_model: unifiedModel } : current);
   }
 
+  function applyCloseBehavior(behavior: CloseBehavior) {
+    setCloseBehavior(behavior);
+    if (behavior === "ask") localStorage.removeItem(closeBehaviorStorageKey);
+    else localStorage.setItem(closeBehaviorStorageKey, behavior);
+  }
+
+  function performWindowClose(behavior: Exclude<CloseBehavior, "ask">) {
+    if (rememberCloseChoice) applyCloseBehavior(behavior);
+    setClosePromptOpen(false);
+    const appWindow = getCurrentWindow();
+    if (behavior === "tray") void appWindow.hide();
+    else void appWindow.close();
+  }
+
+  function requestWindowClose() {
+    if (closeBehavior === "ask") {
+      setRememberCloseChoice(false);
+      setClosePromptOpen(true);
+    } else {
+      performWindowClose(closeBehavior);
+    }
+  }
+
   async function initializeLocalInstance() {
     setInitializationInProgress(true);
     setServiceActionError(null);
@@ -319,7 +352,7 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
       <aside aria-label="主导航" className="sidebar">
         <div className="sidebar-window-row">
           <div aria-label="窗口控制" className="window-controls">
-            <button aria-label="关闭窗口" className="window-close" title="关闭" type="button" onClick={() => void getCurrentWindow().close()}>
+            <button aria-label="关闭窗口" className="window-close" title="关闭" type="button" onClick={requestWindowClose}>
               <span aria-hidden="true">×</span>
             </button>
             <button aria-label="最小化窗口" className="window-minimize" title="最小化" type="button" onClick={() => void getCurrentWindow().minimize()}>
@@ -484,9 +517,21 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
           </section>
         ) : activePage === "供应商" ? <ProvidersPage configPath={selectedConfigPath} /> : activePage === "模型路由" ? <RoutingPage configPath={selectedConfigPath} onUnifiedModelChange={applyUnifiedModel} /> : activePage === "活动" ? <ActivityPage configPath={selectedConfigPath} history={metricHistory} metrics={metrics} />
           : activePage === "集成" ? <IntegrationsPage configPath={selectedConfigPath} baseUrl={metadata?.base_url ?? null} authEnabled={metadata?.auth_enabled ?? false} />
-          : <SettingsPage configPath={selectedConfigPath} metadata={metadata} health={health} onConfigPathChange={applyConfigPath} />}
+          : <SettingsPage closeBehavior={closeBehavior} configPath={selectedConfigPath} metadata={metadata} health={health} onCloseBehaviorChange={applyCloseBehavior} onConfigPathChange={applyConfigPath} />}
       </main>
       </div>
+      {closePromptOpen ? <div className="close-dialog-backdrop" onKeyDown={(event) => { if (event.key === "Escape") setClosePromptOpen(false); }}>
+        <section aria-labelledby="close-dialog-heading" aria-modal="true" className="close-dialog" role="dialog">
+          <h2 id="close-dialog-heading">关闭 Keyloom？</h2>
+          <p>退出应用，或继续在系统托盘中运行。</p>
+          <label className="close-dialog-remember"><input checked={rememberCloseChoice} type="checkbox" onChange={(event) => setRememberCloseChoice(event.target.checked)} />记住我的选择</label>
+          <div className="close-dialog-actions">
+            <button autoFocus className="secondary-button" type="button" onClick={() => setClosePromptOpen(false)}>取消</button>
+            <button className="tray-action" type="button" onClick={() => performWindowClose("tray")}>缩小至托盘</button>
+            <button className="danger-button" type="button" onClick={() => performWindowClose("quit")}>退出 Keyloom</button>
+          </div>
+        </section>
+      </div> : null}
     </div>
   );
 }

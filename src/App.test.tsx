@@ -16,6 +16,7 @@ const invokeMock = vi.mocked(invoke);
 const getCurrentWindowMock = vi.mocked(getCurrentWindow);
 const minimizeMock = vi.fn();
 const closeMock = vi.fn();
+const hideMock = vi.fn();
 
 describe("Keyloom application shell", () => {
   afterEach(() => {
@@ -27,7 +28,8 @@ describe("Keyloom application shell", () => {
     localStorage.clear();
     minimizeMock.mockReset();
     closeMock.mockReset();
-    getCurrentWindowMock.mockReturnValue({ minimize: minimizeMock, close: closeMock } as never);
+    hideMock.mockReset();
+    getCurrentWindowMock.mockReturnValue({ minimize: minimizeMock, close: closeMock, hide: hideMock } as never);
     invokeMock.mockReset();
     invokeMock
       .mockResolvedValueOnce({
@@ -70,10 +72,56 @@ describe("Keyloom application shell", () => {
     expect(sidebar).toContainElement(close);
 
     fireEvent.click(minimize);
-    fireEvent.click(close);
 
     expect(minimizeMock).toHaveBeenCalledOnce();
+  });
+
+  it("asks how to close and remembers the tray choice", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "关闭窗口" }));
+    expect(screen.getByRole("dialog", { name: "关闭 Keyloom？" })).toBeInTheDocument();
+    expect(closeMock).not.toHaveBeenCalled();
+    expect(hideMock).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "记住我的选择" }));
+    fireEvent.click(screen.getByRole("button", { name: "缩小至托盘" }));
+
+    expect(hideMock).toHaveBeenCalledOnce();
+    expect(localStorage.getItem("keyloom.closeBehavior")).toBe("tray");
+    expect(screen.queryByRole("dialog", { name: "关闭 Keyloom？" })).not.toBeInTheDocument();
+  });
+
+  it("uses a remembered exit choice without prompting", () => {
+    localStorage.setItem("keyloom.closeBehavior", "quit");
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "关闭窗口" }));
+
     expect(closeMock).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("dialog", { name: "关闭 Keyloom？" })).not.toBeInTheDocument();
+  });
+
+  it("does not remember a close choice unless requested", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "关闭窗口" }));
+    fireEvent.click(screen.getByRole("button", { name: "退出 Keyloom" }));
+
+    expect(closeMock).toHaveBeenCalledOnce();
+    expect(localStorage.getItem("keyloom.closeBehavior")).toBeNull();
+  });
+
+  it("changes the close preference from settings", () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "设置" }));
+
+    const closeBehavior = screen.getByRole("combobox", { name: "关闭窗口时" });
+    fireEvent.change(closeBehavior, { target: { value: "tray" } });
+    expect(localStorage.getItem("keyloom.closeBehavior")).toBe("tray");
+
+    fireEvent.change(closeBehavior, { target: { value: "ask" } });
+    expect(localStorage.getItem("keyloom.closeBehavior")).toBeNull();
   });
 
   it("shows the documented service workspace with discovered local details", async () => {

@@ -19,11 +19,15 @@ import {
 } from "../../api/amkr";
 
 type SettingsPageProps = {
+  closeBehavior?: CloseBehavior;
   configPath: string | null;
   metadata: AmkrMetadata | null;
   health?: AmkrHealth | null;
+  onCloseBehaviorChange?: (behavior: CloseBehavior) => void;
   onConfigPathChange: (configPath: string | null) => void;
 };
+
+export type CloseBehavior = "ask" | "quit" | "tray";
 
 function formatNativeEndpointSummary(summary: AmkrHealth["native_endpoint_summary"]) {
   if (!summary) return "服务未提供";
@@ -33,7 +37,7 @@ function formatNativeEndpointSummary(summary: AmkrHealth["native_endpoint_summar
   return parts.join(" · ");
 }
 
-export function SettingsPage({ configPath, metadata, health = null, onConfigPathChange }: SettingsPageProps) {
+export function SettingsPage({ closeBehavior = "ask", configPath, metadata, health = null, onCloseBehaviorChange = () => undefined, onConfigPathChange }: SettingsPageProps) {
   const [draftConfigPath, setDraftConfigPath] = useState(configPath ?? metadata?.config_path ?? "");
   const [transfer, setTransfer] = useState("");
   const [transferAction, setTransferAction] = useState<"export" | "import" | null>(null);
@@ -161,6 +165,14 @@ export function SettingsPage({ configPath, metadata, health = null, onConfigPath
   };
   return <section className="settings-page" aria-labelledby="settings-heading">
     <header className="page-header"><div><h2 id="settings-heading">设置</h2><p>当前 AMKR 实例的只读连接摘要。</p></div></header>
+    <section className="runtime-panel" aria-labelledby="application-settings-heading">
+      <div className="card-heading"><h3 id="application-settings-heading">应用设置</h3></div>
+      <label className="application-setting">关闭窗口时<select aria-label="关闭窗口时" value={closeBehavior} onChange={(event) => onCloseBehaviorChange(event.target.value as CloseBehavior)}>
+        <option value="ask">每次询问</option>
+        <option value="quit">退出 Keyloom</option>
+        <option value="tray">缩小至托盘</option>
+      </select></label>
+    </section>
     <form className="config-path-form" onSubmit={(event) => { event.preventDefault(); onConfigPathChange(draftConfigPath.trim() || null); }}>
       <label>配置路径<input disabled={transferAction !== null} value={draftConfigPath} onChange={(event) => setDraftConfigPath(event.target.value)} placeholder="留空使用默认 AMKR 配置" /></label>
       <button type="submit" disabled={transferAction !== null}>使用配置</button>
