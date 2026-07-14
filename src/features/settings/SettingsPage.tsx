@@ -1,21 +1,22 @@
 import { useEffect, useState } from "react";
+import { disable as disableAutostart, enable as enableAutostart, isEnabled as isAutostartEnabled } from "@tauri-apps/plugin-autostart";
 import {
   exportAmkrConfig,
   checkAmkrUpdate,
   getAmkrProviders,
   getAmkrSettings,
-  getRuntimeInstallationStatus,
+  getAmkrToolStatus,
   importAmkrConfig,
+  installAmkrTool,
   regenerateAmkrLocalApiKey,
-  rollbackPrivateRuntime,
-  updatePrivateRuntime,
+  updateAmkrTool,
   updateAmkrSettings,
   type AmkrHealth,
   type AmkrMetadata,
   type AmkrSettings,
   type AmkrSettingsResponse,
   type AmkrUpdateCheck,
-  type RuntimeInstallationStatus,
+  type AmkrToolStatus,
 } from "../../api/amkr";
 import { useCopyToast } from "../../components/CopyToast";
 import { KeyloomUpdatePanel } from "./KeyloomUpdatePanel";
@@ -50,10 +51,10 @@ export function SettingsPage({ amkrWidgetEnabled = false, closeBehavior = "ask",
   const [transferAction, setTransferAction] = useState<"export" | "import" | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [runtimeStatus, setRuntimeStatus] = useState<RuntimeInstallationStatus | null>(null);
-  const [runtimeLoading, setRuntimeLoading] = useState(true);
-  const [runtimeRollback, setRuntimeRollback] = useState(false);
-  const [runtimeError, setRuntimeError] = useState<string | null>(null);
+  const [toolStatus, setToolStatus] = useState<AmkrToolStatus | null>(null);
+  const [toolLoading, setToolLoading] = useState(true);
+  const [toolInstalling, setToolInstalling] = useState(false);
+  const [toolError, setToolError] = useState<string | null>(null);
   const [serviceSettings, setServiceSettings] = useState<AmkrSettingsResponse | null>(null);
   const [settingsDraft, setSettingsDraft] = useState<AmkrSettings | null>(null);
   const [settingsAction, setSettingsAction] = useState<"save" | "key" | null>(null);
@@ -66,6 +67,9 @@ export function SettingsPage({ amkrWidgetEnabled = false, closeBehavior = "ask",
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [widgetAction, setWidgetAction] = useState(false);
   const [widgetError, setWidgetError] = useState<string | null>(null);
+  const [autostartEnabled, setAutostartEnabled] = useState(false);
+  const [autostartLoading, setAutostartLoading] = useState(true);
+  const [autostartError, setAutostartError] = useState<string | null>(null);
   const { copyToast, showCopyToast } = useCopyToast();
   const changeWidgetSetting = async (enabled: boolean) => {
     setWidgetAction(true); setWidgetError(null);
@@ -73,6 +77,21 @@ export function SettingsPage({ amkrWidgetEnabled = false, closeBehavior = "ask",
     catch (reason) { setWidgetError(reason instanceof Error ? reason.message : String(reason)); }
     finally { setWidgetAction(false); }
   };
+  const changeAutostartSetting = async (enabled: boolean) => {
+    const previous = autostartEnabled;
+    setAutostartEnabled(enabled); setAutostartLoading(true); setAutostartError(null);
+    try { await (enabled ? enableAutostart() : disableAutostart()); }
+    catch (reason) { setAutostartEnabled(previous); setAutostartError(reason instanceof Error ? reason.message : String(reason)); }
+    finally { setAutostartLoading(false); }
+  };
+  useEffect(() => {
+    let cancelled = false;
+    void isAutostartEnabled()
+      .then((enabled) => { if (!cancelled) setAutostartEnabled(enabled); })
+      .catch((reason) => { if (!cancelled) setAutostartError(reason instanceof Error ? reason.message : String(reason)); })
+      .finally(() => { if (!cancelled) setAutostartLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
   useEffect(() => setDraftConfigPath(configPath ?? metadata?.config_path ?? ""), [configPath, metadata?.config_path]);
   useEffect(() => {
     if (detectedAmkrUpdate) setUpdateCheck(detectedAmkrUpdate);
@@ -80,13 +99,13 @@ export function SettingsPage({ amkrWidgetEnabled = false, closeBehavior = "ask",
   useEffect(() => {
     if (updateTarget) document.getElementById(`${updateTarget}-update-panel`)?.scrollIntoView?.({ block: "start" });
   }, [updateTarget]);
-  const refreshRuntimeStatus = async () => {
-    setRuntimeLoading(true); setRuntimeError(null);
-    try { setRuntimeStatus(await getRuntimeInstallationStatus()); }
-    catch (reason) { setRuntimeError(reason instanceof Error ? reason.message : String(reason)); }
-    finally { setRuntimeLoading(false); }
+  const refreshToolStatus = async () => {
+    setToolLoading(true); setToolError(null);
+    try { setToolStatus(await getAmkrToolStatus()); }
+    catch (reason) { setToolError(reason instanceof Error ? reason.message : String(reason)); }
+    finally { setToolLoading(false); }
   };
-  useEffect(() => { void refreshRuntimeStatus(); }, []);
+  useEffect(() => { void refreshToolStatus(); }, []);
   useEffect(() => {
     let cancelled = false;
     setServiceSettings(null);
@@ -108,12 +127,11 @@ export function SettingsPage({ amkrWidgetEnabled = false, closeBehavior = "ask",
     })();
     return () => { cancelled = true; };
   }, [configPath, metadata?.config_path]);
-  const rollbackRuntime = async () => {
-    if (!window.confirm("回退到上一个 Keyloom 私有运行时版本？")) return;
-    setRuntimeRollback(true); setRuntimeError(null);
-    try { setRuntimeStatus(await rollbackPrivateRuntime()); }
-    catch (reason) { setRuntimeError(reason instanceof Error ? reason.message : String(reason)); }
-    finally { setRuntimeRollback(false); }
+  const installTool = async () => {
+    setToolInstalling(true); setToolError(null);
+    try { setToolStatus(await installAmkrTool()); }
+    catch (reason) { setToolError(reason instanceof Error ? reason.message : String(reason)); }
+    finally { setToolInstalling(false); }
   };
   const exportConfig = async () => {
     setTransferAction("export"); setNotice(null); setError(null);
@@ -186,10 +204,10 @@ export function SettingsPage({ amkrWidgetEnabled = false, closeBehavior = "ask",
     finally { setUpdateChecking(false); }
   };
   const installUpdate = async () => {
-    if (!updateCheck?.artifact_url || !updateCheck.artifact_sha256 || !window.confirm(`更新 AMKR 到 ${updateCheck.latest_version}？更新完成前请勿退出 Keyloom。`)) return;
+    if (!window.confirm(`通过 ${toolStatus?.manager ?? "工具管理器"} 更新 AMKR 到 ${updateCheck?.latest_version}？`)) return;
     setUpdateInstalling(true); setUpdateError(null);
     try {
-      setRuntimeStatus(await updatePrivateRuntime(configPath, updateCheck.artifact_url, updateCheck.artifact_sha256));
+      setToolStatus(await updateAmkrTool(configPath));
       setUpdateCheck(null);
     } catch (reason) { setUpdateError(reason instanceof Error ? reason.message : String(reason)); }
     finally { setUpdateInstalling(false); }
@@ -203,7 +221,9 @@ export function SettingsPage({ amkrWidgetEnabled = false, closeBehavior = "ask",
         <option value="quit">退出 Keyloom</option>
         <option value="tray">缩小至托盘</option>
       </select></label>
+      <label className="application-setting">开机自动启动 Keyloom<input aria-label="开机自动启动 Keyloom" checked={autostartEnabled} disabled={autostartLoading} type="checkbox" onChange={(event) => void changeAutostartSetting(event.target.checked)} /></label>
       <label className="application-setting">启动 AMKR 桌面挂件<input aria-label="启动 AMKR 桌面挂件" checked={amkrWidgetEnabled} disabled={widgetAction} type="checkbox" onChange={(event) => void changeWidgetSetting(event.target.checked)} /></label>
+      {autostartError ? <p className="service-action-error" role="alert">自启动设置失败: {autostartError}</p> : null}
       {widgetError ? <p className="service-action-error" role="alert">挂件启动失败: {widgetError}</p> : null}
     </section>
     <KeyloomUpdatePanel detectedVersion={detectedKeyloomVersion} />
@@ -233,13 +253,12 @@ export function SettingsPage({ amkrWidgetEnabled = false, closeBehavior = "ask",
       {settingsNotice ? <p className="status-good" role="status">{settingsNotice}</p> : null}
       {settingsError ? <p className="service-action-error" role="alert">{settingsError}</p> : null}
     </section> : null}
-    <section className="runtime-panel" aria-labelledby="runtime-heading">
-      <div className="card-heading"><h3 id="runtime-heading">Keyloom 私有运行时</h3><div className="item-actions"><button type="button" disabled={runtimeLoading || runtimeRollback} onClick={() => void refreshRuntimeStatus()}>{runtimeLoading ? "正在检测" : "重新检测"}</button><button type="button" title={health?.status === "ok" ? "请先停止 AMKR 服务" : undefined} disabled={runtimeLoading || runtimeRollback || !runtimeStatus?.rollback_available || health?.status === "ok"} onClick={() => void rollbackRuntime()}>{runtimeRollback ? "正在回退" : "回退运行时"}</button></div></div>
+    <section className="runtime-panel" aria-labelledby="amkr-tool-heading">
+      <div className="card-heading"><h3 id="amkr-tool-heading">AMKR CLI</h3><div className="item-actions"><button type="button" disabled={toolLoading || toolInstalling} onClick={() => void refreshToolStatus()}>{toolLoading ? "正在检测" : "重新检测"}</button>{!toolStatus?.installed ? <button type="button" disabled={toolLoading || toolInstalling || (!toolStatus?.uv_available && !toolStatus?.pipx_available)} onClick={() => void installTool()}>{toolInstalling ? "正在安装" : "安装 AMKR"}</button> : null}</div></div>
       <dl className="settings-list">
-        <div><dt>状态</dt><dd className={runtimeStatus?.private_runtime_installed ? "status-good" : runtimeStatus?.diagnostic || runtimeError ? "status-warn" : "status-muted"}>{runtimeError ? `操作失败: ${runtimeError}` : runtimeLoading && !runtimeStatus ? "正在检测" : runtimeStatus?.private_runtime_installed ? `已安装 · AMKR ${runtimeStatus.amkr_version ?? "未知版本"}` : runtimeStatus?.diagnostic ?? "未安装"}</dd></div>
-        <div><dt>运行时目录</dt><dd>{runtimeStatus?.runtime_dir || "暂不可用"}</dd></div>
-        <div><dt>Python</dt><dd>{runtimeStatus?.python_version ?? (runtimeStatus?.python_available ? "已发现" : "未安装")}</dd></div>
-        <div><dt>AMKR wheel 校验</dt><dd>{runtimeStatus?.amkr_wheel_sha256 ? `${runtimeStatus.amkr_wheel_sha256.slice(0, 12)}…` : "暂不可用"}</dd></div>
+        <div><dt>状态</dt><dd className={toolStatus?.installed ? "status-good" : toolStatus?.diagnostic || toolError ? "status-warn" : "status-muted"}>{toolError ? `操作失败: ${toolError}` : toolLoading && !toolStatus ? "正在检测" : toolStatus?.installed ? `已安装 · AMKR ${toolStatus.version ?? "未知版本"}` : toolStatus?.diagnostic ?? "未安装"}</dd></div>
+        <div><dt>管理方式</dt><dd>{toolStatus?.manager ?? (toolStatus?.uv_available ? "uv（可用）" : toolStatus?.pipx_available ? "pipx（可用）" : "未发现")}</dd></div>
+        <div><dt>可执行文件</dt><dd>{toolStatus?.executable ?? "暂不可用"}</dd></div>
       </dl>
     </section>
     {metadata ? <section className="runtime-panel" id="amkr-update-panel" aria-labelledby="update-heading">
@@ -251,7 +270,7 @@ export function SettingsPage({ amkrWidgetEnabled = false, closeBehavior = "ask",
         {updateCheck.source ? <div><dt>来源</dt><dd>{updateCheck.source}</dd></div> : null}
         {updateCheck.release_url ? <div><dt>发布页面</dt><dd>{updateCheck.release_url}</dd></div> : null}
       </dl> : <p className="empty-state">尚未检查 AMKR 更新。</p>}
-      {updateCheck?.update_available ? <button type="button" disabled={updateInstalling || health?.status === "ok" || !updateCheck.artifact_url || !updateCheck.artifact_sha256} title={health?.status === "ok" ? "请先停止 AMKR 服务" : undefined} onClick={() => void installUpdate()}>{updateInstalling ? "正在更新" : "安装更新"}</button> : null}
+      {updateCheck?.update_available ? <button type="button" disabled={updateInstalling || health?.status === "ok" || !toolStatus?.installed || !["uv", "pipx"].includes(toolStatus.manager ?? "")} title={health?.status === "ok" ? "请先停止 AMKR 服务" : undefined} onClick={() => void installUpdate()}>{updateInstalling ? "正在更新" : "安装更新"}</button> : null}
       {updateError ? <p className="service-action-error" role="alert">版本检查失败: {updateError}</p> : null}
     </section> : null}
     {!metadata ? <p className="empty-state">正在查找本机 AMKR 配置。</p> : <>
@@ -259,7 +278,7 @@ export function SettingsPage({ amkrWidgetEnabled = false, closeBehavior = "ask",
         <div className="card-heading"><h3 id="instance-summary-heading">实例信息</h3></div>
         <dl className="settings-list">
         <div><dt>服务地址</dt><dd>{metadata.base_url}</dd></div>
-        <div><dt>AMKR 版本</dt><dd>{health?.version ?? runtimeStatus?.amkr_version ?? "暂不可用"}</dd></div>
+        <div><dt>AMKR 版本</dt><dd>{health?.version ?? toolStatus?.version ?? "暂不可用"}</dd></div>
         <div><dt>监听地址</dt><dd>{metadata.host && metadata.port ? `${metadata.host}:${metadata.port}` : "未读取"}</dd></div>
         <div><dt>配置文件</dt><dd>{metadata.config_path}</dd></div>
         <div><dt>本地鉴权</dt><dd>{metadata.auth_enabled ? "已启用" : "未启用"}</dd></div>

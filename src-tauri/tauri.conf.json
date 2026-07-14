@@ -6,7 +6,6 @@
   "build": {
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build",
-    "beforeBundleCommand": "powershell -NoProfile -ExecutionPolicy Bypass -File tests/installer-smoke.ps1 -RuntimeDirectory src-tauri/runtime-bundle/runtime -InstallStatePath src-tauri/runtime-bundle/install-state.json",
     "devUrl": "http://localhost:5173",
     "frontendDist": "../dist"
   },
@@ -28,10 +27,6 @@
     "targets": ["nsis"],
     "createUpdaterArtifacts": false,
     "icon": ["icons/icon.ico"],
-    "resources": {
-      "runtime-bundle/runtime/": "runtime",
-      "runtime-bundle/install-state.json": "runtime/install-state.json"
-    },
     "windows": {
       "allowDowngrades": false,
       "webviewInstallMode": {
@@ -44,8 +39,7 @@
         "displayLanguageSelector": false,
         "compression": "lzma",
         "startMenuFolder": "Keyloom",
-        "installerIcon": "icons/icon.ico",
-        "installerHooks": "../installer/nsis/keyloom.nsi"
+        "installerIcon": "icons/icon.ico"
       }
     }
   },

@@ -6,15 +6,15 @@
 
 **Architecture:** Extend AMKR with additive provider/pool/route management APIs first. Build Keyloom as a separate Tauri 2 application with a React/TypeScript UI and Rust host; the host discovers or installs AMKR, controls the local process/task, and exposes only safe IPC operations to the UI.
 
-**Tech Stack:** Python/FastAPI/pytest for AMKR; Tauri 2, Rust, React, TypeScript, Vite, Vitest, Playwright, NSIS, bundled Python runtime for Keyloom.
+**Tech Stack:** Python/FastAPI/pytest for AMKR; Tauri 2, Rust, React, TypeScript, Vite, Vitest, Playwright, NSIS, and uv/pipx tool management.
 
 ---
 
 ## Current Status (2026-07-14)
 
-- Tasks 1-9 are implemented and covered by AMKR, React, Rust, runtime-contract, and NSIS-contract tests.
-- Task 10 release automation is implemented: tagged builds require Authenticode credentials and publish the installer, SHA-256, runtime smoke report, and generated release notes.
-- Local verification passes for the production frontend, Rust host, mock-backed browser workflows, bundled Python 3.12.10 runtime, AMKR management API contract, and unsigned NSIS verification package.
+- Tasks 1-9 are implemented and covered by AMKR, React, Rust, and NSIS-contract tests.
+- Task 10 release automation is implemented: tagged builds require updater signing credentials and publish the installer, SHA-256, updater archive, manifest, and generated release notes.
+- Local verification covers the production frontend, Rust host, mock-backed browser workflows, AMKR tool discovery, management API contracts, and the NSIS package.
 - External acceptance remains intentionally open: configure the signing secrets, run a tagged release, then execute clean-machine installation, UAC cancellation, DPI, high-contrast, update, rollback, and uninstall checks on Windows 10 and Windows 11.
 
 ---
@@ -26,7 +26,7 @@ The work has two repositories/workspaces but one dependency order:
 1. AMKR management API extension and compatibility tests.
 2. Keyloom desktop shell and AMKR discovery.
 3. Service lifecycle, tray, configuration, metrics, logs, and integrations.
-4. Private AMKR runtime, installer, update/rollback, and Windows acceptance.
+4. AMKR CLI discovery, uv/pipx installation and update, and Windows acceptance.
 
 Each task below produces a testable increment and ends with a focused commit. The desktop workspace is assumed to be created separately from this repository at `D:\Code\keyloom`.
 
@@ -392,43 +392,42 @@ git add src
 git commit -m "feat: 增加 Keyloom 配置和集成页面"
 ```
 
-## Task 9: Package Private AMKR Runtime and Installer
+## Task 9: Manage the AMKR CLI and Installer
 
 **Files:**
-- Create: `D:\Code\keyloom\scripts\prepare-amkr-runtime.ps1`
-- Create: `D:\Code\keyloom\installer\nsis\keyloom.nsi`
-- Create: `D:\Code\keyloom\src-tauri\src\installer.rs`
-- Test: `D:\Code\keyloom\tests\installer-smoke.ps1`
+- Create: `D:\Code\keyloom\src-tauri\src\amkr_tool.rs`
+- Modify: `D:\Code\keyloom\src-tauri\tauri.conf.json`
+- Test: `D:\Code\keyloom\tests\nsis-contract.ps1`
 
-- [ ] **Step 1: Add runtime preparation smoke test**
+- [ ] **Step 1: Add AMKR tool discovery coverage**
 
-On a clean Windows test image, assert the packaged runtime can run `python -c "import auto_model_key_router"` without system Python, uv, pipx, or Node.js.
+On a clean Windows test image, assert Keyloom detects AMKR and installs it with `uv tool`, falling back to `pipx` when uv is unavailable.
 
-- [ ] **Step 2: Implement runtime packaging**
+- [ ] **Step 2: Implement tool-managed installation**
 
-Bundle the pinned embedded Python runtime and AMKR wheel under the Keyloom private runtime directory. Record AMKR version and hash in `install-state.json`.
+Resolve the absolute AMKR executable and its tool environment without copying either into Keyloom.
 
 - [ ] **Step 3: Implement NSIS detection and silent install**
 
 Detect existing Keyloom, AMKR executable, AMKR config, user task, system task, and WebView2. Preserve existing config. Run user-level install without elevation; request elevation only for the system-task option.
 
-- [ ] **Step 4: Implement update and rollback**
+- [ ] **Step 4: Implement tool-managed update**
 
-Download to a temporary directory, verify SHA-256, stop only the Keyloom-managed AMKR process, replace the private runtime atomically, and restore the previous runtime on failure.
+Stop the AMKR service before invoking `uv tool upgrade` or `pipx upgrade`; the selected tool manager owns installation integrity.
 
-- [ ] **Step 5: Run installer smoke test**
+- [ ] **Step 5: Run installer contract test**
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tests/installer-smoke.ps1
+powershell -ExecutionPolicy Bypass -File tests/nsis-contract.ps1
 ```
 
-Expected: install, detect, start, upgrade, rollback, and uninstall checks PASS.
+Expected: current-user NSIS and WebView2 checks PASS, with no private AMKR resources.
 
 - [ ] **Step 6: Commit**
 
 ```powershell
-git add scripts installer src-tauri
-git commit -m "feat: 增加 Keyloom 私有运行时和安装器"
+git add src-tauri tests
+git commit -m "feat(安装): 增加 AMKR 工具管理"
 ```
 
 ## Task 10: End-to-End Windows Verification and Release

@@ -210,7 +210,7 @@ fn run_agent_operation(
     let output = Command::new(python)
         .args(arguments)
         .output()
-        .map_err(|error| format!("无法启动 Keyloom 私有运行时: {error}"))?;
+        .map_err(|error| format!("无法启动 AMKR 工具环境: {error}"))?;
     parse_agent_bridge_output(
         output.status.code().unwrap_or(-1),
         &String::from_utf8_lossy(&output.stdout),
@@ -296,7 +296,7 @@ mod tests {
     }
 
     #[test]
-    fn builds_a_private_python_bridge_command_without_configuration_secrets() {
+    fn builds_a_tool_environment_bridge_command_without_configuration_secrets() {
         let arguments = agent_bridge_arguments(
             AgentOperation::Configure,
             "claude-code",

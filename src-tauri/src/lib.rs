@@ -1,5 +1,5 @@
 pub mod amkr;
-pub mod installer;
+pub mod amkr_tool;
 pub mod integrations;
 pub mod metric_history;
 pub mod tray;
@@ -62,7 +62,7 @@ pub fn discover_amkr(selected_path: Option<&Path>) -> Result<AmkrMetadata, Strin
 
 pub fn initialize_default_amkr_config() -> Result<AmkrMetadata, String> {
     let config_path = default_config_path();
-    installer::initialize_config_with_runtime(&installer::private_runtime_python()?, &config_path)?;
+    amkr_tool::initialize_config(&config_path)?;
     discover_amkr(Some(&config_path))
 }
 
@@ -441,7 +441,7 @@ pub fn import_amkr_config(
 pub fn get_agent_integration_status(
     agent: &str,
 ) -> Result<integrations::AgentIntegrationStatus, String> {
-    match installer::private_runtime_python() {
+    match amkr_tool::python() {
         Ok(python) => integrations::get_agent_status_with_runtime(&python, agent),
         Err(_) => integrations::get_agent_status(agent),
     }
@@ -454,7 +454,7 @@ pub fn configure_agent_integration(
 ) -> Result<integrations::AgentIntegrationStatus, String> {
     let instance = discover_local_instance(selected_path)?;
     integrations::configure_agent_with_runtime(
-        &installer::private_runtime_python()?,
+        &amkr_tool::python()?,
         &instance.config_path,
         agent,
         mode,
@@ -464,7 +464,7 @@ pub fn configure_agent_integration(
 pub fn rollback_agent_integration(
     agent: &str,
 ) -> Result<integrations::AgentIntegrationStatus, String> {
-    integrations::rollback_agent_with_runtime(&installer::private_runtime_python()?, agent)
+    integrations::rollback_agent_with_runtime(&amkr_tool::python()?, agent)
 }
 
 pub fn probe_amkr_keys(
@@ -573,9 +573,11 @@ pub fn run_amkr_service(
     let default_path = default_config_path();
     let config_path = service_action_config_path(action, selected_path, &default_path)?;
     let program = if action == windows_service::ServiceAction::InstallUser {
-        installer::private_runtime_service_program()?
+        amkr_tool::ensure_installed()?;
+        amkr_tool::service_program()?
     } else {
-        windows_service::ServiceProgram::executable("amkr")
+        amkr_tool::service_program()
+            .unwrap_or_else(|_| windows_service::ServiceProgram::executable("amkr"))
     };
     windows_service::run_task_action_for_program(action, &program, &config_path)
 }
@@ -585,8 +587,7 @@ pub fn run_amkr_system_service(
     selected_path: Option<&Path>,
 ) -> Result<Vec<windows_service::TaskCommandResult>, String> {
     let instance = discover_local_instance(selected_path)?;
-    let program = installer::private_runtime_cli_program()
-        .unwrap_or_else(|_| windows_service::ServiceProgram::executable("amkr"));
+    let program = amkr_tool::service_program()?;
     windows_service::run_system_service_action(action, &program, &instance.config_path)
 }
 

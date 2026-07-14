@@ -11,10 +11,8 @@ fn creates_a_limited_current_user_login_task_without_uac() {
     let commands = task_commands_for_program(
         ServiceAction::InstallUser,
         &ServiceProgram {
-            executable: PathBuf::from(
-                "C:/Users/test/AppData/Local/Programs/Keyloom/runtime/pythonw.exe",
-            ),
-            arguments: vec!["-m".to_owned(), "auto_model_key_router.main".to_owned()],
+            executable: PathBuf::from("C:/Users/test/.local/bin/amkr.exe"),
+            arguments: Vec::new(),
         },
         Path::new("C:/Users/test/AppData/Local/AutoModelKeyRouter/router-config.json"),
     );
@@ -33,7 +31,7 @@ fn creates_a_limited_current_user_login_task_without_uac() {
             "LIMITED",
             "/IT",
             "/TR",
-            "\"C:/Users/test/AppData/Local/Programs/Keyloom/runtime/pythonw.exe\" -m auto_model_key_router.main --config \"C:/Users/test/AppData/Local/AutoModelKeyRouter/router-config.json\" --serve-foreground",
+            "\"C:/Users/test/.local/bin/amkr.exe\" --config \"C:/Users/test/AppData/Local/AutoModelKeyRouter/router-config.json\" --serve-foreground",
         ]
         .into_iter()
         .map(String::from)
@@ -59,10 +57,8 @@ fn extracts_config_paths_from_registered_task_and_process_arguments() {
 #[test]
 fn delegates_system_service_actions_to_amkr_uac_handling() {
     let program = ServiceProgram {
-        executable: PathBuf::from(
-            "C:/Users/test/AppData/Local/Programs/Keyloom/runtime/python.exe",
-        ),
-        arguments: vec!["-m".to_owned(), "auto_model_key_router.main".to_owned()],
+        executable: PathBuf::from("C:/Users/test/.local/bin/amkr.exe"),
+        arguments: Vec::new(),
     };
     let config = Path::new("C:/Users/test/AppData/Local/AutoModelKeyRouter/router-config.json");
 
@@ -76,9 +72,7 @@ fn delegates_system_service_actions_to_amkr_uac_handling() {
         assert_eq!(
             system_service_command(action, &program, config),
             vec![
-                "C:/Users/test/AppData/Local/Programs/Keyloom/runtime/python.exe",
-                "-m",
-                "auto_model_key_router.main",
+                "C:/Users/test/.local/bin/amkr.exe",
                 "--config",
                 "C:/Users/test/AppData/Local/AutoModelKeyRouter/router-config.json",
                 "--service",

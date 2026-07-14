@@ -19,8 +19,6 @@ Keyloom 使用 `v<version>` Git 标签触发 Windows 发布。版本必须在 `p
 4. 配置 GitHub Actions Variables：
 
    - `KEYLOOM_UPDATER_PUBLIC_KEY`：生成的 `.pub` 文件全文。
-   - `AMKR_WHEEL_URL`：随安装器发布的兼容 AMKR wheel URL。
-   - `AMKR_WHEEL_SHA256`：上述 wheel 的小写 SHA-256。
 
 ## 发布
 
@@ -42,7 +40,8 @@ npm run release -- --type patch --yes
 
 - 未签名的 NSIS 安装器及 SHA-256；
 - Tauri updater 使用的 NSIS 安装器签名 `.exe.sig`；
-- 应用内更新使用的 `latest.json`；
-- 私有运行时冒烟检查报告。
+- 应用内更新使用的 `latest.json`。
+
+Keyloom 安装包不再携带 Python 或 AMKR。首次初始化时若未发现 AMKR，应用优先执行 `uv tool install "auto-model-key-router[visitor]"`，没有 `uv` 时回退到 `pipx install`；后续 AMKR 更新也交给对应工具管理器。
 
 本地开发构建不包含生产 updater 公钥，也不会生成签名更新包。只有 tag 工作流注入公钥和私钥后生成的正式安装包可以完成程序内更新。

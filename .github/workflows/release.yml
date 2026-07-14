@@ -6,21 +6,6 @@ on:
     branches: [main]
     tags: ["v*"]
   workflow_dispatch:
-    inputs:
-      amkr_wheel_url:
-        description: Pinned compatible AMKR wheel URL
-        required: true
-        type: string
-      amkr_wheel_sha256:
-        description: SHA-256 of the compatible AMKR wheel
-        required: true
-        type: string
-
-env:
-  PYTHON_VERSION: 3.12.10
-  PYTHON_EMBED_SHA256: 4acbed6dd1c744b0376e3b1cf57ce906f9dc9e95e68824584c8099a63025a3c3
-  AMKR_WHEEL_URL: ${{ inputs.amkr_wheel_url || vars.AMKR_WHEEL_URL }}
-  AMKR_WHEEL_SHA256: ${{ inputs.amkr_wheel_sha256 || vars.AMKR_WHEEL_SHA256 }}
 
 jobs:
   verify-windows:
@@ -37,10 +22,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
       - run: npm ci
       - run: npx playwright install chromium
       - run: npm test -- --run
@@ -56,52 +37,10 @@ jobs:
         run: |
           $tag = if ($env:GITHUB_REF -like 'refs/tags/v*') { $env:GITHUB_REF_NAME } else { '' }
           ./tests/release-version-contract.ps1 -Tag $tag
-      - name: Verify runtime packaging contracts
-        shell: pwsh
-        run: ./tests/runtime-contract.ps1
-
-      - name: Prepare pinned private runtime
-        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
-        shell: pwsh
-        run: |
-          if (-not $env:AMKR_WHEEL_URL -or -not $env:AMKR_WHEEL_SHA256) {
-            throw 'Set AMKR_WHEEL_URL and AMKR_WHEEL_SHA256 repository variables for tag builds.'
-          }
-          if ($env:AMKR_WHEEL_SHA256 -cnotmatch '^[0-9a-f]{64}$') {
-            throw 'AMKR_WHEEL_SHA256 must be 64 lowercase hexadecimal characters.'
-          }
-          $root = Join-Path $PWD '.release-runtime'
-          $wheelhouse = Join-Path $root 'wheelhouse'
-          New-Item -ItemType Directory -Path $wheelhouse -Force | Out-Null
-          $archive = Join-Path $root "python-$env:PYTHON_VERSION-embed-amd64.zip"
-          Invoke-WebRequest "https://www.python.org/ftp/python/$env:PYTHON_VERSION/python-$env:PYTHON_VERSION-embed-amd64.zip" -OutFile $archive
-          python -m pip download --disable-pip-version-check --only-binary=:all: --dest $wheelhouse $env:AMKR_WHEEL_URL
-          if ($LASTEXITCODE -ne 0) { throw 'AMKR wheelhouse download failed' }
-          $wheels = @(Get-ChildItem $wheelhouse -Filter 'auto_model_key_router-*.whl')
-          if ($wheels.Count -ne 1) { throw "Expected one AMKR wheel, found $($wheels.Count)" }
-          $wheel = $wheels[0].FullName
-          python -m pip download --disable-pip-version-check --only-binary=:all: --dest $wheelhouse "$($wheel)[visitor]"
-          if ($LASTEXITCODE -ne 0) { throw 'AMKR visitor wheelhouse download failed' }
-          python -m pip download --disable-pip-version-check --only-binary=:all: --dest $wheelhouse 'pip==25.0.1'
-          if ($LASTEXITCODE -ne 0) { throw 'Pinned runtime updater download failed' }
-          ./scripts/prepare-amkr-runtime.ps1 `
-            -PythonEmbedArchive $archive `
-            -PythonArchiveSha256 $env:PYTHON_EMBED_SHA256 `
-            -AmkrWheel $wheel `
-            -AmkrWheelSha256 $env:AMKR_WHEEL_SHA256 `
-            -WheelhouseDirectory $wheelhouse `
-            -RuntimeOutputDirectory 'src-tauri/runtime-bundle/runtime' `
-            -InstallStateOutputPath 'src-tauri/runtime-bundle/install-state.json'
-
       - name: Verify NSIS contracts
         shell: pwsh
         run: |
           ./tests/nsis-contract.ps1
-
-      - name: Verify private runtime contracts
-        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
-        shell: pwsh
-        run: ./tests/installer-smoke.ps1 -RuntimeDirectory 'src-tauri/runtime-bundle/runtime' -InstallStatePath 'src-tauri/runtime-bundle/install-state.json'
 
       - name: Require updater signing keys for tagged releases
         if: startsWith(github.ref, 'refs/tags/v')
@@ -171,25 +110,22 @@ jobs:
             pub_date = (Get-Date).ToUniversalTime().ToString('o')
             platforms = @{
               'windows-x86_64' = @{
-                signature = (Get-Content $signaturePath -Raw).Trim()
-                url = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:GITHUB_REF_NAME/$($installer.Name)"
+              signature = (Get-Content $signaturePath -Raw).Trim()
+              url = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:GITHUB_REF_NAME/$($installer.Name)"
               }
             }
           }
           $manifest | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $bundleDirectory 'latest.json') -Encoding utf8
 
-      - name: Record installer signature status and smoke report
+      - name: Verify installer signature status
         if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
         shell: pwsh
         run: |
           $installer = @(Get-ChildItem 'src-tauri/target/release/bundle/nsis/*-setup.exe')[0]
           $signature = Get-AuthenticodeSignature $installer.FullName
-          "installer_signature_status=$($signature.Status)" |
-            Out-File 'src-tauri/target/release/bundle/nsis/runtime-smoke.txt' -Encoding utf8
-          ./tests/installer-smoke.ps1 `
-            -RuntimeDirectory 'src-tauri/runtime-bundle/runtime' `
-            -InstallStatePath 'src-tauri/runtime-bundle/install-state.json' |
-            Out-File 'src-tauri/target/release/bundle/nsis/runtime-smoke.txt' -Encoding utf8 -Append
+          if ($env:GITHUB_REF -like 'refs/tags/v*' -and $signature.Status -ne 'Valid') {
+            throw "Tagged installer signature is invalid: $($signature.StatusMessage)"
+          }
 
       - uses: actions/upload-artifact@v4
         if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
@@ -200,7 +136,6 @@ jobs:
             src-tauri/target/release/bundle/nsis/*.sha256
             src-tauri/target/release/bundle/nsis/*-setup.exe.sig
             src-tauri/target/release/bundle/nsis/latest.json
-            src-tauri/target/release/bundle/nsis/runtime-smoke.txt
 
       - uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/v')
@@ -211,4 +146,3 @@ jobs:
             src-tauri/target/release/bundle/nsis/*.sha256
             src-tauri/target/release/bundle/nsis/*-setup.exe.sig
             src-tauri/target/release/bundle/nsis/latest.json
-            src-tauri/target/release/bundle/nsis/runtime-smoke.txt

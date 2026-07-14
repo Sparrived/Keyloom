@@ -13,15 +13,20 @@ test("shows live rates separately from the rolling 60-minute totals", async ({ p
   await expect(page.getByLabel("所选用量快照")).toContainText("RPM / TPM12 / 48,000近 60 分钟请求1,284");
 });
 
-test("shows the selected CLI config and packaged runtime metadata", async ({ page }) => {
+test("shows the selected CLI config and uv-managed AMKR metadata", async ({ page }) => {
   await installTauriMock(page);
   await page.goto("/");
   await page.getByRole("button", { name: "设置" }).click();
 
+  const autostart = page.getByRole("checkbox", { name: "开机自动启动 Keyloom" });
+  await expect(autostart).not.toBeChecked();
+  await autostart.check();
+  await expect(autostart).toBeChecked();
+  expect(await commandCalls(page, "plugin:autostart|enable")).toHaveLength(1);
   await expect(page.getByLabel("配置路径")).toHaveValue("C:/Users/test/AppData/Local/AutoModelKeyRouter/router-config.json");
   await expect(page.getByText("已安装 · AMKR 3.1.1")).toBeVisible();
-  await expect(page.getByText("3.12.10")).toBeVisible();
-  await expect(page.getByText("aaaaaaaaaaaa…")).toBeVisible();
+  await expect(page.getByText("uv", { exact: true })).toBeVisible();
+  await expect(page.getByText("C:/Users/test/.local/bin/amkr.exe")).toBeVisible();
   await expect(page.getByText("127.0.0.1:19001", { exact: true })).toBeVisible();
   await expect(page.getByText("已启用", { exact: true }).first()).toBeVisible();
   expect((await commandCalls(page, "discover_amkr"))[0].args).toEqual({ configPath: null });

@@ -402,19 +402,7 @@ describe("Keyloom application shell", () => {
         if (!configCreated) throw new Error("configuration not found");
         return { config_path: configPath, base_url: "http://127.0.0.1:8000", metrics_db_path: null, log_file_path: null, auth_enabled: true };
       }
-      if (command === "get_runtime_installation_status") return {
-        runtime_dir: "C:/Users/test/AppData/Local/Programs/Keyloom/runtime",
-        state_path: "C:/Users/test/AppData/Local/Keyloom/install-state.json",
-        python_available: true,
-        pythonw_available: true,
-        amkr_package_available: true,
-        private_runtime_installed: true,
-        rollback_available: false,
-        python_version: "3.12.10",
-        amkr_version: "3.1.1",
-        amkr_wheel_sha256: "a".repeat(64),
-        diagnostic: null,
-      };
+      if (command === "get_amkr_tool_status") return { installed: true, executable: "C:/Users/test/.local/bin/amkr.exe", version: "3.1.1", manager: "uv", uv_available: true, pipx_available: false, diagnostic: null };
       if (command === "initialize_default_amkr_config") {
         configCreated = true;
         return { config_path: configPath, base_url: "http://127.0.0.1:8000", metrics_db_path: null, log_file_path: null, auth_enabled: true };
@@ -439,29 +427,17 @@ describe("Keyloom application shell", () => {
     expect(localStorage.getItem("keyloom.configPath")).toBe(configPath);
   });
 
-  it("does not initialize a default config without the private runtime", async () => {
+  it("requires uv or pipx before installing a missing AMKR", async () => {
     invokeMock.mockReset();
     invokeMock.mockImplementation(async (command) => {
       if (command === "discover_amkr") throw new Error("configuration not found");
-      if (command === "get_runtime_installation_status") return {
-        runtime_dir: "C:/Users/test/AppData/Local/Programs/Keyloom/runtime",
-        state_path: "C:/Users/test/AppData/Local/Keyloom/install-state.json",
-        python_available: false,
-        pythonw_available: false,
-        amkr_package_available: false,
-        private_runtime_installed: false,
-        rollback_available: false,
-        python_version: null,
-        amkr_version: null,
-        amkr_wheel_sha256: null,
-        diagnostic: "private runtime not installed",
-      };
+      if (command === "get_amkr_tool_status") return { installed: false, executable: null, version: null, manager: null, uv_available: false, pipx_available: false, diagnostic: "请先安装 uv" };
       return undefined;
     });
 
     render(<App />);
 
-    expect(await screen.findByText("未检测到 Keyloom 私有运行时")).toBeInTheDocument();
+    expect(await screen.findByText("未检测到 AMKR、uv 或 pipx")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "创建默认配置并启动" })).toBeDisabled();
     expect(invokeMock).not.toHaveBeenCalledWith("initialize_default_amkr_config");
   });
@@ -477,7 +453,7 @@ describe("Keyloom application shell", () => {
         if (!configCreated) throw new Error("configuration not found");
         return { config_path: configPath, base_url: "http://127.0.0.1:8000", metrics_db_path: null, log_file_path: null, auth_enabled: true };
       }
-      if (command === "get_runtime_installation_status") return { private_runtime_installed: true, runtime_dir: "C:/runtime" };
+      if (command === "get_amkr_tool_status") return { installed: true, executable: "C:/amkr.exe", version: "3.2.0", manager: "uv", uv_available: true, pipx_available: false };
       if (command === "initialize_default_amkr_config") {
         configCreated = true;
         return { config_path: configPath, base_url: "http://127.0.0.1:8000", metrics_db_path: null, log_file_path: null, auth_enabled: true };
@@ -505,7 +481,7 @@ describe("Keyloom application shell", () => {
     invokeMock.mockReset();
     invokeMock.mockImplementation(async (command) => {
       if (command === "discover_amkr") throw new Error("configuration not found");
-      if (command === "get_runtime_installation_status") return { private_runtime_installed: true, runtime_dir: "C:/runtime" };
+      if (command === "get_amkr_tool_status") return { installed: true, executable: "C:/amkr.exe", version: "3.2.0", manager: "uv", uv_available: true, pipx_available: false };
       return undefined;
     });
 
@@ -527,7 +503,7 @@ describe("Keyloom application shell", () => {
         if (!configCreated) throw new Error("configuration not found");
         return { config_path: configPath, base_url: "http://127.0.0.1:8000", metrics_db_path: null, log_file_path: null, auth_enabled: true };
       }
-      if (command === "get_runtime_installation_status") return { private_runtime_installed: true, runtime_dir: "C:/runtime" };
+      if (command === "get_amkr_tool_status") return { installed: true, executable: "C:/amkr.exe", version: "3.2.0", manager: "uv", uv_available: true, pipx_available: false };
       if (command === "initialize_default_amkr_config") {
         configCreated = true;
         return { config_path: configPath, base_url: "http://127.0.0.1:8000", metrics_db_path: null, log_file_path: null, auth_enabled: true };

@@ -461,26 +461,23 @@ fn rollback_agent_integration(
 }
 
 #[tauri::command]
-fn get_runtime_installation_status() -> keyloom_core::installer::RuntimeInstallationStatus {
-    keyloom_core::installer::get_runtime_installation_status()
+fn get_amkr_tool_status() -> keyloom_core::amkr_tool::AmkrToolStatus {
+    keyloom_core::amkr_tool::get_status()
 }
 
 #[tauri::command]
-fn rollback_private_runtime() -> Result<keyloom_core::installer::RuntimeInstallationStatus, String>
-{
-    keyloom_core::installer::rollback_private_runtime()
+fn install_amkr_tool() -> Result<keyloom_core::amkr_tool::AmkrToolStatus, String> {
+    keyloom_core::amkr_tool::ensure_installed()
 }
 
 #[tauri::command]
-fn update_private_runtime(
+fn update_amkr_tool(
     config_path: Option<String>,
-    artifact_url: String,
-    artifact_sha256: String,
-) -> Result<keyloom_core::installer::RuntimeInstallationStatus, String> {
+) -> Result<keyloom_core::amkr_tool::AmkrToolStatus, String> {
     if keyloom_core::get_amkr_health(config_path.as_deref().map(Path::new)).is_ok() {
-        return Err("请先停止 AMKR 服务，再更新私有运行时".to_owned());
+        return Err("请先停止 AMKR 服务，再更新 AMKR".to_owned());
     }
-    keyloom_core::installer::update_private_runtime(&artifact_url, &artifact_sha256)
+    keyloom_core::amkr_tool::update()
 }
 
 #[tauri::command]
@@ -689,6 +686,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_autostart::Builder::new().app_name("Keyloom").build())
         .setup(|app| {
             let open = MenuItem::with_id(app, "open", "打开 Keyloom", true, None::<&str>)?;
             let start = MenuItem::with_id(app, "start", "启动服务", true, None::<&str>)?;
@@ -751,9 +749,9 @@ fn main() {
             get_agent_integration_status,
             configure_agent_integration,
             rollback_agent_integration,
-            get_runtime_installation_status,
-            rollback_private_runtime,
-            update_private_runtime,
+            get_amkr_tool_status,
+            install_amkr_tool,
+            update_amkr_tool,
             probe_amkr_keys,
             probe_amkr_pools,
             get_amkr_probe,

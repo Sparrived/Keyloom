@@ -3,10 +3,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SettingsPage } from "./SettingsPage";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
+vi.mock("@tauri-apps/plugin-autostart", () => ({ disable: vi.fn(), enable: vi.fn(), isEnabled: vi.fn() }));
 
 import { invoke } from "@tauri-apps/api/core";
+import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 
 const invokeMock = vi.mocked(invoke);
+const disableAutostartMock = vi.mocked(disable);
+const enableAutostartMock = vi.mocked(enable);
+const isAutostartEnabledMock = vi.mocked(isEnabled);
 const metadata = {
   config_path: "C:/amkr/router-config.json",
   base_url: "http://127.0.0.1:18900",
@@ -33,7 +38,39 @@ describe("SettingsPage", () => {
 
   beforeEach(() => {
     invokeMock.mockReset();
+    disableAutostartMock.mockReset().mockResolvedValue(undefined);
+    enableAutostartMock.mockReset().mockResolvedValue(undefined);
+    isAutostartEnabledMock.mockReset().mockResolvedValue(false);
     vi.spyOn(window, "confirm").mockReturnValue(true);
+  });
+
+  it("reads and toggles the Windows autostart state", async () => {
+    isAutostartEnabledMock.mockResolvedValue(true);
+    render(<SettingsPage configPath={null} metadata={null} onConfigPathChange={() => undefined} />);
+
+    const checkbox = screen.getByRole("checkbox", { name: "开机自动启动 Keyloom" });
+    await waitFor(() => expect(checkbox).toBeEnabled());
+    expect(checkbox).toBeChecked();
+
+    fireEvent.click(checkbox);
+    await waitFor(() => expect(disableAutostartMock).toHaveBeenCalledOnce());
+    expect(checkbox).not.toBeChecked();
+
+    fireEvent.click(checkbox);
+    await waitFor(() => expect(enableAutostartMock).toHaveBeenCalledOnce());
+    expect(checkbox).toBeChecked();
+  });
+
+  it("restores the autostart checkbox when Windows rejects the change", async () => {
+    enableAutostartMock.mockRejectedValue(new Error("access denied"));
+    render(<SettingsPage configPath={null} metadata={null} onConfigPathChange={() => undefined} />);
+
+    const checkbox = screen.getByRole("checkbox", { name: "开机自动启动 Keyloom" });
+    await waitFor(() => expect(checkbox).toBeEnabled());
+    fireEvent.click(checkbox);
+
+    expect(await screen.findByText("自启动设置失败: access denied")).toBeInTheDocument();
+    expect(checkbox).not.toBeChecked();
   });
 
   it("imports pasted configuration without requiring a prior export", async () => {
@@ -135,9 +172,10 @@ describe("SettingsPage", () => {
     expect(screen.getByText("发现新版本")).toBeInTheDocument();
   });
 
-  it("installs a stopped private runtime only from the checked artifact", async () => {
+  it("updates a stopped AMKR through its tool manager", async () => {
     invokeMock.mockImplementation(async (command) => {
       if (command === "get_amkr_settings") return settingsResponse;
+      if (command === "get_amkr_tool_status") return { installed: true, executable: "C:/Users/test/.local/bin/amkr.exe", version: "3.1.0", manager: "uv", uv_available: true, pipx_available: false, diagnostic: null };
       if (command === "check_amkr_update") return {
         current_version: "3.1.0",
         latest_version: "3.2.0",
@@ -148,7 +186,7 @@ describe("SettingsPage", () => {
         update_available: true,
         error: null,
       };
-      if (command === "update_private_runtime") return { private_runtime_installed: true, amkr_version: "3.2.0" };
+      if (command === "update_amkr_tool") return { installed: true, executable: "C:/Users/test/.local/bin/amkr.exe", version: "3.2.0", manager: "uv", uv_available: true, pipx_available: false, diagnostic: null };
       return undefined;
     });
     render(<SettingsPage configPath="C:/amkr.json" metadata={metadata} health={{ status: "stopped", local_auth_enabled: true }} onConfigPathChange={() => undefined} />);
@@ -156,11 +194,7 @@ describe("SettingsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "检查 AMKR 更新" }));
     fireEvent.click(await screen.findByRole("button", { name: "安装更新" }));
 
-    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_private_runtime", {
-      configPath: "C:/amkr.json",
-      artifactUrl: "https://files.pythonhosted.org/packages/amkr.whl",
-      artifactSha256: "a".repeat(64),
-    }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_amkr_tool", { configPath: "C:/amkr.json" }));
   });
 
   it("rejects invalid JSON before calling the service", async () => {
@@ -254,85 +288,38 @@ describe("SettingsPage", () => {
     expect(screen.getByText("服务未提供")).toBeInTheDocument();
   });
 
-  it("shows the managed private runtime even before an AMKR config is discovered", async () => {
-    invokeMock.mockImplementation(async (command) => command === "get_runtime_installation_status" ? {
-      runtime_dir: "C:/Users/test/AppData/Local/Programs/Keyloom/runtime",
-      state_path: "C:/Users/test/AppData/Local/Keyloom/install-state.json",
-      python_available: true,
-      pythonw_available: true,
-      amkr_package_available: true,
-      private_runtime_installed: true,
-      rollback_available: false,
-      python_version: "3.12.10",
-      amkr_version: "3.1.1",
-      amkr_wheel_sha256: "a".repeat(64),
+  it("shows the uv-managed AMKR CLI before a config is discovered", async () => {
+    invokeMock.mockImplementation(async (command) => command === "get_amkr_tool_status" ? {
+      installed: true,
+      executable: "C:/Users/test/.local/bin/amkr.exe",
+      version: "3.1.1",
+      manager: "uv",
+      uv_available: true,
+      pipx_available: false,
       diagnostic: null,
     } : undefined);
 
     render(<SettingsPage configPath={null} metadata={null} onConfigPathChange={() => undefined} />);
 
     expect(await screen.findByText("已安装 · AMKR 3.1.1")).toBeInTheDocument();
-    expect(screen.getByText("C:/Users/test/AppData/Local/Programs/Keyloom/runtime")).toBeInTheDocument();
-    expect(screen.getByText("aaaaaaaaaaaa…")).toBeInTheDocument();
-    expect(invokeMock).toHaveBeenCalledWith("get_runtime_installation_status");
+    expect(screen.getByText("C:/Users/test/.local/bin/amkr.exe")).toBeInTheDocument();
+    expect(screen.getByText("uv")).toBeInTheDocument();
+    expect(invokeMock).toHaveBeenCalledWith("get_amkr_tool_status");
   });
 
-  it("reports an incomplete private runtime without hiding the selected CLI instance", async () => {
-    invokeMock.mockImplementation(async (command) => command === "get_runtime_installation_status" ? {
-      runtime_dir: "C:/Users/test/AppData/Local/Programs/Keyloom/runtime",
-      state_path: "C:/Users/test/AppData/Local/Keyloom/install-state.json",
-      python_available: true,
-      pythonw_available: false,
-      amkr_package_available: false,
-      private_runtime_installed: false,
-      rollback_available: false,
-      python_version: null,
-      amkr_version: null,
-      amkr_wheel_sha256: null,
-      diagnostic: "私有运行时文件不完整",
-    } : undefined);
+  it("offers uv installation without hiding the selected CLI instance", async () => {
+    invokeMock.mockImplementation(async (command) => {
+      if (command === "get_amkr_tool_status") return { installed: false, executable: null, version: null, manager: null, uv_available: true, pipx_available: false, diagnostic: "未安装 AMKR；继续初始化时将自动安装" };
+      if (command === "install_amkr_tool") return { installed: true, executable: "C:/Users/test/.local/bin/amkr.exe", version: "3.2.0", manager: "uv", uv_available: true, pipx_available: false, diagnostic: null };
+      return undefined;
+    });
 
     render(<SettingsPage configPath={null} metadata={metadata} onConfigPathChange={() => undefined} />);
 
-    expect(await screen.findByText("私有运行时文件不完整")).toBeInTheDocument();
+    expect(await screen.findByText("未安装 AMKR；继续初始化时将自动安装")).toBeInTheDocument();
     expect(screen.getByText(metadata.base_url)).toBeInTheDocument();
-  });
-
-  it("rolls back to the previous private runtime only after confirmation", async () => {
-    invokeMock.mockImplementation(async (command) => {
-      if (command === "get_runtime_installation_status") return {
-        runtime_dir: "C:/Users/test/AppData/Local/Programs/Keyloom/runtime",
-        state_path: "C:/Users/test/AppData/Local/Keyloom/install-state.json",
-        python_available: true,
-        pythonw_available: true,
-        amkr_package_available: true,
-        private_runtime_installed: true,
-        rollback_available: true,
-        python_version: "3.12.10",
-        amkr_version: "3.1.1",
-        amkr_wheel_sha256: "a".repeat(64),
-        diagnostic: null,
-      };
-      if (command === "rollback_private_runtime") return {
-        runtime_dir: "C:/Users/test/AppData/Local/Programs/Keyloom/runtime",
-        state_path: "C:/Users/test/AppData/Local/Keyloom/install-state.json",
-        python_available: true,
-        pythonw_available: true,
-        amkr_package_available: true,
-        private_runtime_installed: true,
-        rollback_available: true,
-        python_version: "3.12.10",
-        amkr_version: "3.1.0",
-        amkr_wheel_sha256: "b".repeat(64),
-        diagnostic: null,
-      };
-      return undefined;
-    });
-    render(<SettingsPage configPath={null} metadata={metadata} health={null} onConfigPathChange={() => undefined} />);
-
-    fireEvent.click(await screen.findByRole("button", { name: "回退运行时" }));
-
-    expect(await screen.findByText("已安装 · AMKR 3.1.0")).toBeInTheDocument();
-    expect(invokeMock).toHaveBeenCalledWith("rollback_private_runtime");
+    fireEvent.click(screen.getByRole("button", { name: "安装 AMKR" }));
+    expect(await screen.findByText("已安装 · AMKR 3.2.0")).toBeInTheDocument();
+    expect(invokeMock).toHaveBeenCalledWith("install_amkr_tool");
   });
 });

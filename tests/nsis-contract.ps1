@@ -21,34 +21,14 @@ if ($config.bundle.windows.webviewInstallMode.type -ne 'downloadBootstrapper' -o
     throw 'WebView2 bootstrapper detection must remain enabled and silent.'
 }
 
-$resources = $config.bundle.resources
-if ($resources.'runtime-bundle/runtime/' -ne 'runtime' -or $resources.'runtime-bundle/install-state.json' -ne 'runtime/install-state.json') {
-    throw 'The private runtime bundle resource mapping is invalid.'
-}
-
-$hookPath = [IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $configPath) $config.bundle.windows.nsis.installerHooks))
-if (-not (Test-Path -LiteralPath $hookPath -PathType Leaf)) {
-    throw "NSIS installer hook is missing: $hookPath"
-}
-$hook = Get-Content -LiteralPath $hookPath -Raw
-foreach ($macro in @('NSIS_HOOK_PREINSTALL', 'NSIS_HOOK_POSTINSTALL', 'NSIS_HOOK_POSTUNINSTALL')) {
-    if ($hook -notmatch [Regex]::Escape($macro)) {
-        throw "NSIS hook macro is missing: $macro"
-    }
-}
-if ($hook -notmatch [Regex]::Escape('$LOCALAPPDATA\Keyloom\install-state.json')) {
-    throw 'NSIS hooks must maintain the Keyloom install state.'
-}
-if ($hook -match 'AutoModelKeyRouter') {
-    throw 'NSIS hooks must never modify the shared AMKR config directory.'
-}
-if ($hook -notmatch 'FindWindow\s+\$0\s+""\s+"Keyloom"') {
-    throw 'NSIS preinstall hook must reject upgrades while the Keyloom window is open.'
+$hasResources = $config.bundle.PSObject.Properties.Name -contains 'resources'
+$hasInstallerHooks = $config.bundle.windows.nsis.PSObject.Properties.Name -contains 'installerHooks'
+if ($hasResources -or $hasInstallerHooks) {
+    throw 'Keyloom must not package or manage a private AMKR runtime.'
 }
 
 [PSCustomObject]@{
     status = 'PASS'
-    installer_hook = $hookPath
     install_mode = $config.bundle.windows.nsis.installMode
     webview_install_mode = $config.bundle.windows.webviewInstallMode.type
 }

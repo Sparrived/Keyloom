@@ -29,6 +29,7 @@ export async function installTauriMock(page: Page, scenario: "existing" | "fresh
     };
     let configExists = activeScenario === "existing";
     let taskInstalled = activeScenario === "existing";
+    let keyloomAutostartEnabled = false;
     let health: typeof healthy | null = activeScenario === "existing" ? healthy : null;
     let providerRevision = "revision-a";
     let providers = [{ id: "provider-a", base_url: "https://api.example.test", keys: [{ name: "main", enabled: true, allow_visitor: false, api_key_fingerprint: "123456789abc" }], pools: [{ name: "primary", keys: ["main"], models: ["model-a"] }], routes: {} }];
@@ -60,6 +61,14 @@ export async function installTauriMock(page: Page, scenario: "existing" | "fresh
         invoke: async (command: string, args: Record<string, unknown> = {}) => {
           calls.push({ command, args });
           switch (command) {
+            case "plugin:autostart|is_enabled":
+              return keyloomAutostartEnabled;
+            case "plugin:autostart|enable":
+              keyloomAutostartEnabled = true;
+              return null;
+            case "plugin:autostart|disable":
+              keyloomAutostartEnabled = false;
+              return null;
             case "discover_amkr":
               if (!configExists) throw new Error("AMKR configuration not found");
               return metadata;
@@ -95,8 +104,8 @@ export async function installTauriMock(page: Page, scenario: "existing" | "fresh
               return { unified_model: healthy.unified_model };
             case "read_amkr_log_tail":
               return "2026-07-13 INFO request completed status=200";
-            case "get_runtime_installation_status":
-              return { runtime_dir: "C:/Users/test/AppData/Local/Programs/Keyloom/runtime", state_path: "C:/Users/test/AppData/Local/Keyloom/install-state.json", python_available: true, pythonw_available: true, amkr_package_available: true, private_runtime_installed: true, rollback_available: true, python_version: "3.12.10", amkr_version: "3.1.1", amkr_wheel_sha256: "a".repeat(64), diagnostic: null };
+            case "get_amkr_tool_status":
+              return { installed: true, executable: "C:/Users/test/.local/bin/amkr.exe", version: "3.1.1", manager: "uv", uv_available: true, pipx_available: false, diagnostic: null };
             case "get_agent_integration_status":
               return integrations[String(args.agent)];
             case "configure_agent_integration": {
@@ -129,8 +138,8 @@ export async function installTauriMock(page: Page, scenario: "existing" | "fresh
               taskInstalled = false;
               health = null;
               return [{ command: ["schtasks"], exit_code: 0, stdout: "SUCCESS", stderr: "" }];
-            case "rollback_private_runtime":
-              return { runtime_dir: "C:/Users/test/AppData/Local/Programs/Keyloom/runtime", state_path: "C:/Users/test/AppData/Local/Keyloom/install-state.json", python_available: true, pythonw_available: true, amkr_package_available: true, private_runtime_installed: true, rollback_available: true, python_version: "3.12.10", amkr_version: "3.1.0", amkr_wheel_sha256: "b".repeat(64), diagnostic: null };
+            case "update_amkr_tool":
+              return { installed: true, executable: "C:/Users/test/.local/bin/amkr.exe", version: "3.2.0", manager: "uv", uv_available: true, pipx_available: false, diagnostic: null };
             case "export_amkr_config":
               return { config_revision: "revision-a", config: { providers: {}, models: {} } };
             case "update_amkr_unified_model":

@@ -55,8 +55,7 @@ foreach ($required in @(
     'latest.json',
     '*-setup.exe.sig',
     'softprops/action-gh-release@v2',
-    'generate_release_notes: true',
-    'runtime-smoke.txt'
+    'generate_release_notes: true'
 )) {
     if ($workflow -notmatch [Regex]::Escape($required)) {
         throw "release workflow is missing required updater-release behavior: $required"

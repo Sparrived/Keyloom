@@ -217,17 +217,13 @@ export type AmkrIntegrationStatus = {
   mode: string | null;
 };
 
-export type RuntimeInstallationStatus = {
-  runtime_dir: string;
-  state_path: string;
-  python_available: boolean;
-  pythonw_available: boolean;
-  amkr_package_available: boolean;
-  private_runtime_installed: boolean;
-  rollback_available: boolean;
-  python_version: string | null;
-  amkr_version: string | null;
-  amkr_wheel_sha256: string | null;
+export type AmkrToolStatus = {
+  installed: boolean;
+  executable: string | null;
+  version: string | null;
+  manager: string | null;
+  uv_available: boolean;
+  pipx_available: boolean;
   diagnostic: string | null;
 };
 export type AmkrServiceAction =
@@ -411,16 +407,16 @@ export function rollbackAgentIntegration(agent: AmkrIntegrationAgent) {
   return invoke<AmkrIntegrationStatus>("rollback_agent_integration", { agent });
 }
 
-export function getRuntimeInstallationStatus() {
-  return invoke<RuntimeInstallationStatus>("get_runtime_installation_status");
+export function getAmkrToolStatus() {
+  return invoke<AmkrToolStatus>("get_amkr_tool_status");
 }
 
-export function rollbackPrivateRuntime() {
-  return invoke<RuntimeInstallationStatus>("rollback_private_runtime");
+export function installAmkrTool() {
+  return invoke<AmkrToolStatus>("install_amkr_tool");
 }
 
-export function updatePrivateRuntime(configPath: string | null, artifactUrl: string, artifactSha256: string) {
-  return invoke<RuntimeInstallationStatus>("update_private_runtime", { configPath, artifactUrl, artifactSha256 });
+export function updateAmkrTool(configPath: string | null) {
+  return invoke<AmkrToolStatus>("update_amkr_tool", { configPath });
 }
 
 export function controlAmkr(

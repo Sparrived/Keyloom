@@ -58,7 +58,7 @@ describe("IntegrationsPage", () => {
     expect(screen.getByText(/目标地址 http:\/\/127\.0\.0\.1:18900/)).toBeInTheDocument();
   });
 
-  it("applies the selected routing mode through the private runtime", async () => {
+  it("applies the selected routing mode through the AMKR tool environment", async () => {
     invokeMock.mockImplementation(async (command, args) => {
       const agent = (args as { agent?: string } | undefined)?.agent;
       if (command === "get_agent_integration_status") return {

@@ -11,7 +11,7 @@ import {
   getAmkrLocalApiKey,
   getAmkrMetricHistory,
   getAmkrMetrics,
-  getRuntimeInstallationStatus,
+  getAmkrToolStatus,
   initializeDefaultAmkrConfig,
   isAmkrVersionCompatible,
   minimumCompatibleAmkrVersion,
@@ -24,7 +24,7 @@ import {
   type AmkrServiceAction,
   type AmkrUnifiedModel,
   type AmkrUpdateCheck,
-  type RuntimeInstallationStatus,
+  type AmkrToolStatus,
 } from "./api/amkr";
 import { UsageChart, type UsageMetric } from "./features/overview/UsageChart";
 import { appendMetricSnapshot, metricHistoryWindowMs, type MetricSnapshot } from "./features/overview/useMetricHistory";
@@ -87,9 +87,9 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
   const [serviceActionError, setServiceActionError] = useState<string | null>(null);
   const [serviceActionNotice, setServiceActionNotice] = useState<string | null>(null);
   const [serviceCommandOutput, setServiceCommandOutput] = useState("");
-  const [runtimeStatus, setRuntimeStatus] = useState<RuntimeInstallationStatus | null>(null);
-  const [runtimeStatusLoading, setRuntimeStatusLoading] = useState(false);
-  const [runtimeStatusError, setRuntimeStatusError] = useState<string | null>(null);
+  const [toolStatus, setToolStatus] = useState<AmkrToolStatus | null>(null);
+  const [toolStatusLoading, setToolStatusLoading] = useState(false);
+  const [toolStatusError, setToolStatusError] = useState<string | null>(null);
   const [initializationInProgress, setInitializationInProgress] = useState(false);
   const [localKeyCopyError, setLocalKeyCopyError] = useState<string | null>(null);
   const [unifiedModelAction, setUnifiedModelAction] = useState(false);
@@ -189,19 +189,19 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
           setMetadata(null);
           setHealth(null);
           setDiscoveryError(error instanceof Error ? error.message : String(error));
-          setRuntimeStatusLoading(true);
-          setRuntimeStatusError(null);
+          setToolStatusLoading(true);
+          setToolStatusError(null);
         }
         try {
-          const status = await getRuntimeInstallationStatus();
-          if (!cancelled) setRuntimeStatus(status);
-        } catch (runtimeError: unknown) {
+          const status = await getAmkrToolStatus();
+          if (!cancelled) setToolStatus(status);
+        } catch (toolError: unknown) {
           if (!cancelled) {
-            setRuntimeStatus(null);
-            setRuntimeStatusError(runtimeError instanceof Error ? runtimeError.message : String(runtimeError));
+            setToolStatus(null);
+            setToolStatusError(toolError instanceof Error ? toolError.message : String(toolError));
           }
         } finally {
-          if (!cancelled) setRuntimeStatusLoading(false);
+          if (!cancelled) setToolStatusLoading(false);
         }
       }
     }
@@ -491,6 +491,7 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
     let initialized: AmkrMetadata | null = null;
     try {
       initialized = await initializeDefaultAmkrConfig();
+      setToolStatus(await getAmkrToolStatus());
       await controlAmkr("install_user_amkr", initialized.config_path);
       await controlAmkr("start_amkr", initialized.config_path);
       setMetadata(initialized);
@@ -644,24 +645,28 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
             <section className="onboarding-page" aria-busy={initializationInProgress} aria-labelledby="onboarding-heading">
               <h2 id="onboarding-heading">开始使用 Keyloom</h2>
               <p className="empty-state" role="alert">未找到可用的 AMKR 配置。</p>
-              <p className={runtimeStatus?.private_runtime_installed ? "status-good" : "status-muted"} role="status">
-                {runtimeStatusLoading
-                  ? "正在检查 Keyloom 私有运行时"
-                  : runtimeStatus?.private_runtime_installed
-                    ? "私有运行时已就绪"
-                    : "未检测到 Keyloom 私有运行时"}
+              <p className={toolStatus?.installed ? "status-good" : "status-muted"} role="status">
+                {toolStatusLoading
+                  ? "正在检查 AMKR CLI"
+                  : toolStatus?.installed
+                    ? `AMKR ${toolStatus.version ?? ""} 已就绪`
+                    : toolStatus?.uv_available
+                      ? "未安装 AMKR，初始化时将通过 uv tool 安装"
+                      : toolStatus?.pipx_available
+                        ? "未安装 AMKR，初始化时将通过 pipx 安装"
+                        : "未检测到 AMKR、uv 或 pipx"}
               </p>
-              {runtimeStatus?.private_runtime_installed ? <code>{runtimeStatus.runtime_dir}</code> : null}
-              {runtimeStatusError ? <p className="service-action-error" role="alert">运行时状态读取失败: {runtimeStatusError}</p> : null}
+              {toolStatus?.executable ? <code>{toolStatus.executable}</code> : null}
+              {toolStatusError ? <p className="service-action-error" role="alert">AMKR 状态读取失败: {toolStatusError}</p> : null}
               {serviceActionError ? <p className="service-action-error" role="alert">初始化失败: {serviceActionError}</p> : null}
               <div className="onboarding-actions">
                 <button
                   className="primary-action"
                   type="button"
-                  disabled={runtimeStatusLoading || !runtimeStatus?.private_runtime_installed || initializationInProgress}
+                  disabled={toolStatusLoading || (!toolStatus?.installed && !toolStatus?.uv_available && !toolStatus?.pipx_available) || initializationInProgress}
                   onClick={() => void initializeLocalInstance()}
                 >
-                  {initializationInProgress ? "正在创建并启动" : "创建默认配置并启动"}
+                  {initializationInProgress ? "正在安装并启动" : "创建默认配置并启动"}
                 </button>
                 <button className="secondary-button" type="button" disabled={initializationInProgress} onClick={() => setActivePage("设置")}>选择已有配置</button>
               </div>
