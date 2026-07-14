@@ -18,6 +18,7 @@ export async function installTauriMock(page: Page, scenario: "existing" | "fresh
     };
     const healthy = {
       status: "ok",
+      version: "3.1.1",
       local_auth_enabled: true,
       config_path: metadata.config_path,
       models: ["model-a", "model-b"],
@@ -30,7 +31,7 @@ export async function installTauriMock(page: Page, scenario: "existing" | "fresh
     let taskInstalled = activeScenario === "existing";
     let health: typeof healthy | null = activeScenario === "existing" ? healthy : null;
     let providerRevision = "revision-a";
-    let providers = [{ id: "provider-a", base_url: "https://api.example.test", keys: [{ name: "main", enabled: true, allow_visitor: false, api_key_fingerprint: "123456789abc" }], pools: [{ name: "primary", keys: ["main"], models: ["model-a"] }] }];
+    let providers = [{ id: "provider-a", base_url: "https://api.example.test", keys: [{ name: "main", enabled: true, allow_visitor: false, api_key_fingerprint: "123456789abc" }], pools: [{ name: "primary", keys: ["main"], models: ["model-a"] }], routes: {} }];
     const integrations: Record<string, Record<string, unknown>> = {
       "claude-code": {
         agent: "claude-code",
@@ -72,10 +73,14 @@ export async function installTauriMock(page: Page, scenario: "existing" | "fresh
             case "get_amkr_metrics":
               if (!health) throw new Error("AMKR service is stopped");
               return { total: { requests: 1284, successes: 1270, failures: 14, prompt_tokens: 800000, completion_tokens: 240000, total_tokens: 1040000, cached_tokens: 312000, cached_token_rate: 0.3, avg_duration_ms: 840 } };
+            case "get_amkr_settings":
+              return { config_revision: providerRevision, settings: { host: metadata.host, port: metadata.port, request_timeout: metadata.request_timeout, stream_first_byte_timeout: metadata.stream_first_byte_timeout, stream_idle_timeout: metadata.stream_idle_timeout, max_retries: metadata.max_retries, local_auth_enabled: true, local_api_key_fingerprint: healthy.local_api_key_fingerprint } };
+            case "check_amkr_update":
+              return { current_version: "3.1.1", latest_version: "3.1.1", release_url: "https://example.test/amkr", source: "PyPI", update_available: false, error: null };
             case "get_amkr_providers":
               return { config_revision: providerRevision, providers };
             case "update_amkr_provider":
-              providers = providers.map((provider) => provider.id === args.providerId ? { ...provider, id: String(args.id), base_url: String(args.baseUrl) } : provider);
+              providers = providers.map((provider) => provider.id === args.providerId ? { ...provider, id: String(args.id), base_url: String(args.baseUrl), routes: args.routes as Record<string, string> } : provider);
               providerRevision = "revision-b";
               return {};
             case "get_amkr_routes":

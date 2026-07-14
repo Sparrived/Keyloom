@@ -31,6 +31,7 @@ test("edits a provider with the current config revision", async ({ page }) => {
       providerId: "provider-a",
       id: "provider-b",
       baseUrl: "https://b.example.test",
+      routes: {},
     },
   }]);
 });
