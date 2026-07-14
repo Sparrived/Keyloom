@@ -14,6 +14,7 @@ const response = {
     base_url: "https://a.example.test",
     keys: [{ name: "key-a", enabled: true, allow_visitor: false, api_key_fingerprint: "65bbff9a6cb9" }],
     pools: [{ name: "pool-a", keys: ["key-a"], models: ["model-a"] }],
+    routes: { openai: "proxy/v1/chat/completions" },
   }],
 };
 
@@ -31,6 +32,7 @@ describe("ProvidersPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "编辑供应商 a.example.test" }));
     fireEvent.change(screen.getByLabelText("供应商名称"), { target: { value: "b.example.test" } });
     fireEvent.change(screen.getByLabelText("供应商地址"), { target: { value: "https://b.example.test" } });
+    fireEvent.change(screen.getByLabelText("Anthropic 路径"), { target: { value: "gateway/v1/messages" } });
     fireEvent.click(screen.getByRole("button", { name: "保存供应商" }));
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_amkr_provider", {
@@ -39,6 +41,10 @@ describe("ProvidersPage", () => {
       providerId: "a.example.test",
       id: "b.example.test",
       baseUrl: "https://b.example.test",
+      routes: {
+        openai: "proxy/v1/chat/completions",
+        anthropic: "gateway/v1/messages",
+      },
     }));
   });
 

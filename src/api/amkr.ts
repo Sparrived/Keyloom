@@ -16,6 +16,7 @@ export type AmkrMetadata = {
 
 export type AmkrHealth = {
   status: string;
+  version?: string | null;
   local_auth_enabled: boolean;
   models?: string[];
   config_path?: string | null;
@@ -31,18 +32,58 @@ export type AmkrHealth = {
   unified_model?: AmkrUnifiedModel | null;
 };
 
+export type AmkrUsageStats = {
+  requests: number;
+  successes?: number | null;
+  failures?: number | null;
+  prompt_tokens?: number | null;
+  completion_tokens?: number | null;
+  total_tokens: number;
+  cached_token_rate: number;
+  cached_tokens?: number | null;
+  avg_duration_ms: number;
+};
+
 export type AmkrMetrics = {
-  total: {
-    requests: number;
-    successes?: number | null;
-    failures?: number | null;
-    prompt_tokens?: number | null;
-    completion_tokens?: number | null;
-    total_tokens: number;
-    cached_token_rate: number;
-    cached_tokens?: number | null;
-    avg_duration_ms: number;
-  };
+  total: AmkrUsageStats;
+  current_rpm?: number;
+  current_tpm?: number;
+  router_status?: string | null;
+  active_requests?: number;
+  caller_types?: Record<string, AmkrUsageStats>;
+  models?: Record<string, AmkrUsageStats>;
+  keys?: Record<string, Record<string, AmkrUsageStats>>;
+};
+
+export type AmkrSettings = {
+  host: string;
+  port: number;
+  request_timeout: number;
+  stream_first_byte_timeout: number;
+  stream_idle_timeout: number;
+  max_retries: number;
+  local_auth_enabled: boolean;
+  local_api_key_fingerprint: string | null;
+};
+
+export type AmkrSettingsResponse = {
+  config_revision: string;
+  settings: AmkrSettings;
+};
+
+export type AmkrLocalApiKeyResponse = {
+  config_revision: string;
+  local_api_key: string;
+  local_api_key_fingerprint: string;
+};
+
+export type AmkrUpdateCheck = {
+  current_version: string;
+  latest_version: string | null;
+  release_url: string | null;
+  source: string | null;
+  update_available: boolean;
+  error: string | null;
 };
 
 export type AmkrProviderKey = {
@@ -63,6 +104,7 @@ export type AmkrProvider = {
   base_url: string;
   keys: AmkrProviderKey[];
   pools: AmkrProviderPool[];
+  routes: Record<string, string>;
 };
 
 export type AmkrProvidersResponse = {
@@ -156,7 +198,11 @@ export type RuntimeInstallationStatus = {
   amkr_wheel_sha256: string | null;
   diagnostic: string | null;
 };
-export type AmkrServiceAction = "start_amkr" | "stop_amkr" | "restart_amkr" | "install_user_amkr" | "uninstall_amkr" | "status_amkr";
+export type AmkrServiceAction =
+  | "start_amkr" | "stop_amkr" | "restart_amkr"
+  | "install_user_amkr" | "uninstall_amkr" | "status_amkr"
+  | "install_system_amkr" | "uninstall_system_amkr"
+  | "start_system_amkr" | "stop_system_amkr" | "restart_system_amkr";
 export type AmkrServiceCommandResult = { command: string[]; exit_code: number; stdout: string; stderr: string };
 
 export function discoverAmkr(configPath: string | null = null) {
@@ -173,6 +219,31 @@ export function getAmkrHealth(configPath: string | null = null) {
 
 export function getAmkrMetrics(configPath: string | null = null) {
   return invoke<AmkrMetrics>("get_amkr_metrics", { configPath });
+}
+
+export function getAmkrSettings(configPath: string | null = null) {
+  return invoke<AmkrSettingsResponse>("get_amkr_settings", { configPath });
+}
+
+export function updateAmkrSettings(configRevision: string, settings: AmkrSettings, configPath: string | null = null) {
+  return invoke<AmkrSettingsResponse>("update_amkr_settings", {
+    configPath,
+    configRevision,
+    host: settings.host,
+    port: settings.port,
+    requestTimeout: settings.request_timeout,
+    streamFirstByteTimeout: settings.stream_first_byte_timeout,
+    streamIdleTimeout: settings.stream_idle_timeout,
+    maxRetries: settings.max_retries,
+  });
+}
+
+export function regenerateAmkrLocalApiKey(configRevision: string, configPath: string | null = null) {
+  return invoke<AmkrLocalApiKeyResponse>("regenerate_amkr_local_api_key", { configPath, configRevision });
+}
+
+export function checkAmkrUpdate(configPath: string | null = null) {
+  return invoke<AmkrUpdateCheck>("check_amkr_update", { configPath });
 }
 
 export function readAmkrLogTail(configPath: string | null = null) {
@@ -221,8 +292,8 @@ export function deleteAmkrProvider(configRevision: string, id: string, configPat
   return invoke("delete_amkr_provider", { configPath, configRevision, id });
 }
 
-export function updateAmkrProvider(configRevision: string, providerId: string, id: string, baseUrl: string, configPath: string | null = null) {
-  return invoke("update_amkr_provider", { configPath, configRevision, providerId, id, baseUrl });
+export function updateAmkrProvider(configRevision: string, providerId: string, id: string, baseUrl: string, routes: Record<string, string>, configPath: string | null = null) {
+  return invoke("update_amkr_provider", { configPath, configRevision, providerId, id, baseUrl, routes });
 }
 
 export function createAmkrProviderKey(configRevision: string, providerId: string, name: string, apiKey: string, allowVisitor: boolean, configPath: string | null = null) {

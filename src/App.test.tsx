@@ -391,6 +391,24 @@ describe("Keyloom application shell", () => {
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("uninstall_amkr", { configPath: null }));
   });
 
+  it("delegates system startup registration to the AMKR UAC command", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    invokeMock.mockReset();
+    invokeMock.mockImplementation(async (command) => {
+      if (command === "discover_amkr") return { config_path: "C:/config.json", base_url: "http://127.0.0.1:18900", metrics_db_path: null, log_file_path: null, auth_enabled: true };
+      if (command === "get_amkr_health") return { status: "ok", local_auth_enabled: true };
+      if (command === "get_amkr_metrics") return { total: { requests: 0, total_tokens: 0, cached_token_rate: 0, avg_duration_ms: 0 } };
+      return [];
+    });
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "服务状态" }));
+    fireEvent.click(screen.getByRole("button", { name: "注册开机服务" }));
+
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("install_system_amkr", { configPath: null }));
+    expect(await screen.findByText("系统级服务已注册。")).toBeInTheDocument();
+  });
+
   it("renders the V5 overview with unified model and real metrics", async () => {
     invokeMock.mockReset();
     invokeMock

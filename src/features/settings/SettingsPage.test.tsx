@@ -14,6 +14,19 @@ const metadata = {
   log_file_path: null,
   auth_enabled: true,
 };
+const settingsResponse = {
+  config_revision: "revision-settings",
+  settings: {
+    host: "127.0.0.1",
+    port: 18900,
+    request_timeout: 60,
+    stream_first_byte_timeout: 90,
+    stream_idle_timeout: 180,
+    max_retries: 2,
+    local_auth_enabled: true,
+    local_api_key_fingerprint: "65bbff9a6cb9",
+  },
+};
 
 describe("SettingsPage", () => {
   afterEach(() => vi.restoreAllMocks());
@@ -41,6 +54,78 @@ describe("SettingsPage", () => {
       config: { providers: {}, models: {} },
     });
     expect(await screen.findByText("配置已导入，AMKR 已热重载。")).toBeInTheDocument();
+  });
+
+  it("edits AMKR listen and timeout settings with the current revision", async () => {
+    invokeMock.mockImplementation(async (command, args) => {
+      if (command === "get_amkr_settings") return settingsResponse;
+      if (command === "update_amkr_settings") return {
+        ...settingsResponse,
+        config_revision: "revision-next",
+        settings: { ...settingsResponse.settings, port: (args as { port: number }).port },
+      };
+      return undefined;
+    });
+    render(<SettingsPage configPath={null} metadata={metadata} onConfigPathChange={() => undefined} />);
+
+    fireEvent.change(await screen.findByLabelText("端口"), { target: { value: "19000" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存设置" }));
+
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_amkr_settings", {
+      configPath: null,
+      configRevision: "revision-settings",
+      host: "127.0.0.1",
+      port: 19000,
+      requestTimeout: 60,
+      streamFirstByteTimeout: 90,
+      streamIdleTimeout: 180,
+      maxRetries: 2,
+    }));
+    expect(await screen.findByText("运行设置已保存。监听地址变更将在服务重启后生效。")).toBeInTheDocument();
+  });
+
+  it("shows a regenerated local key once after confirmation", async () => {
+    invokeMock.mockImplementation(async (command) => {
+      if (command === "get_amkr_settings") return settingsResponse;
+      if (command === "regenerate_amkr_local_api_key") return {
+        config_revision: "revision-next",
+        local_api_key: "replacement-local-key",
+        local_api_key_fingerprint: "82ed35081b47",
+      };
+      return undefined;
+    });
+    render(<SettingsPage configPath={null} metadata={metadata} onConfigPathChange={() => undefined} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "重置 Key" }));
+
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("regenerate_amkr_local_api_key", {
+      configPath: null,
+      configRevision: "revision-settings",
+    }));
+    expect(await screen.findByDisplayValue("replacement-local-key")).toBeInTheDocument();
+    expect(screen.getByText("本地鉴权 Key 已重置，请立即更新客户端配置。")).toBeInTheDocument();
+  });
+
+  it("checks the AMKR version through the management API", async () => {
+    invokeMock.mockImplementation(async (command) => {
+      if (command === "get_amkr_settings") return settingsResponse;
+      if (command === "check_amkr_update") return {
+        current_version: "3.1.0",
+        latest_version: "3.2.0",
+        release_url: "https://example.test/amkr/3.2.0",
+        source: "PyPI",
+        update_available: true,
+        error: null,
+      };
+      return undefined;
+    });
+    render(<SettingsPage configPath={null} metadata={metadata} onConfigPathChange={() => undefined} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "检查更新" }));
+
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("check_amkr_update", { configPath: null }));
+    expect(await screen.findByText("3.2.0")).toBeInTheDocument();
+    expect(screen.getByText("发现新版本")).toBeInTheDocument();
   });
 
   it("rejects invalid JSON before calling the service", async () => {

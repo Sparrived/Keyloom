@@ -1,5 +1,21 @@
 import { useEffect, useState } from "react";
-import { exportAmkrConfig, getAmkrProviders, getRuntimeInstallationStatus, importAmkrConfig, rollbackPrivateRuntime, type AmkrHealth, type AmkrMetadata, type RuntimeInstallationStatus } from "../../api/amkr";
+import {
+  exportAmkrConfig,
+  checkAmkrUpdate,
+  getAmkrProviders,
+  getAmkrSettings,
+  getRuntimeInstallationStatus,
+  importAmkrConfig,
+  regenerateAmkrLocalApiKey,
+  rollbackPrivateRuntime,
+  updateAmkrSettings,
+  type AmkrHealth,
+  type AmkrMetadata,
+  type AmkrSettings,
+  type AmkrSettingsResponse,
+  type AmkrUpdateCheck,
+  type RuntimeInstallationStatus,
+} from "../../api/amkr";
 
 type SettingsPageProps = {
   configPath: string | null;
@@ -26,6 +42,15 @@ export function SettingsPage({ configPath, metadata, health = null, onConfigPath
   const [runtimeLoading, setRuntimeLoading] = useState(true);
   const [runtimeRollback, setRuntimeRollback] = useState(false);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
+  const [serviceSettings, setServiceSettings] = useState<AmkrSettingsResponse | null>(null);
+  const [settingsDraft, setSettingsDraft] = useState<AmkrSettings | null>(null);
+  const [settingsAction, setSettingsAction] = useState<"save" | "key" | null>(null);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [settingsNotice, setSettingsNotice] = useState<string | null>(null);
+  const [generatedLocalKey, setGeneratedLocalKey] = useState<string | null>(null);
+  const [updateCheck, setUpdateCheck] = useState<AmkrUpdateCheck | null>(null);
+  const [updateChecking, setUpdateChecking] = useState(false);
+  const [updateError, setUpdateError] = useState<string | null>(null);
   useEffect(() => setDraftConfigPath(configPath ?? metadata?.config_path ?? ""), [configPath, metadata?.config_path]);
   const refreshRuntimeStatus = async () => {
     setRuntimeLoading(true); setRuntimeError(null);
@@ -34,6 +59,27 @@ export function SettingsPage({ configPath, metadata, health = null, onConfigPath
     finally { setRuntimeLoading(false); }
   };
   useEffect(() => { void refreshRuntimeStatus(); }, []);
+  useEffect(() => {
+    let cancelled = false;
+    setServiceSettings(null);
+    setSettingsDraft(null);
+    setGeneratedLocalKey(null);
+    setSettingsError(null);
+    if (!metadata) return () => { cancelled = true; };
+    void (async () => {
+      try {
+        const result = await getAmkrSettings(configPath);
+        if (!result?.settings) throw new Error("AMKR 未返回运行设置。");
+        if (!cancelled) {
+          setServiceSettings(result);
+          setSettingsDraft(result.settings);
+        }
+      } catch (reason) {
+        if (!cancelled) setSettingsError(reason instanceof Error ? reason.message : String(reason));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [configPath, metadata?.config_path]);
   const rollbackRuntime = async () => {
     if (!window.confirm("回退到上一个 Keyloom 私有运行时版本？")) return;
     setRuntimeRollback(true); setRuntimeError(null);
@@ -63,12 +109,70 @@ export function SettingsPage({ configPath, metadata, health = null, onConfigPath
       setTransferAction(null);
     }
   };
+  const saveSettings = async () => {
+    if (!serviceSettings || !settingsDraft) return;
+    const host = settingsDraft.host.trim();
+    const loopbackHosts = new Set(["127.0.0.1", "localhost", "::1"]);
+    if (!loopbackHosts.has(host.toLowerCase()) && !window.confirm("监听地址不是本机回环地址。远程客户端将可能访问 AMKR 管理 API，确定继续吗？")) return;
+    if (host !== settingsDraft.host) setSettingsDraft({ ...settingsDraft, host });
+    setSettingsAction("save"); setSettingsError(null); setSettingsNotice(null);
+    try {
+      const result = await updateAmkrSettings(serviceSettings.config_revision, { ...settingsDraft, host }, configPath);
+      setServiceSettings(result);
+      setSettingsDraft(result.settings);
+      setSettingsNotice("运行设置已保存。监听地址变更将在服务重启后生效。");
+    } catch (reason) {
+      setSettingsError(reason instanceof Error ? reason.message : String(reason));
+    } finally { setSettingsAction(null); }
+  };
+  const regenerateLocalKey = async () => {
+    if (!serviceSettings || !window.confirm("重置本地鉴权 Key？现有客户端需要改用新 Key。")) return;
+    setSettingsAction("key"); setSettingsError(null); setSettingsNotice(null); setGeneratedLocalKey(null);
+    try {
+      const result = await regenerateAmkrLocalApiKey(serviceSettings.config_revision, configPath);
+      setGeneratedLocalKey(result.local_api_key);
+      setServiceSettings((current) => current ? {
+        ...current,
+        config_revision: result.config_revision,
+        settings: { ...current.settings, local_auth_enabled: true, local_api_key_fingerprint: result.local_api_key_fingerprint },
+      } : current);
+      setSettingsDraft((current) => current ? { ...current, local_auth_enabled: true, local_api_key_fingerprint: result.local_api_key_fingerprint } : current);
+      setSettingsNotice("本地鉴权 Key 已重置，请立即更新客户端配置。");
+    } catch (reason) {
+      setSettingsError(reason instanceof Error ? reason.message : String(reason));
+    } finally { setSettingsAction(null); }
+  };
+  const checkUpdate = async () => {
+    setUpdateChecking(true); setUpdateError(null);
+    try { setUpdateCheck(await checkAmkrUpdate(configPath)); }
+    catch (reason) { setUpdateError(reason instanceof Error ? reason.message : String(reason)); }
+    finally { setUpdateChecking(false); }
+  };
   return <section className="settings-page" aria-labelledby="settings-heading">
     <header className="page-header"><div><h2 id="settings-heading">设置</h2><p>当前 AMKR 实例的只读连接摘要。</p></div></header>
     <form className="config-path-form" onSubmit={(event) => { event.preventDefault(); onConfigPathChange(draftConfigPath.trim() || null); }}>
       <label>配置路径<input disabled={transferAction !== null} value={draftConfigPath} onChange={(event) => setDraftConfigPath(event.target.value)} placeholder="留空使用默认 AMKR 配置" /></label>
       <button type="submit" disabled={transferAction !== null}>使用配置</button>
     </form>
+    {metadata ? <section className="runtime-panel" aria-labelledby="service-settings-heading">
+      <div className="card-heading"><h3 id="service-settings-heading">AMKR 运行设置</h3><span className="config-revision">{serviceSettings ? serviceSettings.config_revision.slice(0, 8) : "正在读取"}</span></div>
+      {settingsDraft ? <form className="inline-form" onSubmit={(event) => { event.preventDefault(); void saveSettings(); }}>
+        <label>监听地址<input required value={settingsDraft.host} onChange={(event) => setSettingsDraft({ ...settingsDraft, host: event.target.value })} /></label>
+        <label>端口<input required type="number" min="1" max="65535" value={settingsDraft.port} onChange={(event) => setSettingsDraft({ ...settingsDraft, port: Number(event.target.value) })} /></label>
+        <label>请求超时<input required type="number" min="0.1" step="0.1" value={settingsDraft.request_timeout} onChange={(event) => setSettingsDraft({ ...settingsDraft, request_timeout: Number(event.target.value) })} /></label>
+        <label>首字节超时<input required type="number" min="0.1" step="0.1" value={settingsDraft.stream_first_byte_timeout} onChange={(event) => setSettingsDraft({ ...settingsDraft, stream_first_byte_timeout: Number(event.target.value) })} /></label>
+        <label>流式空闲超时<input required type="number" min="0.1" step="0.1" value={settingsDraft.stream_idle_timeout} onChange={(event) => setSettingsDraft({ ...settingsDraft, stream_idle_timeout: Number(event.target.value) })} /></label>
+        <label>最大重试<input required type="number" min="0" step="1" value={settingsDraft.max_retries} onChange={(event) => setSettingsDraft({ ...settingsDraft, max_retries: Number(event.target.value) })} /></label>
+        <button type="submit" disabled={settingsAction !== null}>{settingsAction === "save" ? "正在保存" : "保存设置"}</button>
+      </form> : <p className="empty-state">运行设置暂不可用。</p>}
+      <div className="local-key-row">
+        <div><span>本地鉴权</span><strong>{serviceSettings?.settings.local_api_key_fingerprint ? `指纹 ${serviceSettings.settings.local_api_key_fingerprint}` : "未启用"}</strong></div>
+        <button type="button" disabled={!serviceSettings || settingsAction !== null} onClick={() => void regenerateLocalKey()}>{settingsAction === "key" ? "正在重置" : "重置 Key"}</button>
+      </div>
+      {generatedLocalKey ? <div className="generated-key" role="status"><label>新 Key<input readOnly value={generatedLocalKey} /></label><button type="button" onClick={() => void navigator.clipboard.writeText(generatedLocalKey)}>复制</button></div> : null}
+      {settingsNotice ? <p className="status-good" role="status">{settingsNotice}</p> : null}
+      {settingsError ? <p className="service-action-error" role="alert">{settingsError}</p> : null}
+    </section> : null}
     <section className="runtime-panel" aria-labelledby="runtime-heading">
       <div className="card-heading"><h3 id="runtime-heading">Keyloom 私有运行时</h3><div className="item-actions"><button type="button" disabled={runtimeLoading || runtimeRollback} onClick={() => void refreshRuntimeStatus()}>{runtimeLoading ? "正在检测" : "重新检测"}</button><button type="button" title={health?.status === "ok" ? "请先停止 AMKR 服务" : undefined} disabled={runtimeLoading || runtimeRollback || !runtimeStatus?.rollback_available || health?.status === "ok"} onClick={() => void rollbackRuntime()}>{runtimeRollback ? "正在回退" : "回退运行时"}</button></div></div>
       <dl className="settings-list">
@@ -78,9 +182,21 @@ export function SettingsPage({ configPath, metadata, health = null, onConfigPath
         <div><dt>AMKR wheel 校验</dt><dd>{runtimeStatus?.amkr_wheel_sha256 ? `${runtimeStatus.amkr_wheel_sha256.slice(0, 12)}…` : "暂不可用"}</dd></div>
       </dl>
     </section>
+    {metadata ? <section className="runtime-panel" aria-labelledby="update-heading">
+      <div className="card-heading"><h3 id="update-heading">版本更新</h3><button type="button" disabled={updateChecking} onClick={() => void checkUpdate()}>{updateChecking ? "正在检查" : "检查更新"}</button></div>
+      {updateCheck ? <dl className="settings-list">
+        <div><dt>当前版本</dt><dd>{updateCheck.current_version}</dd></div>
+        <div><dt>最新版本</dt><dd className={updateCheck.update_available ? "status-warn" : "status-good"}>{updateCheck.latest_version ?? "暂不可用"}</dd></div>
+        <div><dt>状态</dt><dd>{updateCheck.error ? `检查失败: ${updateCheck.error}` : updateCheck.update_available ? "发现新版本" : "当前已是最新版本"}</dd></div>
+        {updateCheck.source ? <div><dt>来源</dt><dd>{updateCheck.source}</dd></div> : null}
+        {updateCheck.release_url ? <div><dt>发布页面</dt><dd>{updateCheck.release_url}</dd></div> : null}
+      </dl> : <p className="empty-state">尚未检查 AMKR 更新。</p>}
+      {updateError ? <p className="service-action-error" role="alert">版本检查失败: {updateError}</p> : null}
+    </section> : null}
     {!metadata ? <p className="empty-state">正在查找本机 AMKR 配置。</p> : <>
       <dl className="settings-list">
         <div><dt>服务地址</dt><dd>{metadata.base_url}</dd></div>
+        <div><dt>AMKR 版本</dt><dd>{health?.version ?? runtimeStatus?.amkr_version ?? "暂不可用"}</dd></div>
         <div><dt>监听地址</dt><dd>{metadata.host && metadata.port ? `${metadata.host}:${metadata.port}` : "未读取"}</dd></div>
         <div><dt>配置文件</dt><dd>{metadata.config_path}</dd></div>
         <div><dt>本地鉴权</dt><dd>{metadata.auth_enabled ? "已启用" : "未启用"}</dd></div>

@@ -1,7 +1,9 @@
 :root {
+  color-scheme: light dark;
   color: #1d1d1f;
   background: #f5f5f7;
-  font-family: "Segoe UI", sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  font-size: 15px;
 }
 
 * {
@@ -27,8 +29,9 @@ button {
   flex-direction: column;
   gap: 1.5rem;
   padding: 1.5rem 1rem;
-  background: #ebebf0;
+  background: rgb(235 235 240 / 92%);
   border-right: 1px solid #d5d5da;
+  backdrop-filter: saturate(150%) blur(18px);
 }
 
 .brand-block {
@@ -329,6 +332,21 @@ button {
   white-space: pre-wrap;
 }
 
+.system-service-panel {
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid #d5d5da;
+}
+
+.system-service-panel h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.system-service-panel > .service-controls {
+  margin-top: 0.75rem;
+}
+
 .placeholder-page {
   max-width: 44rem;
 }
@@ -339,6 +357,17 @@ button {
 
 .activity-list, .integration-list, .settings-list { display: grid; gap: 0.75rem; margin: 1rem 0 0; padding: 0; }
 .activity-list { list-style: none; }
+.live-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; margin: 1rem 0 0; overflow: hidden; background: #d5d5da; border: 1px solid #d5d5da; border-radius: 6px; }
+.live-metrics div { min-width: 0; padding: 0.75rem; background: #fff; }
+.live-metrics dt { color: #6e6e73; font-size: 0.75rem; }
+.live-metrics dd { margin: 0.25rem 0 0; font-size: 1.05rem; font-weight: 650; overflow-wrap: anywhere; }
+.activity-breakdown { margin-top: 1.25rem; padding-top: 1rem; overflow-x: auto; border-top: 1px solid #e5e5e7; }
+.activity-breakdown h3 { margin: 0; font-size: 1rem; }
+.activity-breakdown table { width: 100%; margin-top: 0.75rem; border-collapse: collapse; font-size: 0.8125rem; }
+.activity-breakdown th, .activity-breakdown td { padding: 0.55rem 0.65rem; border-bottom: 1px solid #e5e5e7; text-align: right; white-space: nowrap; }
+.activity-breakdown th:first-child { text-align: left; }
+.activity-breakdown thead th { color: #6e6e73; font-weight: 500; }
+.activity-breakdown tbody th { font-family: Consolas, monospace; font-weight: 500; }
 .activity-list li, .integration-item, .settings-list div { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 0.85rem 1rem; border: 1px solid #d5d5da; border-radius: 6px; }
 .activity-list time, .settings-list dt, .integration-item p, .integration-note { color: #6e6e73; }
 .activity-list div, .integration-item > div { display: grid; gap: 0.25rem; }
@@ -367,6 +396,11 @@ button {
 .runtime-panel .settings-list { margin-top: 0.75rem; }
 .runtime-panel button { padding: 0.45rem 0.7rem; color: #1d1d1f; background: #fff; border: 1px solid #b9b9c0; border-radius: 5px; cursor: pointer; }
 .runtime-panel button:disabled { cursor: wait; opacity: 0.55; }
+.local-key-row, .generated-key { display: flex; align-items: end; justify-content: space-between; gap: 0.75rem; margin-top: 0.9rem; padding-top: 0.9rem; border-top: 1px solid #e5e5e8; }
+.local-key-row div, .generated-key label { display: grid; gap: 0.2rem; }
+.local-key-row span, .generated-key label { color: #6e6e73; font-size: 0.8125rem; }
+.generated-key { justify-content: flex-start; }
+.generated-key input { min-width: min(32rem, 65vw); padding: 0.45rem 0.55rem; color: #1d1d1f; background: #f5f5f7; border: 1px solid #b9b9c0; border-radius: 5px; font: 0.8125rem/1.4 Consolas, monospace; }
 .transfer-panel textarea { width: 100%; min-height: 12rem; margin-top: 0.75rem; padding: 0.75rem; resize: vertical; color: #1d1d1f; background: #f5f5f7; border: 1px solid #b9b9c0; border-radius: 5px; font: 0.75rem/1.5 Consolas, monospace; }
 .transfer-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-top: 0.75rem; }
 .transfer-actions button { padding: 0.45rem 0.7rem; color: #fff; background: #007aff; border: 1px solid #0067d6; border-radius: 5px; cursor: pointer; }
@@ -753,6 +787,134 @@ textarea:focus-visible {
   .overview-cards { grid-template-columns: 1fr; }
   .overview-cards, .overview-card { width: 100%; }
   .metric-grid { display: grid; grid-template-columns: repeat(2, 1fr); }
+  .live-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .provider-details { grid-template-columns: 1fr; }
   .route-target-row { grid-template-columns: 1fr; }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root { color: #f5f5f7; background: #1c1c1e; }
+  .content { background: #1c1c1e; }
+  .sidebar { background: rgb(44 44 46 / 92%); border-color: #48484a; }
+  .sidebar button:hover,
+  .sidebar button:focus-visible,
+  .sidebar button[aria-current="page"] { background: #3a3a3c; }
+  .brand-block span,
+  .sidebar-section-label,
+  .service-state,
+  .overview-header p,
+  .overview-card p,
+  .card-heading span,
+  .trend-empty,
+  .empty-state,
+  .usage-chart figcaption,
+  .metric-grid dt,
+  .recent-activity-grid,
+  .connection-summary dt,
+  .activity-list time,
+  .settings-list dt,
+  .integration-item p,
+  .integration-note,
+  .activity-list span,
+  .integration-controls label,
+  .integration-preview,
+  .page-header p,
+  .provider-item p,
+  .provider-item header > span,
+  .config-revision,
+  .unified-model-panel .card-heading p,
+  .unified-model-form > label,
+  .unified-model-mode,
+  .unified-model-plan,
+  .unified-model-summary,
+  .route-item p,
+  .route-item header > span,
+  .route-item li,
+  .provider-item code,
+  .probe-controls label,
+  .probe-results li span,
+  .provider-create label,
+  .inline-form label,
+  .route-create label,
+  .config-path-form label,
+  .route-targets legend,
+  .local-key-row span,
+  .generated-key label,
+  .live-metrics dt,
+  .activity-breakdown thead th { color: #aeaeb2; }
+  .recent-activity-grid b,
+  .integration-preview code,
+  .unified-model-mode label { color: #f5f5f7; }
+  .overview-card,
+  .connection-summary div,
+  .activity-list li,
+  .integration-item,
+  .settings-list div,
+  .log-panel,
+  .transfer-panel,
+  .runtime-panel,
+  .unified-model-panel,
+  .unified-model-plan,
+  .route-item,
+  .provider-item,
+  .probe-results li,
+  .route-targets { border-color: #48484a; }
+  .activity-panel,
+  .activity-breakdown,
+  .probe-panel,
+  .editor-form,
+  .local-key-row,
+  .generated-key,
+  .system-service-panel { border-color: #3a3a3c; }
+  .usage-chart-grid { stroke: #48484a; }
+  .usage-chart-detail,
+  .service-command-output,
+  .log-panel pre,
+  .transfer-panel textarea,
+  .integration-preview code,
+  .unified-model-summary,
+  .generated-key input { color: #f5f5f7; background: #2c2c2e; }
+  .live-metrics { background: #48484a; border-color: #48484a; }
+  .live-metrics div { background: #2c2c2e; }
+  .activity-breakdown th,
+  .activity-breakdown td { border-color: #3a3a3c; }
+  .series-switcher button { color: #aeaeb2; background: #3a3a3c; }
+  .integration-controls select,
+  .unified-model-form select,
+  .unified-model-plan select,
+  .probe-controls select,
+  .probe-controls input,
+  .provider-create input,
+  .inline-form input,
+  .route-create input,
+  .route-create select,
+  .config-path-form input,
+  .runtime-panel button,
+  .secondary-button,
+  .integration-controls button.secondary-button,
+  .route-targets > .secondary-button,
+  .route-target-row > .secondary-button { color: #f5f5f7; background: #2c2c2e; border-color: #636366; }
+  .danger-button { color: #ff6961; background: transparent; border-color: #7a3330; }
+  .status-good { color: #30d158; }
+  .status-warn { color: #ffd60a; }
+  .status-bad,
+  .service-action-error { color: #ff6961; }
+  .status-muted { color: #aeaeb2; }
+}
+
+@media (forced-colors: active) {
+  .sidebar,
+  .content,
+  .overview-card,
+  .runtime-panel,
+  .provider-item,
+  .route-item,
+  .integration-item { forced-color-adjust: auto; }
+  button,
+  input,
+  select,
+  textarea { border: 1px solid ButtonText; }
+  .sidebar button[aria-current="page"],
+  .series-switcher button[aria-pressed="true"] { outline: 2px solid Highlight; }
+  .status-dot { color: currentColor; }
 }

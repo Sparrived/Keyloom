@@ -227,6 +227,11 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
       install_user_amkr: "登录启动任务已注册。",
       status_amkr: "任务状态已查询。",
       uninstall_amkr: "登录启动任务已取消。",
+      install_system_amkr: "系统级服务已注册。",
+      uninstall_system_amkr: "系统级服务已取消。",
+      start_system_amkr: "系统级服务已启动。",
+      stop_system_amkr: "系统级服务已停止。",
+      restart_system_amkr: "系统级服务已重启。",
     }[action];
   }
 
@@ -237,10 +242,10 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
     setServiceCommandOutput("");
     try {
       const results = await controlAmkr(action, selectedConfigPath);
-      if (action === "start_amkr" || action === "restart_amkr") {
+      if (["start_amkr", "restart_amkr", "install_system_amkr", "start_system_amkr", "restart_system_amkr"].includes(action)) {
         setHealth(await waitForServiceHealth());
         setHealthError(null);
-      } else if (action === "stop_amkr" || action === "uninstall_amkr") {
+      } else if (["stop_amkr", "uninstall_amkr", "stop_system_amkr", "uninstall_system_amkr"].includes(action)) {
         setHealth(null);
         setHealthError(null);
       }
@@ -255,6 +260,8 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
 
   function requestServiceAction(action: AmkrServiceAction) {
     if (action === "uninstall_amkr" && !window.confirm("取消登录启动任务？正在运行的服务也会停止。")) return;
+    if (action === "install_system_amkr" && !window.confirm("注册系统级开机服务？Windows 将请求管理员授权。")) return;
+    if (action === "uninstall_system_amkr" && !window.confirm("取消系统级服务？Windows 将请求管理员授权。")) return;
     void runServiceAction(action);
   }
 
@@ -437,11 +444,21 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
               </>
             ) : <p className="empty-state">正在查找本机 AMKR 配置。</p>}
             {configMismatch ? <p className="status-warn" role="alert">当前服务使用的配置与 Keyloom 选择的配置不一致。请重启服务以应用当前配置。</p> : null}
+            <section className="system-service-panel" aria-labelledby="system-service-heading">
+              <div className="card-heading"><h3 id="system-service-heading">系统级服务</h3><span>Windows UAC</span></div>
+              <div className="service-controls" aria-label="系统级服务控制">
+                <button type="button" disabled={serviceAction !== null || !metadata} onClick={() => requestServiceAction("install_system_amkr")}>{serviceAction === "install_system_amkr" ? "正在注册" : "注册开机服务"}</button>
+                <button type="button" disabled={serviceAction !== null} onClick={() => requestServiceAction("start_system_amkr")}>{serviceAction === "start_system_amkr" ? "正在启动" : "启动"}</button>
+                <button type="button" disabled={serviceAction !== null} onClick={() => requestServiceAction("stop_system_amkr")}>{serviceAction === "stop_system_amkr" ? "正在停止" : "停止"}</button>
+                <button type="button" disabled={serviceAction !== null} onClick={() => requestServiceAction("restart_system_amkr")}>{serviceAction === "restart_system_amkr" ? "正在重启" : "重启"}</button>
+                <button className="danger-button" type="button" disabled={serviceAction !== null} onClick={() => requestServiceAction("uninstall_system_amkr")}>{serviceAction === "uninstall_system_amkr" ? "正在取消" : "取消系统服务"}</button>
+              </div>
+            </section>
             {serviceActionNotice ? <p className="status-good">{serviceActionNotice}</p> : null}
             {serviceCommandOutput ? <pre className="service-command-output">{serviceCommandOutput}</pre> : null}
             {serviceActionError ? <p className="service-action-error">服务操作失败: {serviceActionError}</p> : null}
           </section>
-        ) : activePage === "供应商" ? <ProvidersPage configPath={selectedConfigPath} /> : activePage === "模型路由" ? <RoutingPage configPath={selectedConfigPath} onUnifiedModelChange={applyUnifiedModel} /> : activePage === "活动" ? <ActivityPage configPath={selectedConfigPath} history={metricHistory} />
+        ) : activePage === "供应商" ? <ProvidersPage configPath={selectedConfigPath} /> : activePage === "模型路由" ? <RoutingPage configPath={selectedConfigPath} onUnifiedModelChange={applyUnifiedModel} /> : activePage === "活动" ? <ActivityPage configPath={selectedConfigPath} history={metricHistory} metrics={metrics} />
           : activePage === "集成" ? <IntegrationsPage configPath={selectedConfigPath} baseUrl={metadata?.base_url ?? null} authEnabled={metadata?.auth_enabled ?? false} />
           : <SettingsPage configPath={selectedConfigPath} metadata={metadata} health={health} onConfigPathChange={applyConfigPath} />}
       </main>

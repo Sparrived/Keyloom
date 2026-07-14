@@ -20,6 +20,12 @@ import { ProbePanel } from "./ProbePanel";
 const csv = (value: string) => value.split(",").map((item) => item.trim()).filter(Boolean);
 const errorMessage = (reason: unknown) => reason instanceof Error ? reason.message : String(reason);
 const isConflict = (message: string) => message.includes("HTTP 409");
+const providerRouteModes = [
+  ["openai", "OpenAI 路径"],
+  ["anthropic", "Anthropic 路径"],
+  ["responses", "Responses 路径"],
+  ["images", "Images 路径"],
+] as const;
 
 type ProviderCardProps = {
   configPath: string | null;
@@ -32,6 +38,7 @@ function ProviderCard({ configPath, provider, revision, refresh }: ProviderCardP
   const [editingProvider, setEditingProvider] = useState(false);
   const [providerId, setProviderId] = useState(provider.id);
   const [providerUrl, setProviderUrl] = useState(provider.base_url);
+  const [providerRoutes, setProviderRoutes] = useState<Record<string, string>>(provider.routes ?? {});
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [keyEditName, setKeyEditName] = useState("");
   const [keyEditSecret, setKeyEditSecret] = useState("");
@@ -103,14 +110,15 @@ function ProviderCard({ configPath, provider, revision, refresh }: ProviderCardP
     <header>
       <div><h3>{provider.id}</h3><p>{provider.base_url}</p></div>
       <div className="item-actions">
-        <button aria-label={`编辑供应商 ${provider.id}`} className="secondary-button" type="button" onClick={() => { setProviderId(provider.id); setProviderUrl(provider.base_url); setEditingProvider(true); }}>编辑</button>
+        <button aria-label={`编辑供应商 ${provider.id}`} className="secondary-button" type="button" onClick={() => { setProviderId(provider.id); setProviderUrl(provider.base_url); setProviderRoutes(provider.routes ?? {}); setEditingProvider(true); }}>编辑</button>
         <button aria-label={`删除供应商 ${provider.id}`} className="danger-button" type="button" onClick={() => { if (window.confirm(`删除供应商 ${provider.id} 及其 Key 和模型池？`)) void mutate(() => deleteAmkrProvider(revision, provider.id, configPath)); }}>删除</button>
       </div>
     </header>
 
-    {editingProvider ? <form className="inline-form editor-form" onSubmit={(event) => { event.preventDefault(); void (async () => { if (await mutate(() => updateAmkrProvider(revision, provider.id, providerId, providerUrl, configPath))) setEditingProvider(false); })(); }}>
+    {editingProvider ? <form className="inline-form editor-form" onSubmit={(event) => { event.preventDefault(); void (async () => { if (await mutate(() => updateAmkrProvider(revision, provider.id, providerId, providerUrl, Object.fromEntries(Object.entries(providerRoutes).filter(([, value]) => value.trim()).map(([mode, value]) => [mode, value.trim()])), configPath))) setEditingProvider(false); })(); }}>
       <label>供应商名称<input required value={providerId} onChange={(event) => setProviderId(event.target.value)} /></label>
       <label>供应商地址<input required type="url" value={providerUrl} onChange={(event) => setProviderUrl(event.target.value)} /></label>
+      {providerRouteModes.map(([mode, label]) => <label key={mode}>{label}<input value={providerRoutes[mode] ?? ""} onChange={(event) => setProviderRoutes({ ...providerRoutes, [mode]: event.target.value })} placeholder="留空使用默认路径" /></label>)}
       <button type="submit">保存供应商</button>
       <button className="secondary-button" type="button" onClick={() => setEditingProvider(false)}>取消</button>
     </form> : null}
