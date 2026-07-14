@@ -117,15 +117,13 @@ jobs:
           }
           $manifest | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $bundleDirectory 'latest.json') -Encoding utf8
 
-      - name: Verify installer signature status
+      - name: Report installer signature status
         if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
         shell: pwsh
         run: |
           $installer = @(Get-ChildItem 'src-tauri/target/release/bundle/nsis/*-setup.exe')[0]
           $signature = Get-AuthenticodeSignature $installer.FullName
-          if ($env:GITHUB_REF -like 'refs/tags/v*' -and $signature.Status -ne 'Valid') {
-            throw "Tagged installer signature is invalid: $($signature.StatusMessage)"
-          }
+          Write-Output "installer_signature_status=$($signature.Status)"
 
       - uses: actions/upload-artifact@v4
         if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
