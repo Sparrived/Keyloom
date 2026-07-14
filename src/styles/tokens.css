@@ -195,6 +195,8 @@ button {
 }
 
 .brand-title {
+  position: relative;
+  width: fit-content;
   background: linear-gradient(90deg, #007aff 0%, #34c759 20%, #ffcc00 40%, #ff375f 60%, #af52de 80%, #007aff 100%);
   background-size: 200% 100%;
   background-position: 0% 50%;
@@ -204,6 +206,30 @@ button {
   -webkit-text-fill-color: transparent;
   filter: hue-rotate(0deg);
   animation: brand-gradient-shift 3s linear infinite;
+}
+
+.brand-title::before,
+.brand-title::after {
+  position: absolute;
+  content: "\2726";
+  line-height: 1;
+  pointer-events: none;
+  -webkit-text-fill-color: currentColor;
+}
+
+.brand-title::before {
+  top: 0.05rem;
+  right: -0.75rem;
+  color: #ffcc00;
+  font-size: 0.7rem;
+  text-shadow: 0 0 5px rgb(255 204 0 / 40%);
+}
+
+.brand-title::after {
+  top: 0.7rem;
+  right: -1.1rem;
+  color: #ff375f;
+  font-size: 0.45rem;
 }
 
 @keyframes brand-gradient-shift {
