@@ -8,6 +8,7 @@ import {
   importAmkrConfig,
   regenerateAmkrLocalApiKey,
   rollbackPrivateRuntime,
+  updatePrivateRuntime,
   updateAmkrSettings,
   type AmkrHealth,
   type AmkrMetadata,
@@ -50,6 +51,7 @@ export function SettingsPage({ configPath, metadata, health = null, onConfigPath
   const [generatedLocalKey, setGeneratedLocalKey] = useState<string | null>(null);
   const [updateCheck, setUpdateCheck] = useState<AmkrUpdateCheck | null>(null);
   const [updateChecking, setUpdateChecking] = useState(false);
+  const [updateInstalling, setUpdateInstalling] = useState(false);
   const [updateError, setUpdateError] = useState<string | null>(null);
   useEffect(() => setDraftConfigPath(configPath ?? metadata?.config_path ?? ""), [configPath, metadata?.config_path]);
   const refreshRuntimeStatus = async () => {
@@ -148,6 +150,15 @@ export function SettingsPage({ configPath, metadata, health = null, onConfigPath
     catch (reason) { setUpdateError(reason instanceof Error ? reason.message : String(reason)); }
     finally { setUpdateChecking(false); }
   };
+  const installUpdate = async () => {
+    if (!updateCheck?.artifact_url || !updateCheck.artifact_sha256 || !window.confirm(`更新 AMKR 到 ${updateCheck.latest_version}？更新完成前请勿退出 Keyloom。`)) return;
+    setUpdateInstalling(true); setUpdateError(null);
+    try {
+      setRuntimeStatus(await updatePrivateRuntime(configPath, updateCheck.artifact_url, updateCheck.artifact_sha256));
+      setUpdateCheck(null);
+    } catch (reason) { setUpdateError(reason instanceof Error ? reason.message : String(reason)); }
+    finally { setUpdateInstalling(false); }
+  };
   return <section className="settings-page" aria-labelledby="settings-heading">
     <header className="page-header"><div><h2 id="settings-heading">设置</h2><p>当前 AMKR 实例的只读连接摘要。</p></div></header>
     <form className="config-path-form" onSubmit={(event) => { event.preventDefault(); onConfigPathChange(draftConfigPath.trim() || null); }}>
@@ -183,7 +194,7 @@ export function SettingsPage({ configPath, metadata, health = null, onConfigPath
       </dl>
     </section>
     {metadata ? <section className="runtime-panel" aria-labelledby="update-heading">
-      <div className="card-heading"><h3 id="update-heading">版本更新</h3><button type="button" disabled={updateChecking} onClick={() => void checkUpdate()}>{updateChecking ? "正在检查" : "检查更新"}</button></div>
+      <div className="card-heading"><h3 id="update-heading">版本更新</h3><button type="button" disabled={updateChecking || updateInstalling} onClick={() => void checkUpdate()}>{updateChecking ? "正在检查" : "检查更新"}</button></div>
       {updateCheck ? <dl className="settings-list">
         <div><dt>当前版本</dt><dd>{updateCheck.current_version}</dd></div>
         <div><dt>最新版本</dt><dd className={updateCheck.update_available ? "status-warn" : "status-good"}>{updateCheck.latest_version ?? "暂不可用"}</dd></div>
@@ -191,6 +202,7 @@ export function SettingsPage({ configPath, metadata, health = null, onConfigPath
         {updateCheck.source ? <div><dt>来源</dt><dd>{updateCheck.source}</dd></div> : null}
         {updateCheck.release_url ? <div><dt>发布页面</dt><dd>{updateCheck.release_url}</dd></div> : null}
       </dl> : <p className="empty-state">尚未检查 AMKR 更新。</p>}
+      {updateCheck?.update_available ? <button type="button" disabled={updateInstalling || health?.status === "ok" || !updateCheck.artifact_url || !updateCheck.artifact_sha256} title={health?.status === "ok" ? "请先停止 AMKR 服务" : undefined} onClick={() => void installUpdate()}>{updateInstalling ? "正在更新" : "安装更新"}</button> : null}
       {updateError ? <p className="service-action-error" role="alert">版本检查失败: {updateError}</p> : null}
     </section> : null}
     {!metadata ? <p className="empty-state">正在查找本机 AMKR 配置。</p> : <>

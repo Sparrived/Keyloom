@@ -18,6 +18,12 @@ if ($releaseWorkflow -notmatch [Regex]::Escape('$($wheel)[visitor]')) {
 if ($installerSmoke -notmatch 'itsdangerous') {
     throw 'installer smoke must verify visitor support.'
 }
+if ($prepareScript -notmatch [Regex]::Escape("'pip==25.0.1'")) {
+    throw 'prepare-amkr-runtime.ps1 must bundle the pinned runtime updater.'
+}
+if ($installerSmoke -notmatch 'import auto_model_key_router, fastapi, httpx, itsdangerous, pip,') {
+    throw 'installer smoke must verify the bundled runtime updater.'
+}
 
 [PSCustomObject]@{
     status = 'PASS'

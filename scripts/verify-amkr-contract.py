@@ -3,6 +3,9 @@ from fastapi import FastAPI
 from auto_model_key_router import agent_config
 from auto_model_key_router.management_api import register_management_api
 from inspect import signature
+from dataclasses import fields
+
+from auto_model_key_router.update import VersionCheckResult
 
 
 REQUIRED_ROUTES = {
@@ -67,6 +70,10 @@ def main() -> None:
     missing_status_fields = sorted(required_status_fields - status_fields)
     if missing_status_fields:
         raise SystemExit(f"AMKR agent integration API is incompatible with Keyloom: status lacks {', '.join(missing_status_fields)}")
+    update_fields = {field.name for field in fields(VersionCheckResult)}
+    missing_update_fields = sorted({"artifact_url", "artifact_sha256"} - update_fields)
+    if missing_update_fields:
+        raise SystemExit(f"AMKR update API is incompatible with Keyloom: metadata lacks {', '.join(missing_update_fields)}")
     print(f"AMKR management API contract PASS ({len(REQUIRED_ROUTES)} routes)")
 
 

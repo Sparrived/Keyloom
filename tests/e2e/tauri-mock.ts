@@ -76,7 +76,7 @@ export async function installTauriMock(page: Page, scenario: "existing" | "fresh
             case "get_amkr_settings":
               return { config_revision: providerRevision, settings: { host: metadata.host, port: metadata.port, request_timeout: metadata.request_timeout, stream_first_byte_timeout: metadata.stream_first_byte_timeout, stream_idle_timeout: metadata.stream_idle_timeout, max_retries: metadata.max_retries, local_auth_enabled: true, local_api_key_fingerprint: healthy.local_api_key_fingerprint } };
             case "check_amkr_update":
-              return { current_version: "3.1.1", latest_version: "3.1.1", release_url: "https://example.test/amkr", source: "PyPI", update_available: false, error: null };
+              return { current_version: "3.1.1", latest_version: "3.1.1", release_url: "https://example.test/amkr", source: "PyPI", artifact_url: null, artifact_sha256: null, update_available: false, error: null };
             case "get_amkr_providers":
               return { config_revision: providerRevision, providers };
             case "update_amkr_provider":

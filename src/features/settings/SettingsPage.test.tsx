@@ -114,6 +114,8 @@ describe("SettingsPage", () => {
         latest_version: "3.2.0",
         release_url: "https://example.test/amkr/3.2.0",
         source: "PyPI",
+        artifact_url: null,
+        artifact_sha256: null,
         update_available: true,
         error: null,
       };
@@ -126,6 +128,34 @@ describe("SettingsPage", () => {
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("check_amkr_update", { configPath: null }));
     expect(await screen.findByText("3.2.0")).toBeInTheDocument();
     expect(screen.getByText("发现新版本")).toBeInTheDocument();
+  });
+
+  it("installs a stopped private runtime only from the checked artifact", async () => {
+    invokeMock.mockImplementation(async (command) => {
+      if (command === "get_amkr_settings") return settingsResponse;
+      if (command === "check_amkr_update") return {
+        current_version: "3.1.0",
+        latest_version: "3.2.0",
+        release_url: "https://pypi.org/project/auto-model-key-router/3.2.0/",
+        source: "PyPI",
+        artifact_url: "https://files.pythonhosted.org/packages/amkr.whl",
+        artifact_sha256: "a".repeat(64),
+        update_available: true,
+        error: null,
+      };
+      if (command === "update_private_runtime") return { private_runtime_installed: true, amkr_version: "3.2.0" };
+      return undefined;
+    });
+    render(<SettingsPage configPath="C:/amkr.json" metadata={metadata} health={{ status: "stopped", local_auth_enabled: true }} onConfigPathChange={() => undefined} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "检查更新" }));
+    fireEvent.click(await screen.findByRole("button", { name: "安装更新" }));
+
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_private_runtime", {
+      configPath: "C:/amkr.json",
+      artifactUrl: "https://files.pythonhosted.org/packages/amkr.whl",
+      artifactSha256: "a".repeat(64),
+    }));
   });
 
   it("rejects invalid JSON before calling the service", async () => {

@@ -95,6 +95,8 @@ export type AmkrUpdateCheck = {
   latest_version: string | null;
   release_url: string | null;
   source: string | null;
+  artifact_url: string | null;
+  artifact_sha256: string | null;
   update_available: boolean;
   error: string | null;
 };
@@ -382,6 +384,10 @@ export function getRuntimeInstallationStatus() {
 
 export function rollbackPrivateRuntime() {
   return invoke<RuntimeInstallationStatus>("rollback_private_runtime");
+}
+
+export function updatePrivateRuntime(configPath: string | null, artifactUrl: string, artifactSha256: string) {
+  return invoke<RuntimeInstallationStatus>("update_private_runtime", { configPath, artifactUrl, artifactSha256 });
 }
 
 export function controlAmkr(

@@ -410,6 +410,18 @@ fn rollback_private_runtime() -> Result<keyloom_core::installer::RuntimeInstalla
 }
 
 #[tauri::command]
+fn update_private_runtime(
+    config_path: Option<String>,
+    artifact_url: String,
+    artifact_sha256: String,
+) -> Result<keyloom_core::installer::RuntimeInstallationStatus, String> {
+    if keyloom_core::get_amkr_health(config_path.as_deref().map(Path::new)).is_ok() {
+        return Err("请先停止 AMKR 服务，再更新私有运行时".to_owned());
+    }
+    keyloom_core::installer::update_private_runtime(&artifact_url, &artifact_sha256)
+}
+
+#[tauri::command]
 fn probe_amkr_keys(
     config_path: Option<String>,
     provider_id: String,
@@ -680,6 +692,7 @@ fn main() {
             rollback_agent_integration,
             get_runtime_installation_status,
             rollback_private_runtime,
+            update_private_runtime,
             probe_amkr_keys,
             probe_amkr_pools,
             get_amkr_probe,

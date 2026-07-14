@@ -20,6 +20,63 @@ if path.exists():
     raise FileExistsError("staging config already exists")
 RouterConfig.load(path)
 "#;
+const UPDATE_RUNTIME_SCRIPT: &str = r#"
+import hashlib
+import json
+import platform
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+runtime = Path(sys.argv[1])
+staging = Path(sys.argv[2])
+state_staging = Path(sys.argv[3])
+artifact_url = sys.argv[4]
+expected_sha256 = sys.argv[5]
+download_dir = staging.parent / (staging.name + ".download")
+
+for path in (staging, download_dir):
+    if path.exists():
+        shutil.rmtree(path)
+if state_staging.exists():
+    state_staging.unlink()
+download_dir.mkdir(parents=True)
+
+subprocess.run([
+    str(runtime / "python.exe"), "-I", "-m", "pip", "download",
+    "--disable-pip-version-check", "--no-deps", "--only-binary=:all:",
+    "--dest", str(download_dir), artifact_url,
+], check=True)
+wheels = list(download_dir.glob("*.whl"))
+if len(wheels) != 1:
+    raise RuntimeError(f"expected one AMKR wheel, found {len(wheels)}")
+wheel = wheels[0]
+actual_sha256 = hashlib.sha256(wheel.read_bytes()).hexdigest()
+if actual_sha256 != expected_sha256:
+    raise RuntimeError("AMKR wheel SHA-256 mismatch")
+
+shutil.copytree(runtime, staging)
+staging_python = staging / "python.exe"
+subprocess.run([
+    str(staging_python), "-I", "-m", "pip", "install",
+    "--disable-pip-version-check", "--no-input", "--no-compile", "--upgrade",
+    "--target", str(staging / "Lib" / "site-packages"), f"{wheel}[visitor]",
+], check=True)
+probe = subprocess.run([
+    str(staging_python), "-I", "-c",
+    "import auto_model_key_router, fastapi, httpx, itsdangerous, pip, uvicorn, json, platform; print(json.dumps(dict(python_version=platform.python_version(), amkr_version=auto_model_key_router.__version__)))",
+], check=True, capture_output=True, text=True)
+versions = json.loads(probe.stdout.strip())
+state_staging.write_text(json.dumps({
+    "schema_version": 1,
+    "owner": "com.keyloom.app",
+    "python_version": versions["python_version"],
+    "amkr_version": versions["amkr_version"],
+    "amkr_wheel_sha256": actual_sha256,
+}, ensure_ascii=True, indent=2) + "\n", encoding="utf-8")
+shutil.rmtree(download_dir)
+"#;
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -105,6 +162,147 @@ pub fn rollback_private_runtime() -> Result<RuntimeInstallationStatus, String> {
     let paths =
         default_install_paths().ok_or_else(|| "无法确定本机 LOCALAPPDATA 目录".to_owned())?;
     rollback_private_runtime_from_paths(&paths.runtime_dir, &paths.state_path)
+}
+
+pub fn update_private_runtime(
+    artifact_url: &str,
+    artifact_sha256: &str,
+) -> Result<RuntimeInstallationStatus, String> {
+    validate_update_artifact(artifact_url, artifact_sha256)?;
+    let paths =
+        default_install_paths().ok_or_else(|| "无法确定本机 LOCALAPPDATA 目录".to_owned())?;
+    update_private_runtime_from_paths(
+        &paths.runtime_dir,
+        &paths.state_path,
+        artifact_url,
+        artifact_sha256,
+    )
+}
+
+fn validate_update_artifact(artifact_url: &str, artifact_sha256: &str) -> Result<(), String> {
+    if !artifact_url.starts_with("https://files.pythonhosted.org/")
+        || !artifact_url.ends_with(".whl")
+    {
+        return Err("AMKR 更新构件必须是 files.pythonhosted.org 的 HTTPS wheel".to_owned());
+    }
+    if artifact_sha256.len() != 64
+        || !artifact_sha256
+            .bytes()
+            .all(|value| value.is_ascii_hexdigit())
+    {
+        return Err("AMKR 更新构件缺少有效的 SHA-256".to_owned());
+    }
+    Ok(())
+}
+
+pub fn update_private_runtime_from_paths(
+    runtime_dir: &Path,
+    state_path: &Path,
+    artifact_url: &str,
+    artifact_sha256: &str,
+) -> Result<RuntimeInstallationStatus, String> {
+    validate_update_artifact(artifact_url, artifact_sha256)?;
+    let current = detect_private_runtime(runtime_dir, state_path);
+    if !current.private_runtime_installed {
+        return Err("当前 Keyloom 私有运行时不完整，无法执行安全更新".to_owned());
+    }
+    if !runtime_dir
+        .join("Lib/site-packages/pip/__init__.py")
+        .is_file()
+    {
+        return Err("当前私有运行时不含安全更新器，请先安装最新 Keyloom 安装包".to_owned());
+    }
+
+    let staging_runtime = sibling_path(runtime_dir, ".update-staging");
+    let staging_state = sibling_path(state_path, ".update-staging");
+    let python = runtime_dir.join("python.exe");
+    let output = hidden_command(&python)
+        .args([
+            "-I",
+            "-c",
+            UPDATE_RUNTIME_SCRIPT,
+            &runtime_dir.to_string_lossy(),
+            &staging_runtime.to_string_lossy(),
+            &staging_state.to_string_lossy(),
+            artifact_url,
+            &artifact_sha256.to_ascii_lowercase(),
+        ])
+        .output()
+        .map_err(|error| format!("无法启动 AMKR 私有运行时更新器: {error}"))?;
+    if !output.status.success() {
+        let detail = String::from_utf8_lossy(&output.stderr);
+        return Err(format!(
+            "AMKR 私有运行时更新失败: {}",
+            detail
+                .chars()
+                .rev()
+                .take(4_000)
+                .collect::<String>()
+                .chars()
+                .rev()
+                .collect::<String>()
+        ));
+    }
+    if !detect_private_runtime(&staging_runtime, &staging_state).private_runtime_installed {
+        return Err("更新后的 AMKR 私有运行时未通过完整性检查".to_owned());
+    }
+    activate_staged_runtime(runtime_dir, state_path, &staging_runtime, &staging_state)?;
+    Ok(runtime_installation_status_from_paths(
+        runtime_dir,
+        state_path,
+    ))
+}
+
+fn hidden_command(program: &Path) -> Command {
+    let mut command = Command::new(program);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000);
+    }
+    command
+}
+
+fn sibling_path(path: &Path, suffix: &str) -> PathBuf {
+    let mut value = OsString::from(path.as_os_str());
+    value.push(suffix);
+    PathBuf::from(value)
+}
+
+fn activate_staged_runtime(
+    runtime_dir: &Path,
+    state_path: &Path,
+    staging_runtime: &Path,
+    staging_state: &Path,
+) -> Result<(), String> {
+    let previous_runtime = previous_path(runtime_dir);
+    let previous_state = previous_path(state_path);
+    if previous_runtime.exists() {
+        fs::remove_dir_all(&previous_runtime)
+            .map_err(|error| format!("无法清理旧运行时回退版本: {error}"))?;
+    }
+    if previous_state.exists() {
+        fs::remove_file(&previous_state)
+            .map_err(|error| format!("无法清理旧安装状态回退版本: {error}"))?;
+    }
+    fs::rename(runtime_dir, &previous_runtime)
+        .map_err(|error| format!("无法备份当前私有运行时: {error}"))?;
+    if let Err(error) = fs::rename(state_path, &previous_state) {
+        let _ = fs::rename(&previous_runtime, runtime_dir);
+        return Err(format!("无法备份当前私有运行时状态: {error}"));
+    }
+    if let Err(error) = fs::rename(staging_runtime, runtime_dir) {
+        let _ = fs::rename(&previous_state, state_path);
+        let _ = fs::rename(&previous_runtime, runtime_dir);
+        return Err(format!("无法启用更新后的私有运行时: {error}"));
+    }
+    if let Err(error) = fs::rename(staging_state, state_path) {
+        let _ = fs::rename(runtime_dir, staging_runtime);
+        let _ = fs::rename(&previous_state, state_path);
+        let _ = fs::rename(&previous_runtime, runtime_dir);
+        return Err(format!("无法启用更新后的私有运行时状态: {error}"));
+    }
+    Ok(())
 }
 
 pub fn rollback_private_runtime_from_paths(
@@ -364,9 +562,10 @@ mod tests {
     use std::fs;
 
     use super::{
-        detect_private_runtime, initialize_config_with_runner, install_paths, previous_path,
-        private_runtime_service_program_from_paths, rollback_private_runtime_from_paths,
-        runtime_installation_status_from_paths,
+        activate_staged_runtime, detect_private_runtime, initialize_config_with_runner,
+        install_paths, previous_path, private_runtime_service_program_from_paths,
+        rollback_private_runtime_from_paths, runtime_installation_status_from_paths, sibling_path,
+        update_private_runtime_from_paths, validate_update_artifact,
     };
 
     fn temp_root(name: &str) -> std::path::PathBuf {
@@ -410,6 +609,74 @@ mod tests {
             paths.state_path,
             std::path::Path::new("C:/Users/test/AppData/Local/Keyloom/install-state.json")
         );
+    }
+
+    #[test]
+    fn accepts_only_hashed_pypi_wheels_for_private_runtime_updates() {
+        assert!(validate_update_artifact(
+            "https://files.pythonhosted.org/packages/amkr.whl",
+            &"a".repeat(64)
+        )
+        .is_ok());
+        assert!(
+            validate_update_artifact("https://example.test/amkr.whl", &"a".repeat(64))
+                .unwrap_err()
+                .contains("files.pythonhosted.org")
+        );
+        assert!(validate_update_artifact(
+            "https://files.pythonhosted.org/packages/amkr.whl",
+            "not-a-hash"
+        )
+        .unwrap_err()
+        .contains("SHA-256"));
+    }
+
+    #[test]
+    fn requires_the_pinned_updater_before_touching_the_current_runtime() {
+        let root = temp_root("runtime-without-updater");
+        let runtime = root.join("runtime");
+        let state = root.join("install-state.json");
+        write_runtime(&runtime, &state, "3.1.1", 'a');
+
+        let error = update_private_runtime_from_paths(
+            &runtime,
+            &state,
+            "https://files.pythonhosted.org/packages/amkr.whl",
+            &"b".repeat(64),
+        )
+        .unwrap_err();
+
+        assert!(error.contains("不含安全更新器"));
+        assert!(runtime.is_dir());
+        assert!(state.is_file());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn atomically_activates_a_staged_runtime_and_keeps_the_previous_version() {
+        let root = temp_root("runtime-update-activation");
+        let runtime = root.join("runtime");
+        let state = root.join("install-state.json");
+        let staging_runtime = sibling_path(&runtime, ".update-staging");
+        let staging_state = sibling_path(&state, ".update-staging");
+        write_runtime(&runtime, &state, "3.1.1", 'a');
+        write_runtime(&staging_runtime, &staging_state, "3.2.0", 'b');
+
+        activate_staged_runtime(&runtime, &state, &staging_runtime, &staging_state).unwrap();
+
+        assert_eq!(
+            detect_private_runtime(&runtime, &state)
+                .amkr_version
+                .as_deref(),
+            Some("3.2.0")
+        );
+        assert_eq!(
+            detect_private_runtime(&previous_path(&runtime), &previous_path(&state))
+                .amkr_version
+                .as_deref(),
+            Some("3.1.1")
+        );
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

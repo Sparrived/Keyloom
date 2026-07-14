@@ -169,10 +169,10 @@ try {
         '--ignore-installed',
         '--no-index', '--find-links', $wheelhouse,
         '--target', $sitePackages,
-        "$($wheel)[visitor]"
+        "$($wheel)[visitor]", 'pip==25.0.1'
     ) 'Offline AMKR installation'
 
-    $smokeOutput = & $python -I -c 'import auto_model_key_router, fastapi, httpx, itsdangerous, uvicorn, json, platform; print(json.dumps(dict(python_version=platform.python_version(), amkr_version=auto_model_key_router.__version__)))'
+    $smokeOutput = & $python -I -c 'import auto_model_key_router, fastapi, httpx, itsdangerous, pip, uvicorn, json, platform; print(json.dumps(dict(python_version=platform.python_version(), amkr_version=auto_model_key_router.__version__)))'
     if ($LASTEXITCODE -ne 0 -or -not $smokeOutput) {
         throw 'The prepared runtime could not import AMKR and its core dependencies.'
     }
