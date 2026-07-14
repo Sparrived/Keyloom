@@ -6,7 +6,7 @@ use keyloom_core::tray::{action_from_menu_id, TrayAction};
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::TrayIconBuilder,
-    Manager, WindowEvent,
+    Manager,
 };
 
 #[tauri::command]
@@ -649,12 +649,6 @@ fn main() {
                 })
                 .build(app)?;
             Ok(())
-        })
-        .on_window_event(|window, event| {
-            if let WindowEvent::CloseRequested { api, .. } = event {
-                let _ = window.hide();
-                api.prevent_close();
-            }
         })
         .invoke_handler(tauri::generate_handler![
             discover_amkr,

@@ -60,11 +60,17 @@ describe("Keyloom application shell", () => {
     expect(main).toContainElement(screen.getByRole("heading", { name: "概览" }));
   });
 
-  it("uses the custom title bar for minimize and close", () => {
+  it("keeps the window controls in the sidebar", () => {
     render(<App />);
 
-    fireEvent.click(screen.getByRole("button", { name: "最小化窗口" }));
-    fireEvent.click(screen.getByRole("button", { name: "关闭窗口" }));
+    const sidebar = screen.getByRole("complementary", { name: "主导航" });
+    const minimize = screen.getByRole("button", { name: "最小化窗口" });
+    const close = screen.getByRole("button", { name: "关闭窗口" });
+    expect(sidebar).toContainElement(minimize);
+    expect(sidebar).toContainElement(close);
+
+    fireEvent.click(minimize);
+    fireEvent.click(close);
 
     expect(minimizeMock).toHaveBeenCalledOnce();
     expect(closeMock).toHaveBeenCalledOnce();

@@ -315,20 +315,20 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
 
   return (
     <div className="app-frame">
-      <header className="window-titlebar" data-tauri-drag-region>
-        <span data-tauri-drag-region>Keyloom</span>
-        <div className="window-controls">
-          <button aria-label="最小化窗口" title="最小化" type="button" onClick={() => void getCurrentWindow().minimize()}>
-            <span aria-hidden="true">−</span>
-          </button>
-          <button aria-label="关闭窗口" className="window-close" title="关闭" type="button" onClick={() => void getCurrentWindow().close()}>
-            <span aria-hidden="true">×</span>
-          </button>
-        </div>
-      </header>
       <div className="app-shell">
       <aside aria-label="主导航" className="sidebar">
-        <div className="brand-block">
+        <div className="sidebar-window-row">
+          <div aria-label="窗口控制" className="window-controls">
+            <button aria-label="关闭窗口" className="window-close" title="关闭" type="button" onClick={() => void getCurrentWindow().close()}>
+              <span aria-hidden="true">×</span>
+            </button>
+            <button aria-label="最小化窗口" className="window-minimize" title="最小化" type="button" onClick={() => void getCurrentWindow().minimize()}>
+              <span aria-hidden="true">−</span>
+            </button>
+          </div>
+          <div className="window-drag-region" data-tauri-drag-region />
+        </div>
+        <div className="brand-block" data-tauri-drag-region>
           <h1>Keyloom</h1>
           <span>AMKR 控制面</span>
         </div>
