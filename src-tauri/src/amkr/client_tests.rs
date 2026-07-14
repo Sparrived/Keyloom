@@ -3,13 +3,13 @@ use std::net::TcpListener;
 use std::thread;
 
 use super::client::{
-    create_provider, create_provider_key, create_route, delete_pool, delete_provider_key, delete_route,
-    delete_unified_model, export_config, get_health, get_models, get_probe, get_providers,
-    get_routes, get_unified_model, import_config, probe_keys, probe_pools, update_pool,
-    update_model_reasoning_effort, update_provider, update_provider_key, update_route,
-    update_unified_model, cancel_probe,
-    AmkrHealth, AmkrRouteTarget, AmkrUnifiedModel, AmkrUnifiedPlan, AmkrUnifiedTarget,
-    AmkrUsageStats,
+    cancel_probe, check_update, create_provider, create_provider_key, create_route, delete_pool,
+    delete_provider_key, delete_route, delete_unified_model, export_config, get_health, get_models,
+    get_probe, get_providers, get_routes, get_settings, get_unified_model, import_config,
+    probe_keys, probe_pools, regenerate_local_api_key, update_model_reasoning_effort, update_pool,
+    update_provider, update_provider_key, update_route, update_settings, update_unified_model,
+    AmkrHealth, AmkrRouteTarget, AmkrSettingsUpdate, AmkrUnifiedModel, AmkrUnifiedPlan,
+    AmkrUnifiedTarget, AmkrUsageStats,
 };
 use super::AmkrConnection;
 
@@ -63,6 +63,84 @@ fn keeps_new_metric_fields_optional_for_older_amkr_responses() {
 }
 
 #[test]
+fn reads_updates_and_regenerates_amkr_settings_with_revision_checks() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = thread::spawn(move || {
+        for (method, path, expected_body, body) in [
+            (
+                "GET",
+                "/api/settings",
+                None,
+                r#"{"config_revision":"revision-a","settings":{"host":"127.0.0.1","port":18900,"request_timeout":60.0,"stream_first_byte_timeout":90.0,"stream_idle_timeout":180.0,"max_retries":2,"local_auth_enabled":true,"local_api_key_fingerprint":"65bbff9a6cb9"}}"#,
+            ),
+            (
+                "PUT",
+                "/api/settings",
+                Some("\"port\":19000"),
+                r#"{"config_revision":"revision-b","settings":{"host":"127.0.0.1","port":19000,"request_timeout":60.0,"stream_first_byte_timeout":90.0,"stream_idle_timeout":180.0,"max_retries":2,"local_auth_enabled":true,"local_api_key_fingerprint":"65bbff9a6cb9"}}"#,
+            ),
+            (
+                "POST",
+                "/api/settings/local-api-key",
+                Some("\"config_revision\":\"revision-b\""),
+                r#"{"config_revision":"revision-c","local_api_key":"replacement-local-key","local_api_key_fingerprint":"82ed35081b47"}"#,
+            ),
+            (
+                "POST",
+                "/api/update/check",
+                None,
+                r#"{"current_version":"3.1.0","latest_version":"3.2.0","release_url":"https://example.test/amkr/3.2.0","source":"PyPI","update_available":true,"error":null}"#,
+            ),
+        ] {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buffer = [0_u8; 4096];
+            let read = stream.read(&mut buffer).unwrap();
+            let request = String::from_utf8_lossy(&buffer[..read]);
+            assert!(request.starts_with(&format!("{method} {path} HTTP/1.1")));
+            assert!(request.contains("Authorization: Bearer local-api-key"));
+            if let Some(expected_body) = expected_body {
+                assert!(
+                    request.contains(expected_body),
+                    "missing {expected_body} in {request}"
+                );
+            }
+            write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body).unwrap();
+        }
+    });
+    let connection = AmkrConnection {
+        base_url: format!("http://{address}"),
+        local_api_key: Some("local-api-key".to_owned()),
+        metrics_db_path: None,
+        log_file_path: None,
+    };
+
+    let current = get_settings(&connection).unwrap();
+    assert_eq!(current.settings.port, 18900);
+    let updated = update_settings(
+        &connection,
+        &AmkrSettingsUpdate {
+            config_revision: current.config_revision,
+            host: "127.0.0.1".to_owned(),
+            port: 19000,
+            request_timeout: 60.0,
+            stream_first_byte_timeout: 90.0,
+            stream_idle_timeout: 180.0,
+            max_retries: 2,
+        },
+    )
+    .unwrap();
+    assert_eq!(updated.config_revision, "revision-b");
+    assert_eq!(updated.settings.port, 19000);
+    let regenerated = regenerate_local_api_key(&connection, &updated.config_revision).unwrap();
+    assert_eq!(regenerated.local_api_key, "replacement-local-key");
+    let update = check_update(&connection).unwrap();
+    assert!(update.update_available);
+    assert_eq!(update.latest_version.as_deref(), Some("3.2.0"));
+    server.join().unwrap();
+}
+
+#[test]
 fn reads_rich_health_capabilities_without_returning_secret_values() {
     let health: AmkrHealth = serde_json::from_str(
         r#"{
@@ -84,7 +162,10 @@ fn reads_rich_health_capabilities_without_returning_secret_values() {
     .unwrap();
 
     assert_eq!(health.models, ["model-a"]);
-    assert_eq!(health.local_api_key_fingerprint.as_deref(), Some("65bbff9a6cb9"));
+    assert_eq!(
+        health.local_api_key_fingerprint.as_deref(),
+        Some("65bbff9a6cb9")
+    );
     assert!(health.visitor_feature_installed);
     assert!(health.visitor_access_enabled);
     assert_eq!(health.visitor_key_count, 2);
@@ -114,7 +195,10 @@ fn normalizes_legacy_flat_unified_model_responses() {
         r#"{"status":"ok","local_auth_enabled":true,"unified_model":{"model":"model-a","key":null}}"#,
     )
     .unwrap();
-    assert_eq!(health.unified_model.unwrap().default.primary.model, "model-a");
+    assert_eq!(
+        health.unified_model.unwrap().default.primary.model,
+        "model-a"
+    );
 }
 
 #[test]
@@ -150,7 +234,10 @@ fn reads_redacted_provider_configuration_with_local_authentication() {
     assert_eq!(response.config_revision, "revision-a");
     assert_eq!(response.providers.len(), 1);
     assert_eq!(response.providers[0].id, "a.example.test");
-    assert_eq!(response.providers[0].keys[0].api_key_fingerprint, "65bbff9a6cb9");
+    assert_eq!(
+        response.providers[0].keys[0].api_key_fingerprint,
+        "65bbff9a6cb9"
+    );
     server.join().unwrap();
 }
 
@@ -243,7 +330,16 @@ fn reads_and_updates_the_unified_model_with_an_explicit_automatic_key() {
     let models = get_models(&connection).unwrap();
     assert_eq!(models.models[0].keys[0].name, "key-a");
     let current = get_unified_model(&connection).unwrap();
-    assert_eq!(current.unified_model.unwrap().default.primary.key.as_deref(), Some("key-a"));
+    assert_eq!(
+        current
+            .unified_model
+            .unwrap()
+            .default
+            .primary
+            .key
+            .as_deref(),
+        Some("key-a")
+    );
     let updated = update_unified_model(
         &connection,
         &AmkrUnifiedModel {
@@ -281,25 +377,54 @@ fn preserves_unedited_fallback_and_image_plans_when_updating_unified_model() {
         assert!(request.contains("\"model\":\"image-a\""));
         assert!(request.contains("\"key\":\"image-key\""));
         let body = r#"{"unified_model":{"default":{"primary":{"model":"model-b","key":null},"fallback":{"model":"backup-a","key":null}},"image":{"primary":{"model":"image-a","key":"image-key"}}}}"#;
-        write!(stream, "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body).unwrap();
+        write!(
+            stream,
+            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            body.len(),
+            body
+        )
+        .unwrap();
     });
-    let connection = AmkrConnection { base_url: format!("http://{address}"), local_api_key: None, metrics_db_path: None, log_file_path: None };
+    let connection = AmkrConnection {
+        base_url: format!("http://{address}"),
+        local_api_key: None,
+        metrics_db_path: None,
+        log_file_path: None,
+    };
     let response = update_unified_model(
         &connection,
         &AmkrUnifiedModel {
             default: AmkrUnifiedPlan {
-                primary: AmkrUnifiedTarget { model: "model-b".to_owned(), key: None },
-                fallback: Some(AmkrUnifiedTarget { model: "backup-a".to_owned(), key: None }),
+                primary: AmkrUnifiedTarget {
+                    model: "model-b".to_owned(),
+                    key: None,
+                },
+                fallback: Some(AmkrUnifiedTarget {
+                    model: "backup-a".to_owned(),
+                    key: None,
+                }),
             },
             image: Some(AmkrUnifiedPlan {
-                primary: AmkrUnifiedTarget { model: "image-a".to_owned(), key: Some("image-key".to_owned()) },
+                primary: AmkrUnifiedTarget {
+                    model: "image-a".to_owned(),
+                    key: Some("image-key".to_owned()),
+                },
                 fallback: None,
             }),
         },
     )
     .unwrap();
 
-    assert_eq!(response.unified_model.unwrap().default.fallback.unwrap().model, "backup-a");
+    assert_eq!(
+        response
+            .unified_model
+            .unwrap()
+            .default
+            .fallback
+            .unwrap()
+            .model,
+        "backup-a"
+    );
     server.join().unwrap();
 }
 
@@ -360,13 +485,27 @@ fn creates_a_provider_key_with_local_authentication_and_revision() {
         assert!(request.contains("\"config_revision\":\"revision-a\""));
         assert!(request.contains("\"name\":\"key-b\""));
         assert!(request.contains("\"allow_visitor\":true"));
-        write!(stream, "HTTP/1.1 201 Created\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").unwrap();
+        write!(
+            stream,
+            "HTTP/1.1 201 Created\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+        )
+        .unwrap();
     });
 
     create_provider_key(
-        &AmkrConnection { base_url: format!("http://{address}"), local_api_key: Some("local-api-key".to_owned()), metrics_db_path: None, log_file_path: None },
-        "revision-a", "a.example.test", "key-b", "upstream-secret", true,
-    ).unwrap();
+        &AmkrConnection {
+            base_url: format!("http://{address}"),
+            local_api_key: Some("local-api-key".to_owned()),
+            metrics_db_path: None,
+            log_file_path: None,
+        },
+        "revision-a",
+        "a.example.test",
+        "key-b",
+        "upstream-secret",
+        true,
+    )
+    .unwrap();
     server.join().unwrap();
 }
 
@@ -382,6 +521,7 @@ fn sends_provider_configuration_updates_with_the_current_revision() {
                     "\"config_revision\":\"revision-a\"",
                     "\"id\":\"b.example.test\"",
                     "\"base_url\":\"https://b.example.test\"",
+                    "\"openai\":\"proxy/v1/chat/completions\"",
                 ],
             ),
             (
@@ -418,7 +558,10 @@ fn sends_provider_configuration_updates_with_the_current_revision() {
             assert!(request.starts_with(expected_path));
             assert!(request.contains("Authorization: Bearer local-api-key"));
             for fragment in expected_body {
-                assert!(request.contains(fragment), "missing {fragment} in {request}");
+                assert!(
+                    request.contains(fragment),
+                    "missing {fragment} in {request}"
+                );
             }
             write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{{}}").unwrap();
         }
@@ -430,9 +573,39 @@ fn sends_provider_configuration_updates_with_the_current_revision() {
         log_file_path: None,
     };
 
-    update_provider(&connection, "revision-a", "a.example.test", "b.example.test", "https://b.example.test").unwrap();
-    update_provider_key(&connection, "revision-a", "b.example.test", "key-a", "key-b", Some("replacement-secret"), false, true).unwrap();
-    update_pool(&connection, "revision-a", "b.example.test", "pool-a", "pool-b", vec!["key-b".to_owned()], vec!["model-b".to_owned()]).unwrap();
+    update_provider(
+        &connection,
+        "revision-a",
+        "a.example.test",
+        "b.example.test",
+        "https://b.example.test",
+        std::collections::BTreeMap::from([(
+            "openai".to_owned(),
+            "proxy/v1/chat/completions".to_owned(),
+        )]),
+    )
+    .unwrap();
+    update_provider_key(
+        &connection,
+        "revision-a",
+        "b.example.test",
+        "key-a",
+        "key-b",
+        Some("replacement-secret"),
+        false,
+        true,
+    )
+    .unwrap();
+    update_pool(
+        &connection,
+        "revision-a",
+        "b.example.test",
+        "pool-a",
+        "pool-b",
+        vec!["key-b".to_owned()],
+        vec!["model-b".to_owned()],
+    )
+    .unwrap();
     update_route(
         &connection,
         "revision-a",
@@ -504,8 +677,11 @@ fn creates_a_route_with_all_targets() {
         assert!(request.contains("\"provider\":\"provider-a\""));
         assert!(request.contains("\"provider\":\"provider-b\""));
         assert!(request.contains("\"upstream_model\":\"upstream-b\""));
-        write!(stream, "HTTP/1.1 201 Created\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{{}}")
-            .unwrap();
+        write!(
+            stream,
+            "HTTP/1.1 201 Created\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{{}}"
+        )
+        .unwrap();
     });
 
     create_route(
@@ -552,7 +728,11 @@ fn sends_key_and_pool_deletions_with_the_current_revision() {
             let request = String::from_utf8_lossy(&buffer[..read]);
             assert!(request.starts_with(expected_path));
             assert!(request.contains("\"config_revision\":\"revision-a\""));
-            write!(stream, "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").unwrap();
+            write!(
+                stream,
+                "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+            )
+            .unwrap();
         }
     });
     let connection = AmkrConnection {
@@ -578,7 +758,11 @@ fn encodes_dynamic_route_ids_as_single_path_segments() {
         let read = stream.read(&mut buffer).unwrap();
         let request = String::from_utf8_lossy(&buffer[..read]);
         assert!(request.starts_with("DELETE /api/routes/model%2Fvision%20latest HTTP/1.1"));
-        write!(stream, "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").unwrap();
+        write!(
+            stream,
+            "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+        )
+        .unwrap();
     });
 
     delete_route(
@@ -675,8 +859,14 @@ fn transfers_config_with_local_authentication_and_revision() {
     let address = listener.local_addr().unwrap();
     let server = thread::spawn(move || {
         for (expected_path, response_body) in [
-            ("POST /api/config/export HTTP/1.1", r#"{"config_revision":"revision-a","config":{"providers":{}}}"#),
-            ("POST /api/config/import HTTP/1.1", r#"{"config_revision":"revision-b","imported":true}"#),
+            (
+                "POST /api/config/export HTTP/1.1",
+                r#"{"config_revision":"revision-a","config":{"providers":{}}}"#,
+            ),
+            (
+                "POST /api/config/import HTTP/1.1",
+                r#"{"config_revision":"revision-b","imported":true}"#,
+            ),
         ] {
             let (mut stream, _) = listener.accept().unwrap();
             let mut buffer = [0_u8; 2048];
@@ -691,7 +881,12 @@ fn transfers_config_with_local_authentication_and_revision() {
             write!(stream, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", response_body.len(), response_body).unwrap();
         }
     });
-    let connection = AmkrConnection { base_url: format!("http://{address}"), local_api_key: Some("local-api-key".to_owned()), metrics_db_path: None, log_file_path: None };
+    let connection = AmkrConnection {
+        base_url: format!("http://{address}"),
+        local_api_key: Some("local-api-key".to_owned()),
+        metrics_db_path: None,
+        log_file_path: None,
+    };
     let exported = export_config(&connection).unwrap();
     assert_eq!(exported.config_revision, "revision-a");
     let imported = import_config(&connection, &exported.config_revision, exported.config).unwrap();
@@ -760,10 +955,14 @@ fn starts_polls_and_cancels_key_and_pool_probes_without_leaking_secrets() {
 
     let started = probe_keys(&connection, "openai", vec!["main".to_owned()], 7.5).unwrap();
     assert_eq!(started.probe_id, "probe-keys");
-    let pool_started = probe_pools(&connection, "openai", vec!["default".to_owned()], 15.0).unwrap();
+    let pool_started =
+        probe_pools(&connection, "openai", vec!["default".to_owned()], 15.0).unwrap();
     assert_eq!(pool_started.status, "pending");
     let completed = get_probe(&connection, "probe-keys").unwrap();
-    assert_eq!(completed.results[0].endpoint, "https://api.openai.com/v1/models");
+    assert_eq!(
+        completed.results[0].endpoint,
+        "https://api.openai.com/v1/models"
+    );
     assert_eq!(completed.results[0].models, ["gpt-4o"]);
     let cancelled = cancel_probe(&connection, "probe-keys").unwrap();
     assert_eq!(cancelled.status, "cancelled");

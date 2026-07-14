@@ -29,8 +29,14 @@ fn reads_connection_details_from_an_existing_amkr_config() {
 
     assert_eq!(connection.base_url, "http://127.0.0.2:18900");
     assert_eq!(connection.local_api_key.as_deref(), Some("amkr-local-key"));
-    assert_eq!(connection.metrics_db_path.as_deref(), Some("C:/amkr/metrics.sqlite3"));
-    assert_eq!(connection.log_file_path.as_deref(), Some("C:/amkr/router.log"));
+    assert_eq!(
+        connection.metrics_db_path.as_deref(),
+        Some("C:/amkr/metrics.sqlite3")
+    );
+    assert_eq!(
+        connection.log_file_path.as_deref(),
+        Some("C:/amkr/router.log")
+    );
 
     fs::remove_file(path).unwrap();
 }

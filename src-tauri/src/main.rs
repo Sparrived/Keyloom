@@ -34,6 +34,56 @@ fn get_amkr_metrics(
 }
 
 #[tauri::command]
+fn get_amkr_settings(
+    config_path: Option<String>,
+) -> Result<keyloom_core::amkr::client::AmkrSettingsResponse, String> {
+    keyloom_core::get_amkr_settings(config_path.as_deref().map(Path::new))
+}
+
+#[tauri::command]
+fn update_amkr_settings(
+    config_path: Option<String>,
+    config_revision: String,
+    host: String,
+    port: u16,
+    request_timeout: f64,
+    stream_first_byte_timeout: f64,
+    stream_idle_timeout: f64,
+    max_retries: u32,
+) -> Result<keyloom_core::amkr::client::AmkrSettingsResponse, String> {
+    keyloom_core::update_amkr_settings(
+        config_path.as_deref().map(Path::new),
+        &keyloom_core::amkr::client::AmkrSettingsUpdate {
+            config_revision,
+            host,
+            port,
+            request_timeout,
+            stream_first_byte_timeout,
+            stream_idle_timeout,
+            max_retries,
+        },
+    )
+}
+
+#[tauri::command]
+fn regenerate_amkr_local_api_key(
+    config_path: Option<String>,
+    config_revision: String,
+) -> Result<keyloom_core::amkr::client::AmkrLocalApiKeyResponse, String> {
+    keyloom_core::regenerate_amkr_local_api_key(
+        config_path.as_deref().map(Path::new),
+        &config_revision,
+    )
+}
+
+#[tauri::command]
+fn check_amkr_update(
+    config_path: Option<String>,
+) -> Result<keyloom_core::amkr::client::AmkrUpdateCheck, String> {
+    keyloom_core::check_amkr_update(config_path.as_deref().map(Path::new))
+}
+
+#[tauri::command]
 fn read_amkr_log_tail(config_path: Option<String>) -> Result<String, String> {
     keyloom_core::read_amkr_log_tail(config_path.as_deref().map(Path::new))
 }
@@ -94,10 +144,7 @@ fn update_amkr_unified_model(
         },
         image,
     };
-    keyloom_core::update_amkr_unified_model(
-        config_path.as_deref().map(Path::new),
-        &unified_model,
-    )
+    keyloom_core::update_amkr_unified_model(config_path.as_deref().map(Path::new), &unified_model)
 }
 
 #[tauri::command]
@@ -106,72 +153,232 @@ fn delete_amkr_unified_model(config_path: Option<String>) -> Result<(), String> 
 }
 
 #[tauri::command]
-fn create_amkr_provider(config_path: Option<String>, config_revision: String, id: String, base_url: String) -> Result<keyloom_core::amkr::client::AmkrProviderResponse, String> {
-    keyloom_core::create_amkr_provider(config_path.as_deref().map(Path::new), &config_revision, &id, &base_url)
+fn create_amkr_provider(
+    config_path: Option<String>,
+    config_revision: String,
+    id: String,
+    base_url: String,
+) -> Result<keyloom_core::amkr::client::AmkrProviderResponse, String> {
+    keyloom_core::create_amkr_provider(
+        config_path.as_deref().map(Path::new),
+        &config_revision,
+        &id,
+        &base_url,
+    )
 }
 
 #[tauri::command]
-fn update_amkr_provider(config_path: Option<String>, config_revision: String, provider_id: String, id: String, base_url: String) -> Result<(), String> {
-    keyloom_core::update_amkr_provider(config_path.as_deref().map(Path::new), &config_revision, &provider_id, &id, &base_url)
+fn update_amkr_provider(
+    config_path: Option<String>,
+    config_revision: String,
+    provider_id: String,
+    id: String,
+    base_url: String,
+    routes: std::collections::BTreeMap<String, String>,
+) -> Result<(), String> {
+    keyloom_core::update_amkr_provider(
+        config_path.as_deref().map(Path::new),
+        &config_revision,
+        &provider_id,
+        &id,
+        &base_url,
+        routes,
+    )
 }
 
 #[tauri::command]
-fn delete_amkr_provider(config_path: Option<String>, config_revision: String, id: String) -> Result<(), String> {
+fn delete_amkr_provider(
+    config_path: Option<String>,
+    config_revision: String,
+    id: String,
+) -> Result<(), String> {
     keyloom_core::delete_amkr_provider(config_path.as_deref().map(Path::new), &config_revision, &id)
 }
 
 #[tauri::command]
-fn create_amkr_provider_key(config_path: Option<String>, config_revision: String, provider_id: String, name: String, api_key: String, allow_visitor: bool) -> Result<(), String> {
-    keyloom_core::create_amkr_provider_key(config_path.as_deref().map(Path::new), &config_revision, &provider_id, &name, &api_key, allow_visitor)
+fn create_amkr_provider_key(
+    config_path: Option<String>,
+    config_revision: String,
+    provider_id: String,
+    name: String,
+    api_key: String,
+    allow_visitor: bool,
+) -> Result<(), String> {
+    keyloom_core::create_amkr_provider_key(
+        config_path.as_deref().map(Path::new),
+        &config_revision,
+        &provider_id,
+        &name,
+        &api_key,
+        allow_visitor,
+    )
 }
 
 #[tauri::command]
-fn update_amkr_provider_key(config_path: Option<String>, config_revision: String, provider_id: String, key_name: String, name: String, api_key: Option<String>, enabled: bool, allow_visitor: bool) -> Result<(), String> {
-    keyloom_core::update_amkr_provider_key(config_path.as_deref().map(Path::new), &config_revision, &provider_id, &key_name, &name, api_key.as_deref(), enabled, allow_visitor)
+fn update_amkr_provider_key(
+    config_path: Option<String>,
+    config_revision: String,
+    provider_id: String,
+    key_name: String,
+    name: String,
+    api_key: Option<String>,
+    enabled: bool,
+    allow_visitor: bool,
+) -> Result<(), String> {
+    keyloom_core::update_amkr_provider_key(
+        config_path.as_deref().map(Path::new),
+        &config_revision,
+        &provider_id,
+        &key_name,
+        &name,
+        api_key.as_deref(),
+        enabled,
+        allow_visitor,
+    )
 }
 
 #[tauri::command]
-fn delete_amkr_provider_key(config_path: Option<String>, config_revision: String, provider_id: String, key_name: String) -> Result<(), String> {
-    keyloom_core::delete_amkr_provider_key(config_path.as_deref().map(Path::new), &config_revision, &provider_id, &key_name)
+fn delete_amkr_provider_key(
+    config_path: Option<String>,
+    config_revision: String,
+    provider_id: String,
+    key_name: String,
+) -> Result<(), String> {
+    keyloom_core::delete_amkr_provider_key(
+        config_path.as_deref().map(Path::new),
+        &config_revision,
+        &provider_id,
+        &key_name,
+    )
 }
 
 #[tauri::command]
-fn create_amkr_pool(config_path: Option<String>, config_revision: String, provider_id: String, name: String, keys: Vec<String>, models: Vec<String>) -> Result<(), String> {
-    keyloom_core::create_amkr_pool(config_path.as_deref().map(Path::new), &config_revision, &provider_id, &name, keys, models)
+fn create_amkr_pool(
+    config_path: Option<String>,
+    config_revision: String,
+    provider_id: String,
+    name: String,
+    keys: Vec<String>,
+    models: Vec<String>,
+) -> Result<(), String> {
+    keyloom_core::create_amkr_pool(
+        config_path.as_deref().map(Path::new),
+        &config_revision,
+        &provider_id,
+        &name,
+        keys,
+        models,
+    )
 }
 
 #[tauri::command]
-fn update_amkr_pool(config_path: Option<String>, config_revision: String, provider_id: String, pool_name: String, name: String, keys: Vec<String>, models: Vec<String>) -> Result<(), String> {
-    keyloom_core::update_amkr_pool(config_path.as_deref().map(Path::new), &config_revision, &provider_id, &pool_name, &name, keys, models)
+fn update_amkr_pool(
+    config_path: Option<String>,
+    config_revision: String,
+    provider_id: String,
+    pool_name: String,
+    name: String,
+    keys: Vec<String>,
+    models: Vec<String>,
+) -> Result<(), String> {
+    keyloom_core::update_amkr_pool(
+        config_path.as_deref().map(Path::new),
+        &config_revision,
+        &provider_id,
+        &pool_name,
+        &name,
+        keys,
+        models,
+    )
 }
 
 #[tauri::command]
-fn delete_amkr_pool(config_path: Option<String>, config_revision: String, provider_id: String, pool_name: String) -> Result<(), String> {
-    keyloom_core::delete_amkr_pool(config_path.as_deref().map(Path::new), &config_revision, &provider_id, &pool_name)
+fn delete_amkr_pool(
+    config_path: Option<String>,
+    config_revision: String,
+    provider_id: String,
+    pool_name: String,
+) -> Result<(), String> {
+    keyloom_core::delete_amkr_pool(
+        config_path.as_deref().map(Path::new),
+        &config_revision,
+        &provider_id,
+        &pool_name,
+    )
 }
 
 #[tauri::command]
-fn create_amkr_route(config_path: Option<String>, config_revision: String, id: String, targets: Vec<keyloom_core::amkr::client::AmkrRouteTarget>, aliases: Vec<String>, routing_mode: Option<String>) -> Result<(), String> {
-    keyloom_core::create_amkr_route(config_path.as_deref().map(Path::new), &config_revision, &id, targets, aliases, routing_mode)
+fn create_amkr_route(
+    config_path: Option<String>,
+    config_revision: String,
+    id: String,
+    targets: Vec<keyloom_core::amkr::client::AmkrRouteTarget>,
+    aliases: Vec<String>,
+    routing_mode: Option<String>,
+) -> Result<(), String> {
+    keyloom_core::create_amkr_route(
+        config_path.as_deref().map(Path::new),
+        &config_revision,
+        &id,
+        targets,
+        aliases,
+        routing_mode,
+    )
 }
 
 #[tauri::command]
-fn update_amkr_route(config_path: Option<String>, config_revision: String, route_id: String, id: String, targets: Vec<keyloom_core::amkr::client::AmkrRouteTarget>, aliases: Vec<String>, routing_mode: Option<String>) -> Result<(), String> {
-    keyloom_core::update_amkr_route(config_path.as_deref().map(Path::new), &config_revision, &route_id, &id, targets, aliases, routing_mode)
+fn update_amkr_route(
+    config_path: Option<String>,
+    config_revision: String,
+    route_id: String,
+    id: String,
+    targets: Vec<keyloom_core::amkr::client::AmkrRouteTarget>,
+    aliases: Vec<String>,
+    routing_mode: Option<String>,
+) -> Result<(), String> {
+    keyloom_core::update_amkr_route(
+        config_path.as_deref().map(Path::new),
+        &config_revision,
+        &route_id,
+        &id,
+        targets,
+        aliases,
+        routing_mode,
+    )
 }
 
 #[tauri::command]
-fn delete_amkr_route(config_path: Option<String>, config_revision: String, id: String) -> Result<(), String> {
+fn delete_amkr_route(
+    config_path: Option<String>,
+    config_revision: String,
+    id: String,
+) -> Result<(), String> {
     keyloom_core::delete_amkr_route(config_path.as_deref().map(Path::new), &config_revision, &id)
 }
 
 #[tauri::command]
-fn export_amkr_config(config_path: Option<String>) -> Result<keyloom_core::amkr::client::AmkrConfigExport, String> { keyloom_core::export_amkr_config(config_path.as_deref().map(Path::new)) }
+fn export_amkr_config(
+    config_path: Option<String>,
+) -> Result<keyloom_core::amkr::client::AmkrConfigExport, String> {
+    keyloom_core::export_amkr_config(config_path.as_deref().map(Path::new))
+}
 #[tauri::command]
-fn import_amkr_config(config_path: Option<String>, config_revision: String, config: serde_json::Value) -> Result<keyloom_core::amkr::client::AmkrConfigImportResult, String> { keyloom_core::import_amkr_config(config_path.as_deref().map(Path::new), &config_revision, config) }
+fn import_amkr_config(
+    config_path: Option<String>,
+    config_revision: String,
+    config: serde_json::Value,
+) -> Result<keyloom_core::amkr::client::AmkrConfigImportResult, String> {
+    keyloom_core::import_amkr_config(
+        config_path.as_deref().map(Path::new),
+        &config_revision,
+        config,
+    )
+}
 
 #[tauri::command]
-fn get_agent_integration_status(agent: String) -> Result<keyloom_core::integrations::AgentIntegrationStatus, String> {
+fn get_agent_integration_status(
+    agent: String,
+) -> Result<keyloom_core::integrations::AgentIntegrationStatus, String> {
     keyloom_core::get_agent_integration_status(&agent)
 }
 
@@ -181,11 +388,7 @@ fn configure_agent_integration(
     agent: String,
     mode: String,
 ) -> Result<keyloom_core::integrations::AgentIntegrationStatus, String> {
-    keyloom_core::configure_agent_integration(
-        config_path.as_deref().map(Path::new),
-        &agent,
-        &mode,
-    )
+    keyloom_core::configure_agent_integration(config_path.as_deref().map(Path::new), &agent, &mode)
 }
 
 #[tauri::command]
@@ -201,27 +404,54 @@ fn get_runtime_installation_status() -> keyloom_core::installer::RuntimeInstalla
 }
 
 #[tauri::command]
-fn rollback_private_runtime() -> Result<keyloom_core::installer::RuntimeInstallationStatus, String> {
+fn rollback_private_runtime() -> Result<keyloom_core::installer::RuntimeInstallationStatus, String>
+{
     keyloom_core::installer::rollback_private_runtime()
 }
 
 #[tauri::command]
-fn probe_amkr_keys(config_path: Option<String>, provider_id: String, keys: Vec<String>, timeout_seconds: f64) -> Result<keyloom_core::amkr::client::AmkrProbeStart, String> {
-    keyloom_core::probe_amkr_keys(config_path.as_deref().map(Path::new), &provider_id, keys, timeout_seconds)
+fn probe_amkr_keys(
+    config_path: Option<String>,
+    provider_id: String,
+    keys: Vec<String>,
+    timeout_seconds: f64,
+) -> Result<keyloom_core::amkr::client::AmkrProbeStart, String> {
+    keyloom_core::probe_amkr_keys(
+        config_path.as_deref().map(Path::new),
+        &provider_id,
+        keys,
+        timeout_seconds,
+    )
 }
 
 #[tauri::command]
-fn probe_amkr_pools(config_path: Option<String>, provider_id: String, pools: Vec<String>, timeout_seconds: f64) -> Result<keyloom_core::amkr::client::AmkrProbeStart, String> {
-    keyloom_core::probe_amkr_pools(config_path.as_deref().map(Path::new), &provider_id, pools, timeout_seconds)
+fn probe_amkr_pools(
+    config_path: Option<String>,
+    provider_id: String,
+    pools: Vec<String>,
+    timeout_seconds: f64,
+) -> Result<keyloom_core::amkr::client::AmkrProbeStart, String> {
+    keyloom_core::probe_amkr_pools(
+        config_path.as_deref().map(Path::new),
+        &provider_id,
+        pools,
+        timeout_seconds,
+    )
 }
 
 #[tauri::command]
-fn get_amkr_probe(config_path: Option<String>, probe_id: String) -> Result<keyloom_core::amkr::client::AmkrProbe, String> {
+fn get_amkr_probe(
+    config_path: Option<String>,
+    probe_id: String,
+) -> Result<keyloom_core::amkr::client::AmkrProbe, String> {
     keyloom_core::get_amkr_probe(config_path.as_deref().map(Path::new), &probe_id)
 }
 
 #[tauri::command]
-fn cancel_amkr_probe(config_path: Option<String>, probe_id: String) -> Result<keyloom_core::amkr::client::AmkrProbe, String> {
+fn cancel_amkr_probe(
+    config_path: Option<String>,
+    probe_id: String,
+) -> Result<keyloom_core::amkr::client::AmkrProbe, String> {
     keyloom_core::cancel_amkr_probe(config_path.as_deref().map(Path::new), &probe_id)
 }
 
@@ -236,42 +466,117 @@ fn run_amkr_service_action(
 fn start_amkr(
     config_path: Option<String>,
 ) -> Result<Vec<keyloom_core::windows_service::TaskCommandResult>, String> {
-    run_amkr_service_action(keyloom_core::windows_service::ServiceAction::Start, config_path)
+    run_amkr_service_action(
+        keyloom_core::windows_service::ServiceAction::Start,
+        config_path,
+    )
 }
 
 #[tauri::command]
 fn stop_amkr(
     config_path: Option<String>,
 ) -> Result<Vec<keyloom_core::windows_service::TaskCommandResult>, String> {
-    run_amkr_service_action(keyloom_core::windows_service::ServiceAction::Stop, config_path)
+    run_amkr_service_action(
+        keyloom_core::windows_service::ServiceAction::Stop,
+        config_path,
+    )
 }
 
 #[tauri::command]
 fn restart_amkr(
     config_path: Option<String>,
 ) -> Result<Vec<keyloom_core::windows_service::TaskCommandResult>, String> {
-    run_amkr_service_action(keyloom_core::windows_service::ServiceAction::Restart, config_path)
+    run_amkr_service_action(
+        keyloom_core::windows_service::ServiceAction::Restart,
+        config_path,
+    )
 }
 
 #[tauri::command]
 fn install_user_amkr(
     config_path: Option<String>,
 ) -> Result<Vec<keyloom_core::windows_service::TaskCommandResult>, String> {
-    run_amkr_service_action(keyloom_core::windows_service::ServiceAction::InstallUser, config_path)
+    run_amkr_service_action(
+        keyloom_core::windows_service::ServiceAction::InstallUser,
+        config_path,
+    )
 }
 
 #[tauri::command]
 fn uninstall_amkr(
     config_path: Option<String>,
 ) -> Result<Vec<keyloom_core::windows_service::TaskCommandResult>, String> {
-    run_amkr_service_action(keyloom_core::windows_service::ServiceAction::Uninstall, config_path)
+    run_amkr_service_action(
+        keyloom_core::windows_service::ServiceAction::Uninstall,
+        config_path,
+    )
 }
 
 #[tauri::command]
 fn status_amkr(
     config_path: Option<String>,
 ) -> Result<Vec<keyloom_core::windows_service::TaskCommandResult>, String> {
-    run_amkr_service_action(keyloom_core::windows_service::ServiceAction::Status, config_path)
+    run_amkr_service_action(
+        keyloom_core::windows_service::ServiceAction::Status,
+        config_path,
+    )
+}
+
+fn run_amkr_system_service_action(
+    action: keyloom_core::windows_service::SystemServiceAction,
+    config_path: Option<String>,
+) -> Result<Vec<keyloom_core::windows_service::TaskCommandResult>, String> {
+    keyloom_core::run_amkr_system_service(action, config_path.as_deref().map(Path::new))
+}
+
+#[tauri::command]
+fn install_system_amkr(
+    config_path: Option<String>,
+) -> Result<Vec<keyloom_core::windows_service::TaskCommandResult>, String> {
+    run_amkr_system_service_action(
+        keyloom_core::windows_service::SystemServiceAction::Install,
+        config_path,
+    )
+}
+
+#[tauri::command]
+fn uninstall_system_amkr(
+    config_path: Option<String>,
+) -> Result<Vec<keyloom_core::windows_service::TaskCommandResult>, String> {
+    run_amkr_system_service_action(
+        keyloom_core::windows_service::SystemServiceAction::Uninstall,
+        config_path,
+    )
+}
+
+#[tauri::command]
+fn start_system_amkr(
+    config_path: Option<String>,
+) -> Result<Vec<keyloom_core::windows_service::TaskCommandResult>, String> {
+    run_amkr_system_service_action(
+        keyloom_core::windows_service::SystemServiceAction::Start,
+        config_path,
+    )
+}
+
+#[tauri::command]
+fn stop_system_amkr(
+    config_path: Option<String>,
+) -> Result<Vec<keyloom_core::windows_service::TaskCommandResult>, String> {
+    run_amkr_system_service_action(
+        keyloom_core::windows_service::SystemServiceAction::Stop,
+        config_path,
+    )
+}
+
+#[tauri::command]
+fn restart_system_amkr(
+    config_path: Option<String>,
+) -> Result<Vec<keyloom_core::windows_service::TaskCommandResult>, String> {
+    run_amkr_system_service_action(
+        keyloom_core::windows_service::SystemServiceAction::Restart,
+        config_path,
+    )
 }
 
 fn show_main_window(app: &tauri::AppHandle) {
@@ -344,6 +649,10 @@ fn main() {
             initialize_default_amkr_config,
             get_amkr_health,
             get_amkr_metrics,
+            get_amkr_settings,
+            update_amkr_settings,
+            regenerate_amkr_local_api_key,
+            check_amkr_update,
             read_amkr_log_tail,
             get_amkr_providers,
             get_amkr_routes,
@@ -380,7 +689,12 @@ fn main() {
             restart_amkr,
             install_user_amkr,
             uninstall_amkr,
-            status_amkr
+            status_amkr,
+            install_system_amkr,
+            uninstall_system_amkr,
+            start_system_amkr,
+            stop_system_amkr,
+            restart_system_amkr
         ])
         .run(tauri::generate_context!())
         .expect("failed to run Keyloom");

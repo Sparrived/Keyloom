@@ -49,10 +49,9 @@ struct RouterConfigFile {
 }
 
 pub fn discover_from_config(path: &Path) -> Result<AmkrConnection, DiscoveryError> {
-    let config: RouterConfigFile = serde_json::from_str(
-        &fs::read_to_string(path).map_err(DiscoveryError::Read)?,
-    )
-    .map_err(DiscoveryError::Parse)?;
+    let config: RouterConfigFile =
+        serde_json::from_str(&fs::read_to_string(path).map_err(DiscoveryError::Read)?)
+            .map_err(DiscoveryError::Parse)?;
 
     let host = config.host.unwrap_or_else(|| "127.0.0.1".to_owned());
     let port = config.port.unwrap_or(8000);

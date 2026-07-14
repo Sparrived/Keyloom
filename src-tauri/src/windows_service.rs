@@ -15,6 +15,27 @@ pub enum ServiceAction {
     Status,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SystemServiceAction {
+    Install,
+    Uninstall,
+    Start,
+    Stop,
+    Restart,
+}
+
+impl SystemServiceAction {
+    fn cli_value(self) -> &'static str {
+        match self {
+            Self::Install => "install",
+            Self::Uninstall => "uninstall",
+            Self::Start => "start",
+            Self::Stop => "stop",
+            Self::Restart => "restart",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct TaskCommandResult {
     pub command: Vec<String>,
@@ -87,6 +108,66 @@ pub fn task_commands_for_program(
             "LIST",
         ])],
     }
+}
+
+pub fn system_service_command(
+    action: SystemServiceAction,
+    program: &ServiceProgram,
+    config_path: &Path,
+) -> Vec<String> {
+    let mut command = vec![program.executable.to_string_lossy().into_owned()];
+    command.extend(program.arguments.iter().cloned());
+    command.extend([
+        "--config".to_owned(),
+        config_path.to_string_lossy().into_owned(),
+        "--service".to_owned(),
+        action.cli_value().to_owned(),
+    ]);
+    command
+}
+
+pub fn run_system_service_action(
+    action: SystemServiceAction,
+    program: &ServiceProgram,
+    config_path: &Path,
+) -> Result<Vec<TaskCommandResult>, String> {
+    let command = system_service_command(action, program, config_path);
+    let (executable, arguments) = command
+        .split_first()
+        .ok_or_else(|| "AMKR 系统服务命令不能为空".to_owned())?;
+    let mut process = Command::new(executable);
+    process.args(arguments);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        process.creation_flags(0x08000000);
+    }
+    let output = process
+        .output()
+        .map_err(|error| format!("无法执行 AMKR 系统服务命令: {error}"))?;
+    let result = TaskCommandResult {
+        command,
+        exit_code: output.status.code().unwrap_or(-1),
+        stdout: String::from_utf8_lossy(&output.stdout).trim().to_owned(),
+        stderr: String::from_utf8_lossy(&output.stderr).trim().to_owned(),
+    };
+    if result.exit_code != 0 {
+        let detail = if result.stderr.is_empty() {
+            result.stdout.as_str()
+        } else {
+            result.stderr.as_str()
+        };
+        return Err(format!(
+            "AMKR 系统服务命令失败（退出码 {}）: {}",
+            result.exit_code,
+            if detail.is_empty() {
+                "无命令输出"
+            } else {
+                detail
+            }
+        ));
+    }
+    Ok(vec![result])
 }
 
 fn task_run_command(program: &ServiceProgram, config_path: &Path) -> String {

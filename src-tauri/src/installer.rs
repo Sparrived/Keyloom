@@ -183,6 +183,13 @@ pub fn private_runtime_service_program() -> Result<ServiceProgram, String> {
     private_runtime_service_program_from_paths(&paths.runtime_dir, &paths.state_path)
 }
 
+pub fn private_runtime_cli_program() -> Result<ServiceProgram, String> {
+    Ok(ServiceProgram {
+        executable: private_runtime_python()?,
+        arguments: vec!["-m".to_owned(), "auto_model_key_router.main".to_owned()],
+    })
+}
+
 pub fn private_runtime_python() -> Result<PathBuf, String> {
     let paths =
         default_install_paths().ok_or_else(|| "无法确定本机 LOCALAPPDATA 目录".to_owned())?;
@@ -195,10 +202,7 @@ pub fn private_runtime_python() -> Result<PathBuf, String> {
     Ok(paths.runtime_dir.join("python.exe"))
 }
 
-pub fn initialize_config_with_runtime(
-    python: &Path,
-    config_path: &Path,
-) -> Result<(), String> {
+pub fn initialize_config_with_runtime(python: &Path, config_path: &Path) -> Result<(), String> {
     if !python.is_file() {
         return Err("Keyloom 私有运行时缺少 python.exe".to_owned());
     }
@@ -236,7 +240,10 @@ where
         .duration_since(UNIX_EPOCH)
         .map_err(|error| format!("无法创建配置事务标识: {error}"))?
         .as_nanos();
-    let staging = parent.join(format!(".keyloom-config-{}-{token}.tmp", std::process::id()));
+    let staging = parent.join(format!(
+        ".keyloom-config-{}-{token}.tmp",
+        std::process::id()
+    ));
     let arguments = vec![
         "-I".to_owned(),
         "-c".to_owned(),
@@ -245,8 +252,8 @@ where
     ];
 
     let result = (|| {
-        let exit_code = runner(python, &arguments)
-            .map_err(|_| "无法启动 Keyloom 私有运行时".to_owned())?;
+        let exit_code =
+            runner(python, &arguments).map_err(|_| "无法启动 Keyloom 私有运行时".to_owned())?;
         if exit_code != 0 {
             return Err(format!("AMKR 配置初始化失败（退出码 {exit_code}）"));
         }
@@ -357,9 +364,9 @@ mod tests {
     use std::fs;
 
     use super::{
-        detect_private_runtime, install_paths, previous_path,
-        initialize_config_with_runner, private_runtime_service_program_from_paths,
-        rollback_private_runtime_from_paths, runtime_installation_status_from_paths,
+        detect_private_runtime, initialize_config_with_runner, install_paths, previous_path,
+        private_runtime_service_program_from_paths, rollback_private_runtime_from_paths,
+        runtime_installation_status_from_paths,
     };
 
     fn temp_root(name: &str) -> std::path::PathBuf {
@@ -604,14 +611,16 @@ mod tests {
             assert!(arguments[2].contains("RouterConfig.load"));
             assert!(!arguments[2].contains("local_api_key"));
             let staging = std::path::Path::new(&arguments[3]);
-            fs::write(staging, br#"{"config_version":3,"local_api_key":"secret"}"#)
-                .unwrap();
+            fs::write(staging, br#"{"config_version":3,"local_api_key":"secret"}"#).unwrap();
             Ok(0)
         })
         .unwrap();
 
         assert!(config.is_file());
-        assert_eq!(fs::read_to_string(&config).unwrap(), r#"{"config_version":3,"local_api_key":"secret"}"#);
+        assert_eq!(
+            fs::read_to_string(&config).unwrap(),
+            r#"{"config_version":3,"local_api_key":"secret"}"#
+        );
         assert_eq!(fs::read_dir(config.parent().unwrap()).unwrap().count(), 1);
         fs::remove_dir_all(root).unwrap();
     }

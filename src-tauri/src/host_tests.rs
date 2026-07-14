@@ -24,8 +24,14 @@ fn discover_amkr_returns_connection_metadata_without_the_api_key() {
 
     assert_eq!(metadata.config_path, path.to_string_lossy());
     assert_eq!(metadata.base_url, "http://127.0.0.2:18900");
-    assert_eq!(metadata.metrics_db_path.as_deref(), Some("C:/amkr/metrics.sqlite3"));
-    assert_eq!(metadata.log_file_path.as_deref(), Some("C:/amkr/router.log"));
+    assert_eq!(
+        metadata.metrics_db_path.as_deref(),
+        Some("C:/amkr/metrics.sqlite3")
+    );
+    assert_eq!(
+        metadata.log_file_path.as_deref(),
+        Some("C:/amkr/router.log")
+    );
     assert!(metadata.auth_enabled);
 
     fs::remove_file(path).unwrap();
@@ -86,7 +92,10 @@ fn returns_a_safe_health_status_for_the_discovered_instance() {
     let path = std::env::temp_dir().join("keyloom-health-config.json");
     fs::write(
         &path,
-        format!(r#"{{"host":"127.0.0.1","port":{},"local_api_key":"secret"}}"#, address.port()),
+        format!(
+            r#"{{"host":"127.0.0.1","port":{},"local_api_key":"secret"}}"#,
+            address.port()
+        ),
     )
     .unwrap();
 
@@ -119,7 +128,10 @@ fn returns_metrics_for_the_discovered_instance() {
     let path = std::env::temp_dir().join("keyloom-metrics-config.json");
     fs::write(
         &path,
-        format!(r#"{{"host":"127.0.0.1","port":{},"local_api_key":"secret"}}"#, address.port()),
+        format!(
+            r#"{{"host":"127.0.0.1","port":{},"local_api_key":"secret"}}"#,
+            address.port()
+        ),
     )
     .unwrap();
 
@@ -168,11 +180,8 @@ fn runs_registered_task_actions_without_a_config_file() {
     let missing = std::env::temp_dir().join("keyloom-missing-service-config.json");
     let _ = fs::remove_file(&missing);
 
-    let results = crate::execute_amkr_service_from_paths(
-        ServiceAction::Start,
-        None,
-        &missing,
-        |command| {
+    let results =
+        crate::execute_amkr_service_from_paths(ServiceAction::Start, None, &missing, |command| {
             assert_eq!(command, ["schtasks", "/Run", "/TN", WINDOWS_TASK_NAME]);
             Ok(TaskCommandResult {
                 command: command.to_vec(),
@@ -180,9 +189,8 @@ fn runs_registered_task_actions_without_a_config_file() {
                 stdout: String::new(),
                 stderr: String::new(),
             })
-        },
-    )
-    .unwrap();
+        })
+        .unwrap();
 
     assert_eq!(results.len(), 1);
 }
@@ -192,7 +200,14 @@ fn reads_only_the_tail_of_the_discovered_amkr_log() {
     let log_path = std::env::temp_dir().join("keyloom-activity.log");
     let config_path = std::env::temp_dir().join("keyloom-activity-config.json");
     fs::write(&log_path, format!("{}\nlatest event", "x".repeat(70_000))).unwrap();
-    fs::write(&config_path, format!(r#"{{"log_file_path":"{}"}}"#, log_path.to_string_lossy().replace('\\', "\\\\"))).unwrap();
+    fs::write(
+        &config_path,
+        format!(
+            r#"{{"log_file_path":"{}"}}"#,
+            log_path.to_string_lossy().replace('\\', "\\\\")
+        ),
+    )
+    .unwrap();
 
     let tail = crate::read_amkr_log_tail_from_paths(Some(&config_path), &config_path).unwrap();
 

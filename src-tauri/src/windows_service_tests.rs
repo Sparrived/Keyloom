@@ -1,13 +1,18 @@
 use std::path::{Path, PathBuf};
 
-use crate::windows_service::{execute_task_commands, task_commands, task_commands_for_program, ServiceProgram, TaskCommandResult, ServiceAction, WINDOWS_TASK_NAME};
+use crate::windows_service::{
+    execute_task_commands, system_service_command, task_commands, task_commands_for_program,
+    ServiceAction, ServiceProgram, SystemServiceAction, TaskCommandResult, WINDOWS_TASK_NAME,
+};
 
 #[test]
 fn creates_a_limited_current_user_login_task_without_uac() {
     let commands = task_commands_for_program(
         ServiceAction::InstallUser,
         &ServiceProgram {
-            executable: PathBuf::from("C:/Users/test/AppData/Local/Programs/Keyloom/runtime/pythonw.exe"),
+            executable: PathBuf::from(
+                "C:/Users/test/AppData/Local/Programs/Keyloom/runtime/pythonw.exe",
+            ),
             arguments: vec!["-m".to_owned(), "auto_model_key_router.main".to_owned()],
         },
         Path::new("C:/Users/test/AppData/Local/AutoModelKeyRouter/router-config.json"),
@@ -33,6 +38,41 @@ fn creates_a_limited_current_user_login_task_without_uac() {
         .map(String::from)
         .collect::<Vec<_>>(),
     );
+}
+
+#[test]
+fn delegates_system_service_actions_to_amkr_uac_handling() {
+    let program = ServiceProgram {
+        executable: PathBuf::from(
+            "C:/Users/test/AppData/Local/Programs/Keyloom/runtime/python.exe",
+        ),
+        arguments: vec!["-m".to_owned(), "auto_model_key_router.main".to_owned()],
+    };
+    let config = Path::new("C:/Users/test/AppData/Local/AutoModelKeyRouter/router-config.json");
+
+    for (action, value) in [
+        (SystemServiceAction::Install, "install"),
+        (SystemServiceAction::Uninstall, "uninstall"),
+        (SystemServiceAction::Start, "start"),
+        (SystemServiceAction::Stop, "stop"),
+        (SystemServiceAction::Restart, "restart"),
+    ] {
+        assert_eq!(
+            system_service_command(action, &program, config),
+            vec![
+                "C:/Users/test/AppData/Local/Programs/Keyloom/runtime/python.exe",
+                "-m",
+                "auto_model_key_router.main",
+                "--config",
+                "C:/Users/test/AppData/Local/AutoModelKeyRouter/router-config.json",
+                "--service",
+                value,
+            ]
+            .into_iter()
+            .map(String::from)
+            .collect::<Vec<_>>(),
+        );
+    }
 }
 
 #[test]
@@ -66,10 +106,18 @@ fn uses_the_existing_task_for_start_stop_restart_status_and_uninstall() {
     );
     assert_eq!(
         task_commands(ServiceAction::Status, executable, config),
-        vec![vec!["schtasks", "/Query", "/TN", WINDOWS_TASK_NAME, "/V", "/FO", "LIST"]
-            .into_iter()
-            .map(String::from)
-            .collect::<Vec<_>>()],
+        vec![vec![
+            "schtasks",
+            "/Query",
+            "/TN",
+            WINDOWS_TASK_NAME,
+            "/V",
+            "/FO",
+            "LIST"
+        ]
+        .into_iter()
+        .map(String::from)
+        .collect::<Vec<_>>()],
     );
     assert_eq!(
         task_commands(ServiceAction::Uninstall, executable, config),
@@ -103,10 +151,16 @@ fn executes_restart_as_stop_then_start_and_returns_each_command_result() {
     )
     .unwrap();
 
-    assert_eq!(seen, task_commands(ServiceAction::Restart, Path::new("amkr.exe"), Path::new("C:/router-config.json")));
+    assert_eq!(
+        seen,
+        task_commands(
+            ServiceAction::Restart,
+            Path::new("amkr.exe"),
+            Path::new("C:/router-config.json")
+        )
+    );
     assert!(results.iter().all(|result| result.exit_code == 0));
 }
-
 
 #[test]
 fn rejects_nonzero_task_results_after_collecting_diagnostics() {
@@ -122,13 +176,24 @@ fn rejects_nonzero_task_results_after_collecting_diagnostics() {
                 command: command.to_vec(),
                 exit_code: if seen.len() == 1 { 1 } else { 0 },
                 stdout: String::new(),
-                stderr: if seen.len() == 1 { "Access is denied".to_owned() } else { String::new() },
+                stderr: if seen.len() == 1 {
+                    "Access is denied".to_owned()
+                } else {
+                    String::new()
+                },
             })
         },
     )
     .unwrap_err();
 
-    assert_eq!(seen, task_commands(ServiceAction::Restart, Path::new("amkr.exe"), Path::new("C:/router-config.json")));
+    assert_eq!(
+        seen,
+        task_commands(
+            ServiceAction::Restart,
+            Path::new("amkr.exe"),
+            Path::new("C:/router-config.json")
+        )
+    );
     assert!(error.contains("退出码 1"));
     assert!(error.contains("Access is denied"));
 }

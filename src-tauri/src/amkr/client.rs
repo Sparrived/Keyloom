@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::io::{Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::time::Duration;
@@ -45,6 +46,8 @@ where
 #[derive(Debug, Deserialize, Serialize)]
 pub struct AmkrHealth {
     pub status: String,
+    #[serde(default)]
+    pub version: Option<String>,
     pub local_auth_enabled: bool,
     #[serde(default)]
     pub models: Vec<String>,
@@ -93,6 +96,66 @@ pub struct AmkrUsageStats {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct AmkrMetrics {
     pub total: AmkrUsageStats,
+    #[serde(default)]
+    pub current_rpm: u64,
+    #[serde(default)]
+    pub current_tpm: u64,
+    #[serde(default)]
+    pub router_status: Option<String>,
+    #[serde(default)]
+    pub active_requests: u64,
+    #[serde(default)]
+    pub caller_types: BTreeMap<String, AmkrUsageStats>,
+    #[serde(default)]
+    pub models: BTreeMap<String, AmkrUsageStats>,
+    #[serde(default)]
+    pub keys: BTreeMap<String, BTreeMap<String, AmkrUsageStats>>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct AmkrSettings {
+    pub host: String,
+    pub port: u16,
+    pub request_timeout: f64,
+    pub stream_first_byte_timeout: f64,
+    pub stream_idle_timeout: f64,
+    pub max_retries: u32,
+    pub local_auth_enabled: bool,
+    pub local_api_key_fingerprint: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct AmkrSettingsResponse {
+    pub config_revision: String,
+    pub settings: AmkrSettings,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AmkrSettingsUpdate {
+    pub config_revision: String,
+    pub host: String,
+    pub port: u16,
+    pub request_timeout: f64,
+    pub stream_first_byte_timeout: f64,
+    pub stream_idle_timeout: f64,
+    pub max_retries: u32,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct AmkrLocalApiKeyResponse {
+    pub config_revision: String,
+    pub local_api_key: String,
+    pub local_api_key_fingerprint: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct AmkrUpdateCheck {
+    pub current_version: String,
+    pub latest_version: Option<String>,
+    pub release_url: Option<String>,
+    pub source: Option<String>,
+    pub update_available: bool,
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -118,6 +181,8 @@ pub struct AmkrProvider {
     pub keys: Vec<AmkrProviderKey>,
     #[serde(default)]
     pub pools: Vec<AmkrProviderPool>,
+    #[serde(default)]
+    pub routes: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -221,14 +286,20 @@ impl<'de> Deserialize<'de> for AmkrUnifiedModel {
 
         let raw = RawUnifiedModel::deserialize(deserializer)?;
         if let Some(default) = raw.default {
-            return Ok(Self { default, image: raw.image });
+            return Ok(Self {
+                default,
+                image: raw.image,
+            });
         }
         let model = raw
             .model
             .ok_or_else(|| serde::de::Error::custom("统一模型缺少 default 或 model"))?;
         Ok(Self {
             default: AmkrUnifiedPlan {
-                primary: AmkrUnifiedTarget { model, key: raw.key },
+                primary: AmkrUnifiedTarget {
+                    model,
+                    key: raw.key,
+                },
                 fallback: None,
             },
             image: raw.image_model.map(|model| AmkrUnifiedPlan {
@@ -303,6 +374,52 @@ pub fn get_health(connection: &AmkrConnection) -> Result<AmkrHealth, String> {
 
 pub fn get_metrics(connection: &AmkrConnection) -> Result<AmkrMetrics, String> {
     get_json(connection, "/metrics", "指标")
+}
+
+pub fn get_settings(connection: &AmkrConnection) -> Result<AmkrSettingsResponse, String> {
+    get_json(connection, "/api/settings", "设置")
+}
+
+pub fn update_settings(
+    connection: &AmkrConnection,
+    settings: &AmkrSettingsUpdate,
+) -> Result<AmkrSettingsResponse, String> {
+    request_json(
+        connection,
+        "PUT",
+        "/api/settings",
+        "更新设置",
+        Some(
+            serde_json::to_value(settings)
+                .map_err(|error| format!("无法序列化 AMKR 设置: {error}"))?,
+        ),
+        &[200],
+    )
+}
+
+pub fn regenerate_local_api_key(
+    connection: &AmkrConnection,
+    config_revision: &str,
+) -> Result<AmkrLocalApiKeyResponse, String> {
+    request_json(
+        connection,
+        "POST",
+        "/api/settings/local-api-key",
+        "重置本地鉴权",
+        Some(serde_json::json!({ "config_revision": config_revision })),
+        &[200],
+    )
+}
+
+pub fn check_update(connection: &AmkrConnection) -> Result<AmkrUpdateCheck, String> {
+    request_json(
+        connection,
+        "POST",
+        "/api/update/check",
+        "检查更新",
+        None,
+        &[200],
+    )
 }
 
 pub fn get_providers(connection: &AmkrConnection) -> Result<AmkrProvidersResponse, String> {
@@ -418,6 +535,7 @@ pub fn update_provider(
     provider_id: &str,
     id: &str,
     base_url: &str,
+    routes: BTreeMap<String, String>,
 ) -> Result<(), String> {
     request_empty(
         connection,
@@ -428,17 +546,43 @@ pub fn update_provider(
             "config_revision": config_revision,
             "id": id,
             "base_url": base_url,
+            "routes": routes,
         }),
         &[200],
     )
 }
 
-pub fn delete_provider(connection: &AmkrConnection, config_revision: &str, id: &str) -> Result<(), String> {
-    request_empty(connection, "DELETE", &format!("/api/providers/{}", encode_path_segment(id)), "删除供应商", serde_json::json!({ "config_revision": config_revision }), &[204])
+pub fn delete_provider(
+    connection: &AmkrConnection,
+    config_revision: &str,
+    id: &str,
+) -> Result<(), String> {
+    request_empty(
+        connection,
+        "DELETE",
+        &format!("/api/providers/{}", encode_path_segment(id)),
+        "删除供应商",
+        serde_json::json!({ "config_revision": config_revision }),
+        &[204],
+    )
 }
 
-pub fn create_provider_key(connection: &AmkrConnection, config_revision: &str, provider_id: &str, name: &str, api_key: &str, allow_visitor: bool) -> Result<(), String> {
-    request_empty(connection, "POST", &format!("/api/providers/{}/keys", encode_path_segment(provider_id)), "创建 Key", serde_json::json!({ "config_revision": config_revision, "name": name, "api_key": api_key, "allow_visitor": allow_visitor }), &[201])
+pub fn create_provider_key(
+    connection: &AmkrConnection,
+    config_revision: &str,
+    provider_id: &str,
+    name: &str,
+    api_key: &str,
+    allow_visitor: bool,
+) -> Result<(), String> {
+    request_empty(
+        connection,
+        "POST",
+        &format!("/api/providers/{}/keys", encode_path_segment(provider_id)),
+        "创建 Key",
+        serde_json::json!({ "config_revision": config_revision, "name": name, "api_key": api_key, "allow_visitor": allow_visitor }),
+        &[201],
+    )
 }
 
 pub fn update_provider_key(
@@ -494,8 +638,22 @@ pub fn delete_provider_key(
     )
 }
 
-pub fn create_pool(connection: &AmkrConnection, config_revision: &str, provider_id: &str, name: &str, keys: Vec<String>, models: Vec<String>) -> Result<(), String> {
-    request_empty(connection, "POST", &format!("/api/providers/{}/pools", encode_path_segment(provider_id)), "创建模型池", serde_json::json!({ "config_revision": config_revision, "name": name, "keys": keys, "models": models }), &[201])
+pub fn create_pool(
+    connection: &AmkrConnection,
+    config_revision: &str,
+    provider_id: &str,
+    name: &str,
+    keys: Vec<String>,
+    models: Vec<String>,
+) -> Result<(), String> {
+    request_empty(
+        connection,
+        "POST",
+        &format!("/api/providers/{}/pools", encode_path_segment(provider_id)),
+        "创建模型池",
+        serde_json::json!({ "config_revision": config_revision, "name": name, "keys": keys, "models": models }),
+        &[201],
+    )
 }
 
 pub fn update_pool(
@@ -570,8 +728,30 @@ pub fn create_route(
     )
 }
 
-pub fn export_config(connection: &AmkrConnection) -> Result<AmkrConfigExport, String> { request_json(connection, "POST", "/api/config/export", "导出配置", None, &[200]) }
-pub fn import_config(connection: &AmkrConnection, config_revision: &str, config: serde_json::Value) -> Result<AmkrConfigImportResult, String> { request_json(connection, "POST", "/api/config/import", "导入配置", Some(serde_json::json!({"config_revision": config_revision, "config": config})), &[200]) }
+pub fn export_config(connection: &AmkrConnection) -> Result<AmkrConfigExport, String> {
+    request_json(
+        connection,
+        "POST",
+        "/api/config/export",
+        "导出配置",
+        None,
+        &[200],
+    )
+}
+pub fn import_config(
+    connection: &AmkrConnection,
+    config_revision: &str,
+    config: serde_json::Value,
+) -> Result<AmkrConfigImportResult, String> {
+    request_json(
+        connection,
+        "POST",
+        "/api/config/import",
+        "导入配置",
+        Some(serde_json::json!({"config_revision": config_revision, "config": config})),
+        &[200],
+    )
+}
 
 pub fn probe_keys(
     connection: &AmkrConnection,
@@ -632,8 +812,19 @@ pub fn cancel_probe(connection: &AmkrConnection, probe_id: &str) -> Result<AmkrP
     )
 }
 
-pub fn delete_route(connection: &AmkrConnection, config_revision: &str, id: &str) -> Result<(), String> {
-    request_empty(connection, "DELETE", &format!("/api/routes/{}", encode_path_segment(id)), "删除模型路由", serde_json::json!({ "config_revision": config_revision }), &[204])
+pub fn delete_route(
+    connection: &AmkrConnection,
+    config_revision: &str,
+    id: &str,
+) -> Result<(), String> {
+    request_empty(
+        connection,
+        "DELETE",
+        &format!("/api/routes/{}", encode_path_segment(id)),
+        "删除模型路由",
+        serde_json::json!({ "config_revision": config_revision }),
+        &[204],
+    )
 }
 
 pub fn update_route(
@@ -684,8 +875,22 @@ fn get_json<T: DeserializeOwned>(
     request_json(connection, "GET", path, label, None, &[200])
 }
 
-fn request_empty(connection: &AmkrConnection, method: &str, path: &str, label: &str, payload: serde_json::Value, success_statuses: &[u16]) -> Result<(), String> {
-    let _: serde_json::Value = request_json(connection, method, path, label, Some(payload), success_statuses)?;
+fn request_empty(
+    connection: &AmkrConnection,
+    method: &str,
+    path: &str,
+    label: &str,
+    payload: serde_json::Value,
+    success_statuses: &[u16],
+) -> Result<(), String> {
+    let _: serde_json::Value = request_json(
+        connection,
+        method,
+        path,
+        label,
+        Some(payload),
+        success_statuses,
+    )?;
     Ok(())
 }
 
@@ -728,7 +933,12 @@ fn request_json<T: DeserializeOwned>(
         .map_err(|error| format!("无法序列化 AMKR {label} 请求: {error}"))?;
     let content_headers = body
         .as_ref()
-        .map(|value| format!("Content-Type: application/json\r\nContent-Length: {}\r\n", value.len()))
+        .map(|value| {
+            format!(
+                "Content-Type: application/json\r\nContent-Length: {}\r\n",
+                value.len()
+            )
+        })
         .unwrap_or_default();
     let request = format!(
         "{method} {path} HTTP/1.1\r\nHost: {authority}\r\n{authorization}{content_headers}Connection: close\r\n\r\n{}",
