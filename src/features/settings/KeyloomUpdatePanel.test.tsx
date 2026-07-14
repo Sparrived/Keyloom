@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import packageMetadata from "../../../package.json";
 import { KeyloomUpdatePanel } from "./KeyloomUpdatePanel";
 
 vi.mock("@tauri-apps/plugin-updater", () => ({ check: vi.fn() }));
@@ -13,7 +14,7 @@ const relaunchMock = vi.mocked(relaunch);
 
 function availableUpdate() {
   return {
-    currentVersion: "0.1.0",
+    currentVersion: packageMetadata.version,
     version: "0.2.0",
     body: "修复更新流程",
     close: vi.fn().mockResolvedValue(undefined),
@@ -41,7 +42,7 @@ describe("KeyloomUpdatePanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "检查 Keyloom 更新" }));
 
     expect(await screen.findByText("当前已是最新版本")).toBeInTheDocument();
-    expect(screen.getAllByText("0.1.0")).toHaveLength(2);
+    expect(screen.getAllByText(packageMetadata.version)).toHaveLength(2);
   });
 
   it("refreshes an update detected by the application shell", async () => {

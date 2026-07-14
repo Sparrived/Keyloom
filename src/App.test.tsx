@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import packageMetadata from "../package.json";
 import App from "./App";
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -68,7 +69,7 @@ describe("Keyloom application shell", () => {
     render(<App />);
 
     expect(await screen.findByText("AMKR v5.6.0")).toBeInTheDocument();
-    expect(screen.getByText("Keyloom v0.1.0")).toBeInTheDocument();
+    expect(screen.getByText(`Keyloom v${packageMetadata.version}`)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Keyloom" })).toHaveClass("brand-title");
   });
 

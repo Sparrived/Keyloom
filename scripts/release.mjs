@@ -16,11 +16,11 @@ const releaseType = valueAfter("--type");
 const requestedVersion = valueAfter("--version");
 
 const executable = (command) => process.platform === "win32" && ["npm", "npx"].includes(command) ? `${command}.cmd` : command;
-const run = (command, commandArgs, options = {}) => execFileSync(executable(command), commandArgs, {
+const run = (command, commandArgs, options = {}) => (execFileSync(executable(command), commandArgs, {
   cwd: root,
   encoding: "utf8",
   stdio: options.capture ? "pipe" : "inherit",
-}).trim();
+}) ?? "").trim();
 const readJson = (path) => JSON.parse(readFileSync(path, "utf8"));
 const writeJson = (path, value) => writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
 const parseVersion = (value) => {
