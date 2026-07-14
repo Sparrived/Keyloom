@@ -26,7 +26,7 @@ jobs:
   verify-windows:
     runs-on: windows-latest
     permissions:
-      contents: read
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -82,6 +82,8 @@ jobs:
           $wheel = $wheels[0].FullName
           python -m pip download --disable-pip-version-check --only-binary=:all: --dest $wheelhouse "$($wheel)[visitor]"
           if ($LASTEXITCODE -ne 0) { throw 'AMKR visitor wheelhouse download failed' }
+          python -m pip download --disable-pip-version-check --only-binary=:all: --dest $wheelhouse 'pip==25.0.1'
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned runtime updater download failed' }
           ./scripts/prepare-amkr-runtime.ps1 `
             -PythonEmbedArchive $archive `
             -PythonArchiveSha256 $env:PYTHON_EMBED_SHA256 `
@@ -101,9 +103,45 @@ jobs:
         shell: pwsh
         run: ./tests/installer-smoke.ps1 -RuntimeDirectory 'src-tauri/runtime-bundle/runtime' -InstallStatePath 'src-tauri/runtime-bundle/install-state.json'
 
-      - name: Build unsigned NSIS verification artifact
+      - name: Require signing certificate for tagged releases
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          KEYLOOM_WINDOWS_CERTIFICATE: ${{ secrets.KEYLOOM_WINDOWS_CERTIFICATE }}
+          KEYLOOM_WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.KEYLOOM_WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          if (-not $env:KEYLOOM_WINDOWS_CERTIFICATE -or -not $env:KEYLOOM_WINDOWS_CERTIFICATE_PASSWORD) {
+            throw 'Tagged releases require KEYLOOM_WINDOWS_CERTIFICATE and KEYLOOM_WINDOWS_CERTIFICATE_PASSWORD.'
+          }
+
+      - name: Import Windows signing certificate
+        id: signing
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          KEYLOOM_WINDOWS_CERTIFICATE: ${{ secrets.KEYLOOM_WINDOWS_CERTIFICATE }}
+          KEYLOOM_WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.KEYLOOM_WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          $certificatePath = Join-Path $env:RUNNER_TEMP 'keyloom-signing.pfx'
+          [IO.File]::WriteAllBytes($certificatePath, [Convert]::FromBase64String($env:KEYLOOM_WINDOWS_CERTIFICATE))
+          $password = ConvertTo-SecureString $env:KEYLOOM_WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+          $certificate = Import-PfxCertificate -FilePath $certificatePath -CertStoreLocation Cert:\CurrentUser\My -Password $password
+          if (-not $certificate.Thumbprint) { throw 'Windows signing certificate import failed.' }
+          "thumbprint=$($certificate.Thumbprint)" >> $env:GITHUB_OUTPUT
+
+      - name: Build NSIS release artifact
         if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
-        run: npx tauri build --bundles nsis --ci --no-sign
+        shell: pwsh
+        env:
+          CERTIFICATE_THUMBPRINT: ${{ steps.signing.outputs.thumbprint }}
+        run: |
+          if ($env:CERTIFICATE_THUMBPRINT) {
+            $config = @{ bundle = @{ windows = @{ certificateThumbprint = $env:CERTIFICATE_THUMBPRINT; digestAlgorithm = 'sha256'; timestampUrl = 'http://timestamp.digicert.com' } } } | ConvertTo-Json -Depth 5 -Compress
+            npx tauri build --bundles nsis --ci --config $config
+          } else {
+            npx tauri build --bundles nsis --ci --no-sign
+          }
+          if ($LASTEXITCODE -ne 0) { throw 'NSIS release build failed.' }
 
       - name: Verify packaged Windows subsystem
         if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
@@ -120,10 +158,34 @@ jobs:
           $hash = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  $($installer.Name)" | Set-Content "$($installer.FullName).sha256" -Encoding ascii
 
+      - name: Verify release signature and record smoke report
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        run: |
+          $installer = @(Get-ChildItem 'src-tauri/target/release/bundle/nsis/*-setup.exe')[0]
+          $signature = Get-AuthenticodeSignature $installer.FullName
+          if ('${{ startsWith(github.ref, 'refs/tags/v') }}' -eq 'true' -and $signature.Status -ne 'Valid') {
+            throw "Tagged installer signature is invalid: $($signature.StatusMessage)"
+          }
+          ./tests/installer-smoke.ps1 `
+            -RuntimeDirectory 'src-tauri/runtime-bundle/runtime' `
+            -InstallStatePath 'src-tauri/runtime-bundle/install-state.json' |
+            Out-File 'src-tauri/target/release/bundle/nsis/runtime-smoke.txt' -Encoding utf8
+
       - uses: actions/upload-artifact@v4
         if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
         with:
-          name: keyloom-windows-x64-unsigned
+          name: keyloom-windows-x64
           path: |
             src-tauri/target/release/bundle/nsis/*-setup.exe
             src-tauri/target/release/bundle/nsis/*.sha256
+            src-tauri/target/release/bundle/nsis/runtime-smoke.txt
+
+      - uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          generate_release_notes: true
+          files: |
+            src-tauri/target/release/bundle/nsis/*-setup.exe
+            src-tauri/target/release/bundle/nsis/*.sha256
+            src-tauri/target/release/bundle/nsis/runtime-smoke.txt

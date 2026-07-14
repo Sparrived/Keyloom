@@ -30,6 +30,17 @@ $workflow = Get-Content -LiteralPath (Join-Path $repoRoot '.github\workflows\rel
 if ($workflow -notmatch [Regex]::Escape('tests/release-version-contract.ps1')) {
     throw 'release workflow must run tests/release-version-contract.ps1.'
 }
+foreach ($required in @(
+    'KEYLOOM_WINDOWS_CERTIFICATE',
+    'Get-AuthenticodeSignature',
+    'softprops/action-gh-release@v2',
+    'generate_release_notes: true',
+    'runtime-smoke.txt'
+)) {
+    if ($workflow -notmatch [Regex]::Escape($required)) {
+        throw "release workflow is missing required signed-release behavior: $required"
+    }
+}
 
 [PSCustomObject]@{
     status = 'PASS'
