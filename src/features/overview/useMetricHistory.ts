@@ -2,6 +2,8 @@ import type { AmkrMetrics } from "../../api/amkr";
 
 export type MetricSnapshot = AmkrMetrics["total"] & {
   timestamp: string;
+  current_rpm: number | null;
+  current_tpm: number | null;
   cached_tokens: number | null;
   successes: number | null;
   failures: number | null;
@@ -17,6 +19,8 @@ export function appendMetricSnapshot(
   const snapshot: MetricSnapshot = {
     timestamp,
     ...metrics.total,
+    current_rpm: metrics.current_rpm ?? null,
+    current_tpm: metrics.current_tpm ?? null,
     cached_tokens: metrics.total.cached_tokens ?? null,
     successes: metrics.total.successes ?? null,
     failures: metrics.total.failures ?? null,

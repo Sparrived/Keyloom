@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { MetricSnapshot } from "./useMetricHistory";
 
-export type UsageMetric = "请求" | "Token" | "缓存";
+export type UsageMetric = "RPM" | "TPM" | "缓存率";
 
 type UsageChartProps = {
   history: readonly MetricSnapshot[];
@@ -9,7 +9,7 @@ type UsageChartProps = {
   onMetricChange?: (metric: UsageMetric) => void;
 };
 
-const metrics: UsageMetric[] = ["请求", "Token", "缓存"];
+const metrics: UsageMetric[] = ["RPM", "TPM", "缓存率"];
 
 function formatCount(value: number) {
   return new Intl.NumberFormat("zh-CN").format(value);
@@ -26,8 +26,13 @@ function formatTime(timestamp: string) {
   }).format(new Date(timestamp)).replaceAll("/", "-");
 }
 
-function formatPointTime(timestamp: string) {
-  return timestamp.slice(11, 16);
+function formatPointTime(timestamp: string, includeSeconds = true) {
+  return new Intl.DateTimeFormat("zh-CN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: includeSeconds ? "2-digit" : undefined,
+    hour12: false,
+  }).format(new Date(timestamp));
 }
 
 function formatDuration(value: number) {
@@ -43,10 +48,32 @@ function formatMetricValue(value: number | null) {
 }
 
 function valueFor(snapshot: MetricSnapshot, metric: UsageMetric) {
-  if (metric === "请求") {
-    return snapshot.requests;
+  if (metric === "RPM") {
+    return snapshot.current_rpm;
   }
-  return metric === "Token" ? snapshot.total_tokens : snapshot.cached_tokens ?? 0;
+  return metric === "TPM" ? snapshot.current_tpm : snapshot.cached_token_rate * 100;
+}
+
+function formatSeriesValue(value: number | null, metric: UsageMetric) {
+  if (value === null) return "暂不可用";
+  if (metric === "缓存率") return `${value.toFixed(1)}%`;
+  return `${formatCount(value)} ${metric === "RPM" ? "次/分" : "Token/分"}`;
+}
+
+function formatAxisValue(value: number, metric: UsageMetric) {
+  if (metric === "缓存率") return `${Math.round(value)}%`;
+  if (value >= 1_000_000) return `${Number((value / 1_000_000).toFixed(1))}M`;
+  if (value >= 1_000) return `${Number((value / 1_000).toFixed(1))}K`;
+  return formatCount(Math.round(value));
+}
+
+function niceMaximum(values: readonly number[], metric: UsageMetric) {
+  if (metric === "缓存率") return 100;
+  const maximum = Math.max(...values, 1);
+  const magnitude = 10 ** Math.floor(Math.log10(maximum));
+  const normalized = maximum / magnitude;
+  const interval = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+  return interval * magnitude;
 }
 
 export function UsageChart({ history, metric, onMetricChange }: UsageChartProps) {
@@ -60,68 +87,101 @@ export function UsageChart({ history, metric, onMetricChange }: UsageChartProps)
   }
 
   const values = history.map((snapshot) => valueFor(snapshot, metric));
-  const max = Math.max(...values, 1);
+  const numericValues = values.filter((value): value is number => value !== null);
+  const max = niceMaximum(numericValues, metric);
   const width = 640;
   const height = 160;
   const padding = 16;
   const points = values.map((value, index) => {
+    if (value === null) return null;
     const x = history.length === 1 ? width / 2 : padding + (index * (width - padding * 2)) / (history.length - 1);
     const y = height - padding - (value / max) * (height - padding * 2);
     return { x, y };
   });
-  const path = points.map(({ x, y }, index) => `${index === 0 ? "M" : "L"}${x} ${y}`).join(" ");
+  let previousPointExists = false;
+  const path = points.map((point) => {
+    if (!point) {
+      previousPointExists = false;
+      return "";
+    }
+    const command = previousPointExists ? "L" : "M";
+    previousPointExists = true;
+    return `${command}${point.x} ${point.y}`;
+  }).join(" ");
+  const currentValue = selectedSnapshot ? valueFor(selectedSnapshot, metric) : null;
+  const firstTimestamp = formatPointTime(history[0].timestamp, false);
+  const lastTimestamp = formatPointTime(history.at(-1)!.timestamp, false);
 
   return (
     <>
-      <div className="series-switcher" aria-label="趋势指标">
-        {metrics.map((series) => (
-          <button
-            aria-pressed={metric === series}
-            key={series}
-            type="button"
-            onClick={() => onMetricChange?.(series)}
-          >
-            {series}
-          </button>
-        ))}
-      </div>
-      <figure aria-label="用量趋势图" className="usage-chart">
-        <svg aria-label={`${metric}趋势`} role="img" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
-          <path className="usage-chart-grid" d={`M${padding} ${height - padding}H${width - padding}`} />
-          <path className="usage-chart-line" d={path} />
-          {points.map(({ x, y }, index) => <circle className={index === selectedIndex ? "is-selected" : undefined} cx={x} cy={y} key={history[index].timestamp} r={index === selectedIndex ? "5" : "3"} />)}
-        </svg>
-        <div aria-label="历史数据点" className="usage-chart-points">
-          {history.map((snapshot, index) => (
+      <div className="usage-chart-toolbar">
+        <div className="series-switcher" aria-label="趋势指标">
+          {metrics.map((series) => (
             <button
-              aria-label={formatPointTime(snapshot.timestamp)}
-              aria-description={`${formatTime(snapshot.timestamp)} ${metric} ${formatCount(valueFor(snapshot, metric))}`}
-              aria-pressed={index === selectedIndex}
-              key={snapshot.timestamp}
+              aria-pressed={metric === series}
+              key={series}
               type="button"
-              onClick={() => setSelectedIndex(index)}
-              onFocus={() => setSelectedIndex(index)}
-              onMouseEnter={() => setSelectedIndex(index)}
-            />
+              onClick={() => onMetricChange?.(series)}
+            >
+              {series}
+            </button>
           ))}
         </div>
-        <figcaption>每个数据点为采样时刻之前 60 分钟的汇总指标。</figcaption>
+        <p className="usage-chart-current"><span>所选时刻</span><strong>{formatSeriesValue(currentValue, metric)}</strong></p>
+      </div>
+      <figure aria-label="用量趋势图" className="usage-chart">
+        <div className="usage-chart-plot">
+          <div aria-hidden="true" className="usage-chart-y-axis">
+            <span>{formatAxisValue(max, metric)}</span>
+            <span>{formatAxisValue(max / 2, metric)}</span>
+            <span>{formatAxisValue(0, metric)}</span>
+          </div>
+          <div className="usage-chart-canvas">
+            <svg aria-label={`${metric}趋势`} role="img" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
+              <path className="usage-chart-grid" d={`M${padding} ${padding}H${width - padding} M${padding} ${height / 2}H${width - padding} M${padding} ${height - padding}H${width - padding}`} />
+              <path className="usage-chart-line" d={path} />
+              {points.map((point, index) => point ? <circle className={index === selectedIndex ? "is-selected" : undefined} cx={point.x} cy={point.y} key={history[index].timestamp} r={index === selectedIndex ? "5" : "3"} /> : null)}
+            </svg>
+            {numericValues.length === 0 ? <p className="usage-chart-unavailable">当前 AMKR 版本未提供 {metric} 指标。</p> : null}
+            <div aria-label="历史数据点" className="usage-chart-points">
+              {history.map((snapshot, index) => {
+                const value = valueFor(snapshot, metric);
+                return (
+                  <button
+                    aria-label={formatPointTime(snapshot.timestamp)}
+                    aria-description={`${formatTime(snapshot.timestamp)} ${metric} ${formatSeriesValue(value, metric)}`}
+                    aria-pressed={index === selectedIndex}
+                    key={snapshot.timestamp}
+                    type="button"
+                    onClick={() => setSelectedIndex(index)}
+                    onFocus={() => setSelectedIndex(index)}
+                    onMouseEnter={() => setSelectedIndex(index)}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        </div>
+        <div aria-hidden="true" className={`usage-chart-x-axis${history.length === 1 ? " is-single" : ""}`}><span>{firstTimestamp}</span>{history.length > 1 ? <span>{lastTimestamp}</span> : null}</div>
+        <figcaption>RPM、TPM 为过去 1 分钟的滚动速率；缓存率为最近 60 分钟汇总。</figcaption>
       </figure>
       {selectedSnapshot ? (
-        <aside aria-label="所选用量快照" className="usage-chart-detail" role="status">
-          <p>时间 {formatTime(selectedSnapshot.timestamp)}</p>
-          <p>请求 {formatCount(selectedSnapshot.requests)}</p>
-          <p>输入 Token {formatMetricValue(selectedSnapshot.prompt_tokens)}</p>
-          <p>输出 Token {formatMetricValue(selectedSnapshot.completion_tokens)}</p>
-          <p>总 Token {formatCount(selectedSnapshot.total_tokens)}</p>
-          <p>缓存 {formatMetricValue(selectedSnapshot.cached_tokens)}</p>
-          <p>成功率 {
+        <dl aria-label="所选用量快照" className="usage-chart-detail" role="status">
+          <div><dt>时间</dt><dd>{formatTime(selectedSnapshot.timestamp)}</dd></div>
+          <div><dt>RPM</dt><dd>{formatMetricValue(selectedSnapshot.current_rpm)}</dd></div>
+          <div><dt>TPM</dt><dd>{formatMetricValue(selectedSnapshot.current_tpm)}</dd></div>
+          <div><dt>近 60 分钟请求</dt><dd>{formatCount(selectedSnapshot.requests)}</dd></div>
+          <div><dt>输入 Token</dt><dd>{formatMetricValue(selectedSnapshot.prompt_tokens)}</dd></div>
+          <div><dt>输出 Token</dt><dd>{formatMetricValue(selectedSnapshot.completion_tokens)}</dd></div>
+          <div><dt>近 60 分钟 Token</dt><dd>{formatCount(selectedSnapshot.total_tokens)}</dd></div>
+          <div><dt>缓存命中率</dt><dd>{formatPercent(selectedSnapshot.cached_token_rate)}</dd></div>
+          <div><dt>成功率</dt><dd>{
             selectedSnapshot.successes === null || selectedSnapshot.failures === null || selectedSnapshot.successes + selectedSnapshot.failures === 0
               ? "暂不可用"
               : formatPercent(selectedSnapshot.successes / (selectedSnapshot.successes + selectedSnapshot.failures))
-          }</p>
-          <p>平均延迟 {formatDuration(selectedSnapshot.avg_duration_ms)}</p>
-        </aside>
+          }</dd></div>
+          <div><dt>平均延迟</dt><dd>{formatDuration(selectedSnapshot.avg_duration_ms)}</dd></div>
+        </dl>
       ) : null}
     </>
   );

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   controlAmkr,
@@ -59,13 +59,11 @@ type AppProps = {
 
 export default function App({ now = () => new Date().toISOString() }: AppProps) {
   const [activePage, setActivePage] = useState<NavigationItem>("概览");
-  const activePageRef = useRef<NavigationItem>(activePage);
-  activePageRef.current = activePage;
   const [selectedConfigPath, setSelectedConfigPath] = useState<string | null>(() => localStorage.getItem(configPathStorageKey));
   const [closeBehavior, setCloseBehavior] = useState<CloseBehavior>(readCloseBehavior);
   const [closePromptOpen, setClosePromptOpen] = useState(false);
   const [rememberCloseChoice, setRememberCloseChoice] = useState(false);
-  const [trendMetric, setTrendMetric] = useState<UsageMetric>("请求");
+  const [trendMetric, setTrendMetric] = useState<UsageMetric>("RPM");
   const [metadata, setMetadata] = useState<AmkrMetadata | null>(null);
   const [health, setHealth] = useState<AmkrHealth | null>(null);
   const [metrics, setMetrics] = useState<AmkrMetrics | null>(null);
@@ -133,9 +131,7 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
         await refreshHealth();
         await refreshMetrics();
         healthPoll = window.setInterval(() => void refreshHealth(), 5_000);
-        metricsPoll = window.setInterval(() => {
-          if (activePageRef.current !== "活动") void refreshMetrics();
-        }, 15_000);
+        metricsPoll = window.setInterval(() => void refreshMetrics(), 15_000);
       } catch (error: unknown) {
         if (!cancelled) {
           setMetadata(null);
@@ -180,7 +176,6 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
         if (!cancelled && metricsResult?.total) {
           setMetrics(metricsResult);
           setMetricsError(null);
-          setMetricHistory((history) => appendMetricSnapshot(history, metricsResult, now()));
         }
       } catch (error: unknown) {
         if (!cancelled) setMetricsError(error instanceof Error ? error.message : String(error));
@@ -435,7 +430,7 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
             </div>
             <section className="trend-panel" aria-labelledby="trend-heading">
               <div className="card-heading">
-                <div><h3 id="trend-heading">用量趋势</h3><span>最近 60 分钟</span></div>
+                <div><h3 id="trend-heading">实时用量</h3><span>本次运行 · 每 15 秒采样</span></div>
               </div>
               <UsageChart history={metricHistory} metric={trendMetric} onMetricChange={setTrendMetric} />
             </section>

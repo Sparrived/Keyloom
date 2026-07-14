@@ -509,6 +509,8 @@ describe("Keyloom application shell", () => {
         },
       })
       .mockResolvedValueOnce({
+        current_rpm: 23,
+        current_tpm: 45_000,
         total: {
           requests: 1428,
           successes: 1400,
@@ -532,12 +534,13 @@ describe("Keyloom application shell", () => {
     expect(screen.getAllByText("1,428").length).toBeGreaterThan(0);
     expect(screen.getByText("2.84M")).toBeInTheDocument();
     expect(screen.getByText("68%")).toBeInTheDocument();
-    expect(screen.getByText("1.2s")).toBeInTheDocument();
+    expect(screen.getAllByText("1.2s")).toHaveLength(2);
     expect(screen.getByRole("button", { name: "打开服务" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "请求" })).toBeInTheDocument();
-    expect(screen.getByLabelText("所选用量快照")).toHaveTextContent("输入 Token 1,840,000");
-    expect(screen.getByLabelText("所选用量快照")).toHaveTextContent("输出 Token 1,000,000");
-    expect(screen.getByLabelText("所选用量快照")).toHaveTextContent("成功率 98.0%");
+    expect(screen.getByRole("button", { name: "RPM" })).toBeInTheDocument();
+    expect(screen.getByText("本次运行 · 每 15 秒采样")).toBeInTheDocument();
+    expect(screen.getByLabelText("所选用量快照")).toHaveTextContent(/输入 Token\s*1,840,000/);
+    expect(screen.getByLabelText("所选用量快照")).toHaveTextContent(/输出 Token\s*1,000,000/);
+    expect(screen.getByLabelText("所选用量快照")).toHaveTextContent(/成功率\s*98.0%/);
     expect(screen.getByText("1.25M tokens")).toBeInTheDocument();
     expect(invokeMock).toHaveBeenCalledWith("get_amkr_metrics", { configPath: null });
   });
@@ -653,11 +656,11 @@ describe("Keyloom application shell", () => {
   it("selects a usage trend metric", async () => {
     render(<App />);
 
-    await screen.findByRole("button", { name: "请求" });
-    fireEvent.click(screen.getByRole("button", { name: "Token" }));
+    await screen.findByRole("button", { name: "RPM" });
+    fireEvent.click(screen.getByRole("button", { name: "TPM" }));
 
-    expect(screen.getByRole("button", { name: "Token" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: "请求" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "TPM" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "RPM" })).toHaveAttribute("aria-pressed", "false");
   });
 
   it("refreshes the service health every five seconds after discovery", async () => {
@@ -688,10 +691,11 @@ describe("Keyloom application shell", () => {
     vi.useRealTimers();
   });
 
-  it("refreshes metrics every two seconds only while the activity page is open", async () => {
+  it("keeps activity refreshes out of the 15-second trend history", async () => {
     vi.useFakeTimers();
     invokeMock.mockReset();
     let metricReads = 0;
+    const now = vi.fn(() => new Date(Date.now()).toISOString());
     invokeMock.mockImplementation(async (command) => {
       if (command === "discover_amkr") return {
         config_path: "C:/config.json",
@@ -703,27 +707,28 @@ describe("Keyloom application shell", () => {
       if (command === "get_amkr_health") return { status: "ok", local_auth_enabled: true };
       if (command === "get_amkr_metrics") {
         metricReads += 1;
-        return { total: { requests: metricReads, total_tokens: 0, cached_token_rate: 0, avg_duration_ms: 0 } };
+        return { current_rpm: metricReads, current_tpm: metricReads * 100, total: { requests: metricReads, total_tokens: 0, cached_token_rate: 0, avg_duration_ms: 0 } };
       }
       if (command === "read_amkr_log_tail") return "";
       return undefined;
     });
 
-    render(<App />);
+    render(<App now={now} />);
     await act(async () => { await vi.advanceTimersByTimeAsync(1); });
     expect(metricReads).toBe(1);
+    expect(now).toHaveBeenCalledTimes(1);
 
     fireEvent.click(screen.getByRole("button", { name: "活动" }));
     await act(async () => { await vi.advanceTimersByTimeAsync(1); });
     expect(metricReads).toBe(2);
     await act(async () => { await vi.advanceTimersByTimeAsync(4_001); });
     expect(metricReads).toBe(4);
+    expect(now).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("1 个快照")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "概览" }));
-    await act(async () => { await vi.advanceTimersByTimeAsync(4_001); });
-    expect(metricReads).toBe(4);
-    await act(async () => { await vi.advanceTimersByTimeAsync(7_001); });
-    expect(metricReads).toBe(5);
+    await act(async () => { await vi.advanceTimersByTimeAsync(11_001); });
+    expect(now).toHaveBeenCalledTimes(2);
+    expect(screen.getByText("2 个快照")).toBeInTheDocument();
   });
 
   it("shows a disconnected state when a health refresh fails", async () => {

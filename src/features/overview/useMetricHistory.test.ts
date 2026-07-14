@@ -3,6 +3,8 @@ import type { AmkrMetrics } from "../../api/amkr";
 import { appendMetricSnapshot } from "./useMetricHistory";
 
 const metrics: AmkrMetrics = {
+  current_rpm: 7,
+  current_tpm: 840,
   total: {
     requests: 12,
     successes: 11,
@@ -21,6 +23,8 @@ describe("appendMetricSnapshot", () => {
     expect(appendMetricSnapshot([], metrics, "2026-07-12T10:00:00.000Z")).toEqual([
       {
         timestamp: "2026-07-12T10:00:00.000Z",
+        current_rpm: 7,
+        current_tpm: 840,
         requests: 12,
         successes: 11,
         failures: 1,
@@ -37,6 +41,8 @@ describe("appendMetricSnapshot", () => {
   it("keeps the most recent 240 snapshots", () => {
     const history = Array.from({ length: 240 }, (_, index) => ({
       timestamp: `2026-07-12T10:${String(index).padStart(2, "0")}:00.000Z`,
+      current_rpm: index,
+      current_tpm: index * 100,
       requests: index,
       successes: index,
       failures: 0,
@@ -69,6 +75,8 @@ describe("appendMetricSnapshot", () => {
     const history = [
       {
         timestamp: "2026-07-12T09:00:00.000Z",
+        current_rpm: 1,
+        current_tpm: 100,
         requests: 1,
         successes: 1,
         failures: 0,
@@ -95,6 +103,8 @@ describe("appendMetricSnapshot", () => {
     };
 
     expect(appendMetricSnapshot([], legacy, "2026-07-12T10:00:00.000Z")[0]).toMatchObject({
+      current_rpm: null,
+      current_tpm: null,
       cached_tokens: null,
       successes: null,
       failures: null,

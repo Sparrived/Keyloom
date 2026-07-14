@@ -6,7 +6,7 @@ test("discovers an existing AMKR instance and renders live metrics", async ({ pa
   await page.goto("/");
 
   await expect(page.getByRole("heading", { name: "概览" })).toBeVisible();
-  await expect(page.getByText("1,284", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("数据总览").getByText("1,284", { exact: true })).toBeVisible();
   await expect(page.getByText("1.04M")).toBeVisible();
   await expect(page.getByText("服务运行中").first()).toBeVisible();
 });
