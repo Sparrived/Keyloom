@@ -1208,8 +1208,8 @@ button {
 .danger-button { padding: 0.35rem 0.55rem; color: #b42318; background: transparent; border: 1px solid #f1c0bc; border-radius: 5px; cursor: pointer; }
 .secondary-button { padding: 0.35rem 0.55rem; color: #1d1d1f; background: #fff; border: 1px solid #b9b9c0; border-radius: 5px; cursor: pointer; }
 .editor-form { padding-top: 0.75rem; border-top: 1px solid #e5e5e8; }
-.editor-help { flex: 1 1 100%; margin: 0; color: #6e6e73; font-size: 0.75rem; }
-.pool-model-selection { display: flex; flex: 1 1 100%; flex-wrap: wrap; gap: 0.35rem; }
+.editor-help { grid-column: 1 / -1; margin: 0; color: #6e6e73; font-size: 0.75rem; }
+.pool-model-selection { display: flex; grid-column: 1 / -1; flex-wrap: wrap; gap: 0.35rem; }
 .pool-model-selection span { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.2rem 0.4rem; background: #f0f0f2; border-radius: 4px; font-size: 0.75rem; }
 .pool-model-selection button { min-height: 0; padding: 0; color: #6e6e73; background: transparent; border: 0; }
 
