@@ -44,6 +44,16 @@ describe("KeyloomUpdatePanel", () => {
     expect(screen.getAllByText("0.1.0")).toHaveLength(2);
   });
 
+  it("refreshes an update detected by the application shell", async () => {
+    checkMock.mockResolvedValue(availableUpdate() as never);
+
+    render(<KeyloomUpdatePanel detectedVersion="0.2.0" />);
+
+    await waitFor(() => expect(checkMock).toHaveBeenCalledOnce());
+    expect(screen.getByText("发现新版本")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "下载并安装" })).toBeInTheDocument();
+  });
+
   it("downloads, installs, and relaunches an available update", async () => {
     const update = availableUpdate();
     checkMock.mockResolvedValue(update as never);

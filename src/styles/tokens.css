@@ -197,15 +197,14 @@ button {
 .brand-title {
   position: relative;
   width: fit-content;
-  background: linear-gradient(90deg, #007aff 0%, #34c759 20%, #ffcc00 40%, #ff375f 60%, #af52de 80%, #007aff 100%);
+  background: linear-gradient(90deg, #007aff 0%, #34c759 50%, #007aff 100%);
   background-size: 200% 100%;
   background-position: 0% 50%;
   background-clip: text;
   -webkit-background-clip: text;
   color: transparent;
   -webkit-text-fill-color: transparent;
-  filter: hue-rotate(0deg);
-  animation: brand-gradient-shift 3s linear infinite;
+  animation: brand-gradient-shift 4s ease-in-out infinite;
 }
 
 .brand-title::before,
@@ -233,19 +232,8 @@ button {
 }
 
 @keyframes brand-gradient-shift {
-  from {
-    background-position: 0% 50%;
-    filter: hue-rotate(0deg);
-  }
-  to {
-    background-position: 200% 50%;
-    filter: hue-rotate(360deg);
-  }
-}
-
-.brand-block span {
-  color: #6e6e73;
-  font-size: 0.75rem;
+  from { background-position: 0% 50%; }
+  to { background-position: 200% 50%; }
 }
 
 .sidebar h1,
@@ -280,6 +268,25 @@ button {
   background: #ffffff;
 }
 
+.sidebar .brand-version {
+  width: fit-content;
+  padding: 0;
+  color: #6e6e73;
+  background: transparent;
+  border-radius: 2px;
+  font-size: 0.75rem;
+}
+
+.sidebar .brand-version:hover,
+.sidebar .brand-version:focus-visible {
+  background: transparent;
+}
+
+.sidebar .brand-version.has-update {
+  color: #b56a00;
+  font-weight: 600;
+}
+
 .sidebar-service {
   display: grid;
   gap: 0.35rem;
@@ -287,7 +294,22 @@ button {
 }
 
 .status-dot {
+  display: inline-block;
   margin-right: 0.35rem;
+}
+
+.status-dot.status-good {
+  animation: status-dot-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes status-dot-pulse {
+  0%, 100% { opacity: 0.55; transform: scale(0.82); text-shadow: 0 0 0 currentColor; }
+  50% { opacity: 1; transform: scale(1); text-shadow: 0 0 0.35rem currentColor; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-title,
+  .status-dot.status-good { animation: none; }
 }
 
 .status-good { color: #248a3d; }
@@ -499,15 +521,42 @@ button {
   color: #1d1d1f;
 }
 
+.service-page {
+  width: min(100%, 48rem);
+  margin-inline: auto;
+}
+
+.service-page > .page-header {
+  display: grid;
+  gap: 1rem;
+}
+
+.service-page > .page-header h2 {
+  white-space: nowrap;
+}
+
+.service-page > .page-header p {
+  margin: 0.3rem 0 0;
+}
+
+.service-page > .page-header > .service-controls {
+  display: grid;
+  grid-template-columns: repeat(3, max-content);
+  justify-content: start;
+}
+
 .connection-summary {
   display: grid;
-  gap: 0.75rem;
-  max-width: 32rem;
+  gap: 0.65rem;
+  width: 100%;
+  max-width: 44rem;
+  margin: 1.25rem 0 0;
 }
 
 .connection-summary div {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 5rem minmax(0, 1fr);
+  align-items: start;
   gap: 1rem;
   padding: 0.75rem;
   border: 1px solid #d5d5da;
@@ -516,9 +565,11 @@ button {
 
 .connection-summary dt {
   color: #6e6e73;
+  white-space: nowrap;
 }
 
 .connection-summary dd {
+  min-width: 0;
   margin: 0;
   overflow-wrap: anywhere;
   text-align: right;
@@ -538,6 +589,7 @@ button {
   border: 1px solid #0067d6;
   border-radius: 6px;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .service-controls button:disabled {
@@ -677,16 +729,32 @@ button {
 .runtime-panel .settings-list { margin-top: 0.75rem; }
 .runtime-panel button { padding: 0.45rem 0.7rem; color: #1d1d1f; background: #fff; border: 1px solid #b9b9c0; border-radius: 5px; cursor: pointer; }
 .runtime-panel button:disabled { cursor: wait; opacity: 0.55; }
-.application-setting { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-top: 0.75rem; color: #6e6e73; }
+.settings-page { width: min(100%, 64rem); margin-inline: auto; }
+.settings-page .page-header p { margin: 0.3rem 0 0; }
+.settings-page .runtime-panel,
+.settings-page .transfer-panel { margin-top: 0.75rem; padding: 0.9rem; }
+.settings-page .settings-list { gap: 0; margin-top: 0.65rem; border-top: 1px solid #e5e5e8; }
+.settings-page .settings-list > div { display: grid; grid-template-columns: minmax(7rem, 30%) minmax(0, 1fr); align-items: center; gap: 1rem; padding: 0.65rem 0; border: 0; border-bottom: 1px solid #e5e5e8; border-radius: 0; }
+.settings-page .settings-list dd { min-width: 0; }
+.settings-page .runtime-panel > button { display: block; margin: 0.75rem 0 0 auto; }
+.settings-form { display: grid !important; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: 0.75rem; margin-top: 0.75rem; }
+.settings-form label,
+.settings-form input { width: 100%; min-width: 0; }
+.settings-form > button { grid-column: 1 / -1; justify-self: end; }
+.settings-page .settings-config-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 0.75rem; margin-top: 0.75rem; }
+.settings-page .settings-config-form label,
+.settings-page .settings-config-form input { width: 100%; min-width: 0; }
+.application-setting { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 1rem; margin: 0; padding: 0.65rem 0; color: #6e6e73; border-top: 1px solid #e5e5e8; }
+.card-heading + .application-setting { margin-top: 0.65rem; }
 .application-setting select { min-height: 2.25rem; padding: 0.4rem 0.5rem; color: #1d1d1f; background: #fff; border: 1px solid #b9b9c0; border-radius: 5px; font: inherit; }
 .application-setting input[type="checkbox"] { width: 1.1rem; height: 1.1rem; margin: 0; accent-color: #007aff; }
 .update-notes { margin: 0.75rem 0; color: #6e6e73; white-space: pre-wrap; }
 .update-progress { display: grid; gap: 0.35rem; margin: 0.75rem 0; color: #6e6e73; font-size: 0.8125rem; }
 .update-progress progress { width: 100%; accent-color: #007aff; }
-.local-key-row, .generated-key { display: flex; align-items: end; justify-content: space-between; gap: 0.75rem; margin-top: 0.9rem; padding-top: 0.9rem; border-top: 1px solid #e5e5e8; }
+.local-key-row, .generated-key { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 0.75rem; margin-top: 0.9rem; padding-top: 0.9rem; border-top: 1px solid #e5e5e8; }
 .local-key-row div, .generated-key label { display: grid; gap: 0.2rem; }
 .local-key-row span, .generated-key label { color: #6e6e73; font-size: 0.8125rem; }
-.generated-key { justify-content: flex-start; }
+.generated-key { justify-content: initial; }
 .generated-key input { min-width: min(32rem, 65vw); padding: 0.45rem 0.55rem; color: #1d1d1f; background: #f5f5f7; border: 1px solid #b9b9c0; border-radius: 5px; font: 0.8125rem/1.4 Consolas, monospace; }
 .transfer-panel textarea { width: 100%; min-height: 12rem; margin-top: 0.75rem; padding: 0.75rem; resize: vertical; color: #1d1d1f; background: #f5f5f7; border: 1px solid #b9b9c0; border-radius: 5px; font: 0.75rem/1.5 Consolas, monospace; }
 .transfer-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-top: 0.75rem; }
@@ -1422,7 +1490,9 @@ textarea:focus-visible {
   .route-item .editor-form { grid-template-columns: 1fr; }
   .route-target-row { grid-template-columns: 1fr; }
   .route-rules-heading { flex-direction: column; }
-  .application-setting { align-items: stretch; flex-direction: column; }
+  .application-setting,
+  .settings-page .settings-config-form,
+  .settings-form { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 900px) {
@@ -1437,6 +1507,23 @@ textarea:focus-visible {
 }
 
 @media (max-width: 560px) {
+  .service-page > .page-header > .service-controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .service-page > .page-header > .service-controls button {
+    width: 100%;
+  }
+
+  .service-page .connection-summary div {
+    grid-template-columns: 1fr;
+    gap: 0.25rem;
+  }
+
+  .service-page .connection-summary dd {
+    text-align: left;
+  }
+
   .provider-create {
     grid-template-columns: 1fr;
   }
@@ -1461,7 +1548,7 @@ textarea:focus-visible {
   .sidebar button:hover,
   .sidebar button:focus-visible,
   .sidebar button[aria-current="page"] { background: #3a3a3c; }
-  .brand-block span,
+  .brand-version:not(.has-update),
   .overview-header p,
   .overview-card p,
   .card-heading span,
@@ -1535,6 +1622,9 @@ textarea:focus-visible {
   .provider-item .inline-form { background: #2c2c2e; }
   .provider-resource,
   .provider-item .provider-row { border-color: #3a3a3c; }
+  .settings-page .settings-list,
+  .settings-page .settings-list > div,
+  .application-setting { border-color: #3a3a3c; }
   .provider-section-heading > .secondary-button { color: #0a84ff; background: transparent; border-color: transparent; }
   .provider-section-heading > .secondary-button:hover { background: #3a3a3c; }
   .activity-panel,
@@ -1590,6 +1680,9 @@ textarea:focus-visible {
   .status-bad,
   .service-action-error { color: #ff6961; }
   .status-muted { color: #aeaeb2; }
+  .sidebar .brand-version.has-update { color: #ffd60a; }
+  .sidebar .brand-version:hover,
+  .sidebar .brand-version:focus-visible { background: transparent; }
   .log-line-info { color: #64d2ff; }
   .log-line-warning { color: #ffd60a; }
   .log-line-error { color: #ff6961; }

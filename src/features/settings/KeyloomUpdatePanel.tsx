@@ -1,21 +1,24 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check, type DownloadEvent, type Update } from "@tauri-apps/plugin-updater";
 import packageMetadata from "../../../package.json";
 
 type UpdatePhase = "idle" | "checking" | "downloading" | "installing" | "restarting";
 
-export function KeyloomUpdatePanel() {
+export function KeyloomUpdatePanel({ detectedVersion = null }: { detectedVersion?: string | null }) {
   const [update, setUpdate] = useState<Update | null>(null);
   const [checked, setChecked] = useState(false);
   const [phase, setPhase] = useState<UpdatePhase>("idle");
   const [downloaded, setDownloaded] = useState(0);
   const [downloadSize, setDownloadSize] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const checkingRef = useRef(false);
 
   useEffect(() => () => { void update?.close(); }, [update]);
 
   const checkForUpdate = async () => {
+    if (checkingRef.current) return;
+    checkingRef.current = true;
     setPhase("checking");
     setError(null);
     setDownloaded(0);
@@ -27,9 +30,14 @@ export function KeyloomUpdatePanel() {
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
+      checkingRef.current = false;
       setPhase("idle");
     }
   };
+
+  useEffect(() => {
+    if (detectedVersion) void checkForUpdate();
+  }, [detectedVersion]);
 
   const handleDownload = (event: DownloadEvent) => {
     if (event.event === "Started") {
@@ -58,16 +66,17 @@ export function KeyloomUpdatePanel() {
 
   const busy = phase !== "idle";
   const progress = downloadSize ? Math.min(100, Math.round((downloaded / downloadSize) * 100)) : null;
+  const availableVersion = update?.version ?? detectedVersion;
 
-  return <section className="runtime-panel" aria-labelledby="keyloom-update-heading">
+  return <section className="runtime-panel" id="keyloom-update-panel" aria-labelledby="keyloom-update-heading">
     <div className="card-heading">
       <h3 id="keyloom-update-heading">Keyloom 更新</h3>
       <button type="button" disabled={busy} onClick={() => void checkForUpdate()}>{phase === "checking" ? "正在检查" : "检查 Keyloom 更新"}</button>
     </div>
     <dl className="settings-list">
       <div><dt>当前版本</dt><dd>{packageMetadata.version}</dd></div>
-      <div><dt>最新版本</dt><dd className={update ? "status-warn" : checked ? "status-good" : "status-muted"}>{update?.version ?? (checked ? packageMetadata.version : "尚未检查")}</dd></div>
-      <div><dt>状态</dt><dd>{update ? "发现新版本" : checked ? "当前已是最新版本" : "等待检查"}</dd></div>
+      <div><dt>最新版本</dt><dd className={availableVersion ? "status-warn" : checked ? "status-good" : "status-muted"}>{availableVersion ?? (checked ? packageMetadata.version : "尚未检查")}</dd></div>
+      <div><dt>状态</dt><dd>{availableVersion ? "发现新版本" : checked ? "当前已是最新版本" : "等待检查"}</dd></div>
     </dl>
     {update?.body ? <p className="update-notes">{update.body}</p> : null}
     {phase === "downloading" || phase === "installing" ? <div className="update-progress" role="status">

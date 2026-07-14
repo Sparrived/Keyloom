@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { check as checkKeyloomUpdate } from "@tauri-apps/plugin-updater";
 import packageMetadata from "../package.json";
 import {
+  checkAmkrUpdate,
   controlAmkr,
   deleteAmkrUnifiedModel,
   discoverAmkr,
@@ -21,6 +23,7 @@ import {
   type AmkrServiceCommandResult,
   type AmkrServiceAction,
   type AmkrUnifiedModel,
+  type AmkrUpdateCheck,
   type RuntimeInstallationStatus,
 } from "./api/amkr";
 import { UsageChart, type UsageMetric } from "./features/overview/UsageChart";
@@ -92,8 +95,12 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
   const [unifiedModelAction, setUnifiedModelAction] = useState(false);
   const [unifiedModelError, setUnifiedModelError] = useState<string | null>(null);
   const [unifiedModelPromptOpen, setUnifiedModelPromptOpen] = useState(false);
+  const [amkrUpdateCheck, setAmkrUpdateCheck] = useState<AmkrUpdateCheck | null>(null);
+  const [keyloomUpdateVersion, setKeyloomUpdateVersion] = useState<string | null>(null);
+  const [settingsUpdateTarget, setSettingsUpdateTarget] = useState<"amkr" | "keyloom" | null>(null);
   const sidebarDragStart = useRef<{ x: number; y: number } | null>(null);
   const widgetStartupRequested = useRef(false);
+  const versionCheckRunning = useRef(false);
   const { copyToast, showCopyToast } = useCopyToast();
 
   useEffect(() => {
@@ -213,6 +220,35 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
   }, [selectedConfigPath]);
 
   useEffect(() => {
+    if (!metadata && !discoveryError) return;
+    let cancelled = false;
+    const detectVersionUpdates = async () => {
+      if (versionCheckRunning.current) return;
+      versionCheckRunning.current = true;
+      const [amkrResult, keyloomResult] = await Promise.allSettled([
+        checkAmkrUpdate(selectedConfigPath),
+        checkKeyloomUpdate({ timeout: 15_000 }).then(async (update) => {
+          const version = update?.version ?? null;
+          if (update) await update.close().catch(() => undefined);
+          return version;
+        }),
+      ]);
+      if (!cancelled) {
+        if (amkrResult.status === "fulfilled" && amkrResult.value) setAmkrUpdateCheck(amkrResult.value);
+        if (keyloomResult.status === "fulfilled") setKeyloomUpdateVersion(keyloomResult.value);
+      }
+      versionCheckRunning.current = false;
+    };
+    const handleFocus = () => void detectVersionUpdates();
+    void detectVersionUpdates();
+    window.addEventListener("focus", handleFocus);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", handleFocus);
+    };
+  }, [selectedConfigPath, metadata?.config_path, discoveryError]);
+
+  useEffect(() => {
     if (activePage !== "活动" || !metadata) return;
     let cancelled = false;
     const refreshMetrics = async () => {
@@ -262,6 +298,11 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
     ? `${unifiedTarget.key ? `固定 Key · ${unifiedTarget.key}` : "自动路由"} · ${unifiedTargetCount} 个目标`
     : "尚未配置统一路由";
   const latestSnapshot = metricHistory.at(-1);
+
+  const openUpdateSettings = (target: "amkr" | "keyloom") => {
+    setSettingsUpdateTarget(target);
+    setActivePage("设置");
+  };
 
   async function waitForServiceHealth(configPath = selectedConfigPath) {
     let lastError: unknown = new Error("服务未在预期时间内就绪");
@@ -506,8 +547,8 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
         </div>
         <div className="brand-block" data-tauri-drag-region>
           <h1 className="brand-title">Keyloom</h1>
-          <span>AMKR v{health?.version ?? "—"}</span>
-          <span>Keyloom v{packageMetadata.version}</span>
+          <button aria-label="打开 AMKR 更新" className={`brand-version ${amkrUpdateCheck?.update_available ? "has-update" : ""}`} title="打开 AMKR 更新" type="button" onClick={() => openUpdateSettings("amkr")}>AMKR v{health?.version ?? "—"}</button>
+          <button aria-label="打开 Keyloom 更新" className={`brand-version ${keyloomUpdateVersion ? "has-update" : ""}`} title="打开 Keyloom 更新" type="button" onClick={() => openUpdateSettings("keyloom")}>Keyloom v{packageMetadata.version}</button>
         </div>
         <nav>
           {primaryNavigation.map((label) => (
@@ -515,7 +556,7 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
               aria-current={activePage === label ? "page" : undefined}
               key={label}
               type="button"
-              onClick={() => setActivePage(label)}
+              onClick={() => { setSettingsUpdateTarget(null); setActivePage(label); }}
             >
               {label}
             </button>
@@ -671,7 +712,7 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
           </section>
         ) : activePage === "供应商" ? <ProvidersPage configPath={selectedConfigPath} /> : activePage === "模型路由" ? <RoutingPage configPath={selectedConfigPath} onUnifiedModelChange={applyUnifiedModel} /> : activePage === "活动" ? <ActivityPage configPath={selectedConfigPath} metrics={metrics} />
           : activePage === "集成" ? <IntegrationsPage configPath={selectedConfigPath} baseUrl={metadata?.base_url ?? null} authEnabled={metadata?.auth_enabled ?? false} />
-          : <SettingsPage amkrWidgetEnabled={amkrWidgetEnabled} closeBehavior={closeBehavior} configPath={selectedConfigPath} metadata={metadata} health={health} onAmkrWidgetEnabledChange={applyAmkrWidgetEnabled} onCloseBehaviorChange={applyCloseBehavior} onConfigPathChange={applyConfigPath} />}
+          : <SettingsPage amkrWidgetEnabled={amkrWidgetEnabled} closeBehavior={closeBehavior} configPath={selectedConfigPath} detectedAmkrUpdate={amkrUpdateCheck} detectedKeyloomVersion={keyloomUpdateVersion} metadata={metadata} health={health} onAmkrWidgetEnabledChange={applyAmkrWidgetEnabled} onCloseBehaviorChange={applyCloseBehavior} onConfigPathChange={applyConfigPath} updateTarget={settingsUpdateTarget} />}
       </main>
       </div>
       {closePromptOpen ? <div className="close-dialog-backdrop" onKeyDown={(event) => { if (event.key === "Escape") setClosePromptOpen(false); }}>

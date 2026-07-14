@@ -8,12 +8,17 @@ vi.mock("@tauri-apps/api/core", () => ({
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: vi.fn(),
 }));
+vi.mock("@tauri-apps/plugin-updater", () => ({
+  check: vi.fn(),
+}));
 
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { check } from "@tauri-apps/plugin-updater";
 
 const invokeMock = vi.mocked(invoke);
 const getCurrentWindowMock = vi.mocked(getCurrentWindow);
+const keyloomUpdateCheckMock = vi.mocked(check);
 const minimizeMock = vi.fn();
 const closeMock = vi.fn();
 const hideMock = vi.fn();
@@ -31,6 +36,8 @@ describe("Keyloom application shell", () => {
     closeMock.mockReset();
     hideMock.mockReset();
     startDraggingMock.mockReset();
+    keyloomUpdateCheckMock.mockReset();
+    keyloomUpdateCheckMock.mockResolvedValue(null);
     getCurrentWindowMock.mockReturnValue({ minimize: minimizeMock, close: closeMock, hide: hideMock, startDragging: startDraggingMock } as never);
     invokeMock.mockReset();
     invokeMock
@@ -63,6 +70,44 @@ describe("Keyloom application shell", () => {
     expect(await screen.findByText("AMKR v5.6.0")).toBeInTheDocument();
     expect(screen.getByText("Keyloom v0.1.0")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Keyloom" })).toHaveClass("brand-title");
+  });
+
+  it("checks versions when focused and opens the matching update panel", async () => {
+    invokeMock.mockReset();
+    invokeMock.mockImplementation(async (command) => {
+      if (command === "discover_amkr") return {
+        config_path: "C:/config.json",
+        base_url: "http://127.0.0.1:18900",
+        metrics_db_path: null,
+        log_file_path: null,
+        auth_enabled: true,
+      };
+      if (command === "get_amkr_health") return { status: "ok", version: "3.1.0", local_auth_enabled: true };
+      if (command === "get_amkr_metrics") return { total: { requests: 0, total_tokens: 0, cached_token_rate: 0, avg_duration_ms: 0 } };
+      if (command === "check_amkr_update") return { current_version: "3.1.0", latest_version: "3.2.0", update_available: true, error: null };
+      return undefined;
+    });
+    keyloomUpdateCheckMock.mockImplementation(async () => ({
+      version: "0.2.0",
+      close: vi.fn().mockResolvedValue(undefined),
+    }) as never);
+
+    render(<App />);
+
+    const amkrVersion = await screen.findByRole("button", { name: "打开 AMKR 更新" });
+    const keyloomVersion = screen.getByRole("button", { name: "打开 Keyloom 更新" });
+    await waitFor(() => expect(amkrVersion).toHaveClass("has-update"));
+    expect(keyloomVersion).toHaveClass("has-update");
+    await waitFor(() => expect(invokeMock.mock.calls.filter(([command]) => command === "check_amkr_update")).toHaveLength(1));
+
+    fireEvent.focus(window);
+    await waitFor(() => expect(invokeMock.mock.calls.filter(([command]) => command === "check_amkr_update")).toHaveLength(2));
+
+    fireEvent.click(amkrVersion);
+    expect(screen.getByRole("heading", { name: "AMKR 更新" })).toBeInTheDocument();
+    fireEvent.click(keyloomVersion);
+    expect(screen.getByRole("heading", { name: "Keyloom 更新" })).toBeInTheDocument();
+    expect(await screen.findByText("0.2.0")).toBeInTheDocument();
   });
 
   it("keeps navigation outside the main content landmark", () => {
@@ -907,8 +952,9 @@ describe("Keyloom application shell", () => {
       await vi.advanceTimersByTimeAsync(5_001);
     });
 
-    expect(invokeMock).toHaveBeenCalledTimes(4);
-    expect(invokeMock).toHaveBeenLastCalledWith("get_amkr_health", { configPath: null });
+    const healthCalls = invokeMock.mock.calls.filter(([command]) => command === "get_amkr_health");
+    expect(healthCalls).toHaveLength(2);
+    expect(healthCalls.at(-1)).toEqual(["get_amkr_health", { configPath: null }]);
     vi.useRealTimers();
   });
 
@@ -1026,19 +1072,19 @@ describe("Keyloom application shell", () => {
 
   it("loads redacted providers when the providers page opens", async () => {
     invokeMock.mockReset();
-    invokeMock
-      .mockResolvedValueOnce({
+    invokeMock.mockImplementation(async (command) => {
+      if (command === "discover_amkr") return {
         config_path: "C:/Users/test/AppData/Local/AutoModelKeyRouter/router-config.json",
         base_url: "http://127.0.0.1:18900",
         metrics_db_path: null,
         log_file_path: null,
         auth_enabled: true,
-      })
-      .mockResolvedValueOnce({ status: "ok", local_auth_enabled: true })
-      .mockResolvedValueOnce({
+      };
+      if (command === "get_amkr_health") return { status: "ok", local_auth_enabled: true };
+      if (command === "get_amkr_metrics") return {
         total: { requests: 0, total_tokens: 0, cached_token_rate: 0, avg_duration_ms: 0 },
-      })
-      .mockResolvedValueOnce({
+      };
+      if (command === "get_amkr_providers") return {
         config_revision: "revision-a",
         providers: [
           {
@@ -1055,7 +1101,9 @@ describe("Keyloom application shell", () => {
             pools: [{ name: "model-a", keys: ["key-a"], models: ["model-a"] }],
           },
         ],
-      });
+      };
+      return undefined;
+    });
 
     render(<App />);
     await screen.findByRole("button", { name: /服务状态/ });
