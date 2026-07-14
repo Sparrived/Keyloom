@@ -10,6 +10,15 @@
 
 ---
 
+## Current Status (2026-07-14)
+
+- Tasks 1-9 are implemented and covered by AMKR, React, Rust, runtime-contract, and NSIS-contract tests.
+- Task 10 release automation is implemented: tagged builds require Authenticode credentials and publish the installer, SHA-256, runtime smoke report, and generated release notes.
+- Local verification passes for the production frontend, Rust host, mock-backed browser workflows, bundled Python 3.12.10 runtime, AMKR management API contract, and unsigned NSIS verification package.
+- External acceptance remains intentionally open: configure the signing secrets, run a tagged release, then execute clean-machine installation, UAC cancellation, DPI, high-contrast, update, rollback, and uninstall checks on Windows 10 and Windows 11.
+
+---
+
 ## Scope and Order
 
 The work has two repositories/workspaces but one dependency order:
