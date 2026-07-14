@@ -349,7 +349,13 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
   return (
     <div className="app-frame">
       <div className="app-shell">
-      <aside aria-label="主导航" className="sidebar">
+      <aside
+        aria-label="主导航"
+        className="sidebar"
+        onMouseDown={(event) => {
+          if (event.button === 0 && !(event.target as Element).closest("button, input, select, textarea, a")) void getCurrentWindow().startDragging();
+        }}
+      >
         <div className="sidebar-window-row">
           <div aria-label="窗口控制" className="window-controls">
             <button aria-label="关闭窗口" className="window-close" title="关闭" type="button" onClick={requestWindowClose}>

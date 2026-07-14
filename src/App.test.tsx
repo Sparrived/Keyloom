@@ -17,6 +17,7 @@ const getCurrentWindowMock = vi.mocked(getCurrentWindow);
 const minimizeMock = vi.fn();
 const closeMock = vi.fn();
 const hideMock = vi.fn();
+const startDraggingMock = vi.fn();
 
 describe("Keyloom application shell", () => {
   afterEach(() => {
@@ -29,7 +30,8 @@ describe("Keyloom application shell", () => {
     minimizeMock.mockReset();
     closeMock.mockReset();
     hideMock.mockReset();
-    getCurrentWindowMock.mockReturnValue({ minimize: minimizeMock, close: closeMock, hide: hideMock } as never);
+    startDraggingMock.mockReset();
+    getCurrentWindowMock.mockReturnValue({ minimize: minimizeMock, close: closeMock, hide: hideMock, startDragging: startDraggingMock } as never);
     invokeMock.mockReset();
     invokeMock
       .mockResolvedValueOnce({
@@ -71,8 +73,11 @@ describe("Keyloom application shell", () => {
     expect(sidebar).toContainElement(minimize);
     expect(sidebar).toContainElement(close);
 
+    fireEvent.mouseDown(sidebar, { button: 0 });
+    fireEvent.mouseDown(close, { button: 0 });
     fireEvent.click(minimize);
 
+    expect(startDraggingMock).toHaveBeenCalledOnce();
     expect(minimizeMock).toHaveBeenCalledOnce();
   });
 
