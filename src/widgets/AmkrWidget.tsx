@@ -151,7 +151,7 @@ export function AmkrWidget() {
 
   return <main className="amkr-widget-root" ref={rootRef}>
     <header className="amkr-widget-header" onMouseDown={startDragging}>
-      <div className="amkr-widget-title"><span className="amkr-widget-mark">AMKR</span><span>仪表盘</span></div>
+      <div className="amkr-widget-title"><span className="amkr-widget-mark"><span>A</span><span>M</span><span>K</span><span>R</span></span><span>仪表盘</span></div>
       <div className="amkr-widget-status" role="status">
         <span className={`amkr-widget-status-dot status-${metrics?.router_status ?? "off"}`} />
         <span>{status}</span>

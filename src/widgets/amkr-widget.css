@@ -26,6 +26,12 @@
   border: 1px solid var(--widget-border);
   border-radius: 7px;
   box-shadow: 0 12px 36px rgb(0 0 0 / 35%);
+  animation: amkr-widget-enter 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes amkr-widget-enter {
+  from { opacity: 0; transform: translateY(6px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .amkr-widget-root button { color: inherit; }
@@ -50,13 +56,30 @@
 }
 
 .amkr-widget-title { min-width: 0; gap: 7px; font-weight: 600; }
-.amkr-widget-mark { color: #62b0ff; font: 700 11px/1 var(--widget-mono); }
+.amkr-widget-mark { display: inline-flex; color: #62b0ff; font: 700 11px/1 var(--widget-mono); }
+.amkr-widget-mark > span { display: inline-block; animation: amkr-widget-mark-bounce 2.8s ease-in-out infinite; }
+.amkr-widget-mark > span:nth-child(2) { animation-delay: 80ms; }
+.amkr-widget-mark > span:nth-child(3) { animation-delay: 160ms; }
+.amkr-widget-mark > span:nth-child(4) { animation-delay: 240ms; }
+
+@keyframes amkr-widget-mark-bounce {
+  0%, 68%, 100% { transform: translateY(0); text-shadow: none; }
+  76% { transform: translateY(-4px); text-shadow: 0 4px 8px rgb(98 176 255 / 45%); }
+  83% { transform: translateY(0); }
+  88% { transform: translateY(-1.5px); }
+  93% { transform: translateY(0); }
+}
 .amkr-widget-status { gap: 5px; margin-right: 8px; color: var(--widget-muted); font-size: 10px; }
 .amkr-widget-status strong { min-width: 15px; padding: 1px 4px; color: #62b0ff; background: rgb(98 176 255 / 12%); border-radius: 3px; text-align: center; }
 .amkr-widget-status-dot { width: 7px; height: 7px; border-radius: 50%; background: #6f6f76; }
-.amkr-widget-status-dot.status-green { background: #4ade80; box-shadow: 0 0 5px rgb(74 222 128 / 55%); }
+.amkr-widget-status-dot.status-green { background: #4ade80; box-shadow: 0 0 5px rgb(74 222 128 / 55%); animation: amkr-widget-status-pulse 1.8s ease-in-out infinite; }
 .amkr-widget-status-dot.status-yellow { background: #facc15; }
 .amkr-widget-status-dot.status-red { background: #f87171; }
+
+@keyframes amkr-widget-status-pulse {
+  0%, 100% { opacity: 0.7; transform: scale(0.9); box-shadow: 0 0 3px rgb(74 222 128 / 35%); }
+  50% { opacity: 1; transform: scale(1.15); box-shadow: 0 0 8px rgb(74 222 128 / 75%); }
+}
 
 .amkr-widget-close {
   display: grid;
@@ -70,8 +93,10 @@
   border-radius: 4px;
   cursor: pointer;
   font-size: 17px;
+  transition: color 150ms ease, background 150ms ease, transform 150ms ease;
 }
 .amkr-widget-close:hover { color: #fff; background: rgb(248 113 113 / 18%); }
+.amkr-widget-close:active { transform: scale(0.88); }
 
 .amkr-widget-body { display: flex; flex: 1; min-height: 0; flex-direction: column; gap: 7px; padding: 8px 10px 10px; }
 .amkr-widget-toolbar { position: relative; z-index: 2; min-height: 29px; gap: 8px; }
@@ -90,19 +115,31 @@
   cursor: pointer;
   font-size: 10px;
   text-align: left;
+  transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
 }
+.amkr-widget-selector > button:hover:not(:disabled) { background: rgb(98 176 255 / 9%); border-color: rgb(98 176 255 / 40%); transform: translateY(-1px); }
+.amkr-widget-selector > button:focus-visible { outline: 1px solid #62b0ff; outline-offset: 1px; }
+.amkr-widget-selector > button:disabled { cursor: default; opacity: 0.55; }
 .amkr-widget-selector > button strong { overflow: hidden; color: #eee; font: 500 11px/1.3 var(--widget-mono); text-overflow: ellipsis; white-space: nowrap; }
-.amkr-widget-dropdown { position: absolute; top: calc(100% + 3px); left: 0; width: 100%; max-height: 165px; overflow: auto; padding: 4px; background: #222226; border: 1px solid var(--widget-border); border-radius: 4px; box-shadow: 0 10px 24px rgb(0 0 0 / 45%); }
-.amkr-widget-dropdown button { width: 100%; overflow: hidden; padding: 6px; background: transparent; border: 0; border-radius: 3px; cursor: pointer; font: 10px/1.3 var(--widget-mono); text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.amkr-widget-dropdown { position: absolute; top: calc(100% + 3px); left: 0; width: 100%; max-height: 165px; overflow: auto; padding: 4px; background: #222226; border: 1px solid var(--widget-border); border-radius: 4px; box-shadow: 0 10px 24px rgb(0 0 0 / 45%); transform-origin: top; animation: amkr-widget-dropdown-in 140ms ease-out both; }
+.amkr-widget-dropdown button { width: 100%; overflow: hidden; padding: 6px; background: transparent; border: 0; border-radius: 3px; cursor: pointer; font: 10px/1.3 var(--widget-mono); text-align: left; text-overflow: ellipsis; white-space: nowrap; transition: color 140ms ease, background 140ms ease; }
 .amkr-widget-dropdown button:hover { background: rgb(255 255 255 / 8%); }
 .amkr-widget-dropdown button.is-current { color: #62b0ff; background: rgb(98 176 255 / 12%); }
+
+@keyframes amkr-widget-dropdown-in {
+  from { opacity: 0; transform: translateY(-3px) scaleY(0.96); }
+  to { opacity: 1; transform: translateY(0) scaleY(1); }
+}
+
 .amkr-widget-rates { flex-shrink: 0; gap: 7px; font: 600 10px/1 var(--widget-mono); }
-.amkr-widget-rates span:first-child { color: #62b0ff; }
-.amkr-widget-rates span:last-child { color: #d291ff; }
+.amkr-widget-rates span { padding: 3px 4px; border: 1px solid var(--widget-border); border-radius: 3px; }
+.amkr-widget-rates span:first-child { color: #62b0ff; background: rgb(98 176 255 / 8%); }
+.amkr-widget-rates span:last-child { color: #d291ff; background: rgb(210 145 255 / 8%); }
 
 .amkr-widget-headline,
 .amkr-widget-tokens { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; }
-.amkr-widget-metric { min-width: 0; padding: 5px 2px; background: rgb(255 255 255 / 3%); border-radius: 3px; text-align: center; }
+.amkr-widget-metric { min-width: 0; padding: 5px 2px; background: rgb(255 255 255 / 3%); border: 1px solid transparent; border-radius: 3px; text-align: center; transition: background 160ms ease, border-color 160ms ease, transform 160ms ease; }
+.amkr-widget-metric:hover { background: rgb(98 176 255 / 7%); border-color: rgb(98 176 255 / 18%); transform: translateY(-1px); }
 .amkr-widget-metric strong { display: block; overflow: hidden; font: 700 13px/1.25 var(--widget-mono); text-overflow: ellipsis; white-space: nowrap; }
 .amkr-widget-metric span { display: block; margin-top: 1px; color: var(--widget-muted); font-size: 9px; }
 .amkr-widget-tokens .amkr-widget-metric { padding: 3px 2px; }
@@ -113,18 +150,34 @@
 .amkr-widget-bars small { color: var(--widget-muted); font-size: 9px; }
 .amkr-widget-bars strong { font: 600 10px/1 var(--widget-mono); }
 .amkr-widget-bars i { display: block; height: 3px; overflow: hidden; background: rgb(255 255 255 / 7%); border-radius: 2px; }
-.amkr-widget-bars b { display: block; height: 100%; background: #4ade80; border-radius: inherit; transition: width 0.3s ease; }
+.amkr-widget-bars b { position: relative; display: block; height: 100%; overflow: hidden; background: #4ade80; border-radius: inherit; transition: width 0.3s ease; }
+.amkr-widget-bars b::after { position: absolute; inset: 0; content: ""; background: linear-gradient(90deg, transparent, rgb(255 255 255 / 55%), transparent); transform: translateX(-100%); animation: amkr-widget-bar-shine 2.4s ease-in-out infinite; }
 .amkr-widget-bars > div:last-child b { background: #62b0ff; }
+
+@keyframes amkr-widget-bar-shine {
+  0%, 30% { transform: translateX(-100%); }
+  70%, 100% { transform: translateX(100%); }
+}
 
 .amkr-widget-models { flex: none; max-height: 180px; overflow: auto; }
 .amkr-widget-models table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .amkr-widget-models th { position: sticky; top: 0; padding: 4px; color: var(--widget-muted); background: #1a1a1d; border-bottom: 1px solid var(--widget-border); font-size: 8px; font-weight: 600; text-align: right; }
 .amkr-widget-models td { overflow: hidden; padding: 4px; color: #b8b8be; border-bottom: 1px solid rgb(255 255 255 / 4%); font: 9px/1.25 var(--widget-mono); text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+.amkr-widget-models tbody tr:hover td { background: rgb(255 255 255 / 4%); }
 .amkr-widget-models th:first-child,
 .amkr-widget-models td:first-child { width: 30%; color: #eee; text-align: left; }
 .amkr-widget-empty { display: flex; flex: 1; min-height: 0; align-items: center; justify-content: center; flex-direction: column; gap: 5px; color: var(--widget-muted); font-size: 11px; text-align: center; }
 .amkr-widget-empty span { max-width: 90%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 @media (prefers-reduced-motion: reduce) {
+  .amkr-widget-root,
+  .amkr-widget-status-dot.status-green,
+  .amkr-widget-dropdown,
+  .amkr-widget-bars b::after,
+  .amkr-widget-mark > span { animation: none; }
+  .amkr-widget-close,
+  .amkr-widget-selector > button,
+  .amkr-widget-dropdown button,
+  .amkr-widget-metric,
   .amkr-widget-bars b { transition: none; }
 }
