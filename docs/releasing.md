@@ -15,8 +15,6 @@ Keyloom 使用 `v<version>` Git 标签触发 Windows 发布。版本必须在 `p
 
    - `TAURI_SIGNING_PRIVATE_KEY`：生成的 updater 私钥全文。
    - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`：生成私钥时使用的密码。
-   - `KEYLOOM_WINDOWS_CERTIFICATE`：PFX 证书的 Base64 内容。
-   - `KEYLOOM_WINDOWS_CERTIFICATE_PASSWORD`：PFX 证书密码。
 
 4. 配置 GitHub Actions Variables：
 
@@ -40,9 +38,9 @@ npm run release -- --type patch --yes
 
 `--type` 支持 `patch`、`minor`、`major`，也可以使用 `--version 1.2.3`。添加 `--no-push` 可只创建本地提交和标签。
 
-脚本会同步版本、执行前端和 Rust 测试、验证发布契约、构建前端、创建中文 release commit 和带注释标签，然后推送。标签工作流会发布：
+脚本会同步版本、执行前端和 Rust 测试、验证发布契约、构建前端、创建中文 release commit 和带注释标签，然后推送。当前首发流程不配置 Authenticode 证书，因此 Windows 会将安装器显示为“未知发布者”。标签工作流会发布：
 
-- Authenticode 签名的 NSIS 安装器及 SHA-256；
+- 未签名的 NSIS 安装器及 SHA-256；
 - Tauri updater 的 `.nsis.zip` 与 `.sig`；
 - 应用内更新使用的 `latest.json`；
 - 私有运行时冒烟检查报告。

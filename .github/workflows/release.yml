@@ -103,52 +103,28 @@ jobs:
         shell: pwsh
         run: ./tests/installer-smoke.ps1 -RuntimeDirectory 'src-tauri/runtime-bundle/runtime' -InstallStatePath 'src-tauri/runtime-bundle/install-state.json'
 
-      - name: Require signing certificate for tagged releases
+      - name: Require updater signing keys for tagged releases
         if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
         env:
-          KEYLOOM_WINDOWS_CERTIFICATE: ${{ secrets.KEYLOOM_WINDOWS_CERTIFICATE }}
-          KEYLOOM_WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.KEYLOOM_WINDOWS_CERTIFICATE_PASSWORD }}
           KEYLOOM_UPDATER_PUBLIC_KEY: ${{ vars.KEYLOOM_UPDATER_PUBLIC_KEY }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          if (-not $env:KEYLOOM_WINDOWS_CERTIFICATE -or -not $env:KEYLOOM_WINDOWS_CERTIFICATE_PASSWORD) {
-            throw 'Tagged releases require KEYLOOM_WINDOWS_CERTIFICATE and KEYLOOM_WINDOWS_CERTIFICATE_PASSWORD.'
-          }
           if (-not $env:KEYLOOM_UPDATER_PUBLIC_KEY -or -not $env:TAURI_SIGNING_PRIVATE_KEY) {
             throw 'Tagged releases require KEYLOOM_UPDATER_PUBLIC_KEY and TAURI_SIGNING_PRIVATE_KEY.'
           }
-
-      - name: Import Windows signing certificate
-        id: signing
-        if: startsWith(github.ref, 'refs/tags/v')
-        shell: pwsh
-        env:
-          KEYLOOM_WINDOWS_CERTIFICATE: ${{ secrets.KEYLOOM_WINDOWS_CERTIFICATE }}
-          KEYLOOM_WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.KEYLOOM_WINDOWS_CERTIFICATE_PASSWORD }}
-        run: |
-          $certificatePath = Join-Path $env:RUNNER_TEMP 'keyloom-signing.pfx'
-          [IO.File]::WriteAllBytes($certificatePath, [Convert]::FromBase64String($env:KEYLOOM_WINDOWS_CERTIFICATE))
-          $password = ConvertTo-SecureString $env:KEYLOOM_WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
-          $certificate = Import-PfxCertificate -FilePath $certificatePath -CertStoreLocation Cert:\CurrentUser\My -Password $password
-          if (-not $certificate.Thumbprint) { throw 'Windows signing certificate import failed.' }
-          "thumbprint=$($certificate.Thumbprint)" >> $env:GITHUB_OUTPUT
 
       - name: Build NSIS release artifact
         if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
         shell: pwsh
         env:
-          CERTIFICATE_THUMBPRINT: ${{ steps.signing.outputs.thumbprint }}
           KEYLOOM_UPDATER_PUBLIC_KEY: ${{ vars.KEYLOOM_UPDATER_PUBLIC_KEY }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           $tagged = $env:GITHUB_REF -like 'refs/tags/v*'
           $bundle = @{ createUpdaterArtifacts = $tagged }
-          if ($env:CERTIFICATE_THUMBPRINT) {
-            $bundle.windows = @{ certificateThumbprint = $env:CERTIFICATE_THUMBPRINT; digestAlgorithm = 'sha256'; timestampUrl = 'http://timestamp.digicert.com' }
-          }
           $configObject = @{ bundle = $bundle }
           if ($tagged) {
             $configObject.plugins = @{ updater = @{
@@ -202,19 +178,18 @@ jobs:
           }
           $manifest | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $bundleDirectory 'latest.json') -Encoding utf8
 
-      - name: Verify release signature and record smoke report
+      - name: Record installer signature status and smoke report
         if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
         shell: pwsh
         run: |
           $installer = @(Get-ChildItem 'src-tauri/target/release/bundle/nsis/*-setup.exe')[0]
           $signature = Get-AuthenticodeSignature $installer.FullName
-          if ('${{ startsWith(github.ref, 'refs/tags/v') }}' -eq 'true' -and $signature.Status -ne 'Valid') {
-            throw "Tagged installer signature is invalid: $($signature.StatusMessage)"
-          }
+          "installer_signature_status=$($signature.Status)" |
+            Out-File 'src-tauri/target/release/bundle/nsis/runtime-smoke.txt' -Encoding utf8
           ./tests/installer-smoke.ps1 `
             -RuntimeDirectory 'src-tauri/runtime-bundle/runtime' `
             -InstallStatePath 'src-tauri/runtime-bundle/install-state.json' |
-            Out-File 'src-tauri/target/release/bundle/nsis/runtime-smoke.txt' -Encoding utf8
+            Out-File 'src-tauri/target/release/bundle/nsis/runtime-smoke.txt' -Encoding utf8 -Append
 
       - uses: actions/upload-artifact@v4
         if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
