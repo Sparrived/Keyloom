@@ -12,6 +12,12 @@ if ($source -notmatch '#!\[cfg_attr\(not\(debug_assertions\),\s*windows_subsyste
     throw 'Release builds must use the Windows GUI subsystem.'
 }
 
+$repoRoot = Split-Path -Parent $PSScriptRoot
+$tauriConfig = Get-Content -LiteralPath (Join-Path $repoRoot 'src-tauri\tauri.conf.json') -Raw | ConvertFrom-Json
+if (@($tauriConfig.app.windows).Count -ne 1 -or $tauriConfig.app.windows[0].decorations -ne $false) {
+    throw 'Keyloom must disable native window decorations for its custom title bar.'
+}
+
 $subsystem = $null
 if ($ExecutablePath) {
     $stream = [IO.File]::OpenRead((Resolve-Path -LiteralPath $ExecutablePath))

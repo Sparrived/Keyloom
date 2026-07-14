@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   controlAmkr,
   discoverAmkr,
@@ -313,7 +314,19 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
   }
 
   return (
-    <div className="app-shell">
+    <div className="app-frame">
+      <header className="window-titlebar" data-tauri-drag-region>
+        <span data-tauri-drag-region>Keyloom</span>
+        <div className="window-controls">
+          <button aria-label="最小化窗口" title="最小化" type="button" onClick={() => void getCurrentWindow().minimize()}>
+            <span aria-hidden="true">−</span>
+          </button>
+          <button aria-label="关闭窗口" className="window-close" title="关闭" type="button" onClick={() => void getCurrentWindow().close()}>
+            <span aria-hidden="true">×</span>
+          </button>
+        </div>
+      </header>
+      <div className="app-shell">
       <aside aria-label="主导航" className="sidebar">
         <div className="brand-block">
           <h1>Keyloom</h1>
@@ -473,6 +486,7 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
           : activePage === "集成" ? <IntegrationsPage configPath={selectedConfigPath} baseUrl={metadata?.base_url ?? null} authEnabled={metadata?.auth_enabled ?? false} />
           : <SettingsPage configPath={selectedConfigPath} metadata={metadata} health={health} onConfigPathChange={applyConfigPath} />}
       </main>
+      </div>
     </div>
   );
 }

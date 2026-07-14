@@ -5,10 +5,17 @@ import App from "./App";
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
 }));
+vi.mock("@tauri-apps/api/window", () => ({
+  getCurrentWindow: vi.fn(),
+}));
 
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 const invokeMock = vi.mocked(invoke);
+const getCurrentWindowMock = vi.mocked(getCurrentWindow);
+const minimizeMock = vi.fn();
+const closeMock = vi.fn();
 
 describe("Keyloom application shell", () => {
   afterEach(() => {
@@ -18,6 +25,9 @@ describe("Keyloom application shell", () => {
 
   beforeEach(() => {
     localStorage.clear();
+    minimizeMock.mockReset();
+    closeMock.mockReset();
+    getCurrentWindowMock.mockReturnValue({ minimize: minimizeMock, close: closeMock } as never);
     invokeMock.mockReset();
     invokeMock
       .mockResolvedValueOnce({
@@ -48,6 +58,16 @@ describe("Keyloom application shell", () => {
     expect(main).not.toHaveAttribute("aria-live");
     expect(main).not.toContainElement(screen.getByRole("navigation"));
     expect(main).toContainElement(screen.getByRole("heading", { name: "概览" }));
+  });
+
+  it("uses the custom title bar for minimize and close", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "最小化窗口" }));
+    fireEvent.click(screen.getByRole("button", { name: "关闭窗口" }));
+
+    expect(minimizeMock).toHaveBeenCalledOnce();
+    expect(closeMock).toHaveBeenCalledOnce();
   });
 
   it("shows the documented service workspace with discovered local details", async () => {
