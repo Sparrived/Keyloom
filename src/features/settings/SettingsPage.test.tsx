@@ -85,6 +85,8 @@ describe("SettingsPage", () => {
   });
 
   it("shows a regenerated local key once after confirmation", async () => {
+    const clipboard = { writeText: vi.fn().mockResolvedValue(undefined) };
+    Object.assign(navigator, { clipboard });
     invokeMock.mockImplementation(async (command) => {
       if (command === "get_amkr_settings") return settingsResponse;
       if (command === "regenerate_amkr_local_api_key") return {
@@ -104,6 +106,9 @@ describe("SettingsPage", () => {
     }));
     expect(await screen.findByDisplayValue("replacement-local-key")).toBeInTheDocument();
     expect(screen.getByText("本地鉴权 Key 已重置，请立即更新客户端配置。")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "复制" }));
+    await waitFor(() => expect(clipboard.writeText).toHaveBeenCalledWith("replacement-local-key"));
+    expect(await screen.findByText("Key 已复制")).toHaveClass("copy-toast");
   });
 
   it("checks the AMKR version through the management API", async () => {
@@ -123,7 +128,7 @@ describe("SettingsPage", () => {
     });
     render(<SettingsPage configPath={null} metadata={metadata} onConfigPathChange={() => undefined} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "检查更新" }));
+    fireEvent.click(screen.getByRole("button", { name: "检查 AMKR 更新" }));
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("check_amkr_update", { configPath: null }));
     expect(await screen.findByText("3.2.0")).toBeInTheDocument();
@@ -148,7 +153,7 @@ describe("SettingsPage", () => {
     });
     render(<SettingsPage configPath="C:/amkr.json" metadata={metadata} health={{ status: "stopped", local_auth_enabled: true }} onConfigPathChange={() => undefined} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "检查更新" }));
+    fireEvent.click(screen.getByRole("button", { name: "检查 AMKR 更新" }));
     fireEvent.click(await screen.findByRole("button", { name: "安装更新" }));
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_private_runtime", {

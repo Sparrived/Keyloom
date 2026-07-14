@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { UnifiedModelPanel } from "./UnifiedModelPanel";
 
@@ -7,6 +7,7 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 import { invoke } from "@tauri-apps/api/core";
 
 const invokeMock = vi.mocked(invoke);
+const openEditor = async () => fireEvent.click(await screen.findByRole("button", { name: /^(编辑|配置)统一模型$/ }));
 const models = {
   models: [
     {
@@ -39,7 +40,8 @@ describe("UnifiedModelPanel", () => {
     const onChange = vi.fn();
     render(<UnifiedModelPanel configPath="C:/amkr.json" onChange={onChange} />);
 
-    expect(await screen.findByText("固定 Key · key-a")).toBeInTheDocument();
+    await screen.findByRole("button", { name: "编辑统一模型" });
+    await openEditor();
     fireEvent.change(screen.getByLabelText("模型"), { target: { value: "model-b" } });
     fireEvent.click(screen.getByRole("radio", { name: "自动路由" }));
     fireEvent.click(screen.getByRole("button", { name: "保存统一模型" }));
@@ -59,10 +61,12 @@ describe("UnifiedModelPanel", () => {
     const onChange = vi.fn();
     render(<UnifiedModelPanel configPath={null} onChange={onChange} />);
 
-    await screen.findByText("固定 Key · key-a");
+    await screen.findByRole("button", { name: "编辑统一模型" });
+    await openEditor();
     expect(screen.getByRole("option", { name: "key-a" })).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "disabled-key" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "停用统一模型" }));
+    fireEvent.click(screen.getByRole("button", { name: "收起统一模型" }));
+    fireEvent.click(screen.getByRole("button", { name: "停用" }));
 
     expect(confirm).toHaveBeenCalled();
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("delete_amkr_unified_model", { configPath: null }));
@@ -80,11 +84,13 @@ describe("UnifiedModelPanel", () => {
       return undefined;
     });
     const { rerender } = render(<UnifiedModelPanel configPath={null} refreshToken={0} />);
-    await screen.findByRole("option", { name: "model-a" });
-    expect(screen.queryByRole("option", { name: "model-b" })).not.toBeInTheDocument();
+    await openEditor();
+    const modelSelect = await screen.findByLabelText("模型");
+    expect(within(modelSelect).getByRole("option", { name: "model-a" })).toBeInTheDocument();
+    expect(within(modelSelect).queryByRole("option", { name: "model-b" })).not.toBeInTheDocument();
 
     rerender(<UnifiedModelPanel configPath={null} refreshToken={1} />);
-    expect(await screen.findByRole("option", { name: "model-b" })).toBeInTheDocument();
+    await waitFor(() => expect(within(screen.getByLabelText("模型")).getByRole("option", { name: "model-b" })).toBeInTheDocument());
   });
 
   it("swaps the old primary into fallback when selecting the current fallback", async () => {
@@ -109,7 +115,8 @@ describe("UnifiedModelPanel", () => {
       return undefined;
     });
     render(<UnifiedModelPanel configPath={null} />);
-    await screen.findByText("固定 Key · key-a");
+    await screen.findByRole("button", { name: "编辑统一模型" });
+    await openEditor();
 
     fireEvent.change(screen.getByLabelText("模型"), { target: { value: "model-b" } });
     fireEvent.click(screen.getByRole("button", { name: "保存统一模型" }));
@@ -139,12 +146,16 @@ describe("UnifiedModelPanel", () => {
       return undefined;
     });
     render(<UnifiedModelPanel configPath={null} />);
+    await openEditor();
     await screen.findByRole("radio", { name: "自动路由" });
 
-    fireEvent.click(screen.getByLabelText("启用回退目标"));
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("回退 Key")).toBeDisabled();
+    expect(screen.getByLabelText("图像 Key")).toBeDisabled();
     fireEvent.change(screen.getByLabelText("回退模型"), { target: { value: "model-b" } });
-    fireEvent.click(screen.getByLabelText("配置图像模型映射"));
     fireEvent.change(screen.getByLabelText("图像模型"), { target: { value: "model-b" } });
+    expect(screen.getByLabelText("回退 Key")).toBeEnabled();
+    expect(screen.getByLabelText("图像 Key")).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "保存统一模型" }));
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_amkr_unified_model", {
@@ -173,6 +184,7 @@ describe("UnifiedModelPanel", () => {
     });
     render(<UnifiedModelPanel configPath={null} />);
 
+    await openEditor();
     expect(await screen.findByText("路由策略：only_first")).toBeInTheDocument();
     expect(screen.getByText("推理强度：high")).toBeInTheDocument();
     expect(screen.getByText("访客可用")).toBeInTheDocument();
@@ -190,7 +202,8 @@ describe("UnifiedModelPanel", () => {
     });
     render(<UnifiedModelPanel configPath="C:/amkr.json" />);
 
-    await screen.findByRole("option", { name: "model-a" });
+    await openEditor();
+    await screen.findByLabelText("模型");
     fireEvent.change(screen.getByLabelText("推理强度"), { target: { value: "high" } });
     fireEvent.click(screen.getByRole("button", { name: "保存统一模型" }));
 
@@ -211,7 +224,8 @@ describe("UnifiedModelPanel", () => {
     });
     render(<UnifiedModelPanel configPath={null} />);
 
-    await screen.findByRole("option", { name: "model-a" });
+    await openEditor();
+    await screen.findByLabelText("模型");
     fireEvent.change(screen.getByLabelText("推理强度"), { target: { value: "" } });
     fireEvent.click(screen.getByRole("button", { name: "保存统一模型" }));
 
@@ -220,5 +234,18 @@ describe("UnifiedModelPanel", () => {
       modelId: "model-a",
       reasoningEffort: null,
     }));
+  });
+
+  it("discards unsaved changes when editing is cancelled", async () => {
+    render(<UnifiedModelPanel configPath={null} />);
+    await openEditor();
+    fireEvent.change(screen.getByLabelText("模型"), { target: { value: "model-b" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "收起统一模型" }));
+
+    expect(screen.queryByLabelText("模型")).not.toBeInTheDocument();
+    expect(screen.getByText("model-a")).toBeInTheDocument();
+    await openEditor();
+    expect(screen.getByLabelText("模型")).toHaveValue("model-a");
   });
 });

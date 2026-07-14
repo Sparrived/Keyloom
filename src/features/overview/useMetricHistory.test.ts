@@ -38,9 +38,9 @@ describe("appendMetricSnapshot", () => {
     ]);
   });
 
-  it("keeps the most recent 240 snapshots", () => {
-    const history = Array.from({ length: 240 }, (_, index) => ({
-      timestamp: `2026-07-12T10:${String(index).padStart(2, "0")}:00.000Z`,
+  it("keeps only snapshots from the latest ten minutes", () => {
+    const history = ["2026-07-12T10:49:59.000Z", "2026-07-12T10:50:00.000Z"].map((timestamp, index) => ({
+      timestamp,
       current_rpm: index,
       current_tpm: index * 100,
       requests: index,
@@ -56,7 +56,7 @@ describe("appendMetricSnapshot", () => {
 
     const result = appendMetricSnapshot(history, metrics, "2026-07-12T11:00:00.000Z");
 
-    expect(result).toHaveLength(240);
+    expect(result).toHaveLength(2);
     expect(result[0]).toBe(history[1]);
     expect(result.at(-1)).toMatchObject({ timestamp: "2026-07-12T11:00:00.000Z" });
   });
@@ -74,7 +74,7 @@ describe("appendMetricSnapshot", () => {
   it("does not mutate the supplied history or samples", () => {
     const history = [
       {
-        timestamp: "2026-07-12T09:00:00.000Z",
+        timestamp: "2026-07-12T09:50:00.000Z",
         current_rpm: 1,
         current_tpm: 100,
         requests: 1,

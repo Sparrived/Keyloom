@@ -14,8 +14,11 @@
     "windows": [
       {
         "title": "Keyloom",
-        "width": 1000,
-        "height": 700,
+        "width": 800,
+        "height": 600,
+        "resizable": false,
+        "maximizable": false,
+        "devtools": false,
         "decorations": false
       }
     ]
@@ -23,6 +26,7 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
+    "createUpdaterArtifacts": false,
     "icon": ["icons/icon.ico"],
     "resources": {
       "runtime-bundle/runtime/": "runtime",
@@ -42,6 +46,15 @@
         "startMenuFolder": "Keyloom",
         "installerIcon": "icons/icon.ico",
         "installerHooks": "../installer/nsis/keyloom.nsi"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": ["https://github.com/Sparrived/Keyloom/releases/latest/download/latest.json"],
+      "pubkey": "",
+      "windows": {
+        "installMode": "passive"
       }
     }
   }

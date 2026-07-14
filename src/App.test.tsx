@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 
@@ -43,6 +43,7 @@ describe("Keyloom application shell", () => {
       })
       .mockResolvedValueOnce({
         status: "ok",
+        version: "5.6.0",
         local_auth_enabled: true,
       });
   });
@@ -50,9 +51,18 @@ describe("Keyloom application shell", () => {
   it("renders all primary navigation destinations", () => {
     render(<App />);
 
-    for (const label of ["概览", "供应商", "模型路由", "活动", "集成", "设置", "服务状态"]) {
+    for (const label of ["概览", "供应商", "模型路由", "活动", "集成", "设置"]) {
       expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
     }
+    expect(screen.getByRole("button", { name: /服务状态/ })).toBeInTheDocument();
+  });
+
+  it("shows the connected AMKR version in the brand block", async () => {
+    render(<App />);
+
+    expect(await screen.findByText("AMKR v5.6.0")).toBeInTheDocument();
+    expect(screen.getByText("Keyloom v0.1.0")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Keyloom" })).toHaveClass("brand-title");
   });
 
   it("keeps navigation outside the main content landmark", () => {
@@ -64,7 +74,18 @@ describe("Keyloom application shell", () => {
     expect(main).toContainElement(screen.getByRole("heading", { name: "概览" }));
   });
 
-  it("keeps the window controls in the sidebar", () => {
+  it("opens activity from the metrics overview card", async () => {
+    render(<App />);
+
+    const metricsCard = await screen.findByRole("link", { name: "数据总览" });
+    expect(screen.queryByRole("heading", { name: "最近活动" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "查看全部 ›" })).not.toBeInTheDocument();
+    fireEvent.keyDown(metricsCard, { key: "Enter" });
+
+    expect(screen.getByRole("heading", { name: "活动" })).toBeInTheDocument();
+  });
+
+  it("starts dragging only after moving a held pointer from sidebar blank space", () => {
     render(<App />);
 
     const sidebar = screen.getByRole("complementary", { name: "主导航" });
@@ -73,11 +94,18 @@ describe("Keyloom application shell", () => {
     expect(sidebar).toContainElement(minimize);
     expect(sidebar).toContainElement(close);
 
-    fireEvent.mouseDown(sidebar, { button: 0 });
-    fireEvent.mouseDown(close, { button: 0 });
+    fireEvent.mouseDown(sidebar, { button: 0, clientX: 20, clientY: 20 });
+    fireEvent.mouseMove(sidebar, { buttons: 1, clientX: 22, clientY: 22 });
+    expect(startDraggingMock).not.toHaveBeenCalled();
+    fireEvent.mouseMove(sidebar, { buttons: 1, clientX: 28, clientY: 20 });
+    fireEvent.mouseMove(sidebar, { buttons: 1, clientX: 40, clientY: 20 });
+    expect(startDraggingMock).toHaveBeenCalledOnce();
+
+    fireEvent.mouseDown(close, { button: 0, clientX: 20, clientY: 20 });
+    fireEvent.mouseMove(sidebar, { buttons: 1, clientX: 40, clientY: 20 });
+    expect(startDraggingMock).toHaveBeenCalledOnce();
     fireEvent.click(minimize);
 
-    expect(startDraggingMock).toHaveBeenCalledOnce();
     expect(minimizeMock).toHaveBeenCalledOnce();
   });
 
@@ -129,10 +157,59 @@ describe("Keyloom application shell", () => {
     expect(localStorage.getItem("keyloom.closeBehavior")).toBeNull();
   });
 
+  it("starts the optional AMKR widget and remembers the choice", async () => {
+    invokeMock.mockReset();
+    invokeMock.mockImplementation(async (command) => {
+      if (command === "discover_amkr") return { config_path: "C:/config.json", base_url: "http://127.0.0.1:18900", metrics_db_path: null, log_file_path: null, auth_enabled: true };
+      if (command === "get_amkr_health") return { status: "ok", local_auth_enabled: true };
+      if (command === "get_amkr_metrics") return { total: { requests: 0, total_tokens: 0, cached_token_rate: 0, avg_duration_ms: 0 } };
+      return undefined;
+    });
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "设置" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "启动 AMKR 桌面挂件" }));
+
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("set_amkr_widget_visible", { visible: true }));
+    expect(localStorage.getItem("keyloom.amkrWidgetEnabled")).toBe("true");
+    expect(screen.getByRole("checkbox", { name: "启动 AMKR 桌面挂件" })).toBeChecked();
+  });
+
+  it("checks the widget setting immediately while the native window is opening", async () => {
+    let finishOpening!: () => void;
+    const opening = new Promise<void>((resolve) => { finishOpening = resolve; });
+    invokeMock.mockReset();
+    invokeMock.mockImplementation(async (command) => {
+      if (command === "discover_amkr") return { config_path: "C:/config.json", base_url: "http://127.0.0.1:18900", metrics_db_path: null, log_file_path: null, auth_enabled: true };
+      if (command === "get_amkr_health") return { status: "ok", local_auth_enabled: true };
+      if (command === "get_amkr_metrics") return { total: { requests: 0, total_tokens: 0, cached_token_rate: 0, avg_duration_ms: 0 } };
+      if (command === "set_amkr_widget_visible") return opening;
+      return undefined;
+    });
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "设置" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "启动 AMKR 桌面挂件" }));
+
+    expect(screen.getByRole("checkbox", { name: "启动 AMKR 桌面挂件" })).toBeChecked();
+    expect(localStorage.getItem("keyloom.amkrWidgetEnabled")).toBe("true");
+    finishOpening();
+  });
+
+  it("restores an enabled widget only once in Strict Mode", async () => {
+    localStorage.setItem("keyloom.amkrWidgetEnabled", "true");
+    invokeMock.mockReset();
+    invokeMock.mockResolvedValue(undefined);
+
+    render(<App />);
+
+    await waitFor(() => expect(invokeMock.mock.calls.filter(([command]) => command === "set_amkr_widget_visible")).toHaveLength(1));
+  });
+
   it("shows the documented service workspace with discovered local details", async () => {
     render(<App />);
 
-    fireEvent.click(screen.getByRole("button", { name: "服务状态" }));
+    fireEvent.click(screen.getByRole("button", { name: /服务状态/ }));
 
     expect(await screen.findByRole("heading", { name: "服务状态" })).toBeInTheDocument();
     expect(screen.getByText("http://127.0.0.1:18900")).toBeInTheDocument();
@@ -164,9 +241,9 @@ describe("Keyloom application shell", () => {
     render(<App />);
 
     await waitFor(() => {
-      expect(screen.getByRole("status", { name: "服务状态" })).toHaveTextContent("配置不一致");
+      expect(screen.getByRole("button", { name: /服务状态/ })).toHaveTextContent("配置不一致");
     });
-    fireEvent.click(screen.getByRole("button", { name: "服务状态" }));
+    fireEvent.click(screen.getByRole("button", { name: /服务状态/ }));
 
     expect(screen.getByText("D:/amkr/other-config.json")).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("当前服务使用的配置与 Keyloom 选择的配置不一致");
@@ -197,7 +274,7 @@ describe("Keyloom application shell", () => {
     render(<App />);
 
     await waitFor(() => {
-      expect(screen.getByRole("status", { name: "服务状态" })).toHaveTextContent("服务运行中");
+      expect(screen.getByRole("button", { name: /服务状态/ })).toHaveTextContent("服务运行中");
     });
     expect(screen.queryByText("配置不一致")).not.toBeInTheDocument();
   });
@@ -206,12 +283,69 @@ describe("Keyloom application shell", () => {
     render(<App />);
 
     await waitFor(() => {
-      expect(screen.getByRole("status", { name: "服务状态" })).toHaveTextContent("服务运行中");
+      expect(screen.getByRole("button", { name: /服务状态/ })).toHaveTextContent("服务运行中");
     });
     expect(screen.getByText("http://127.0.0.1:18900")).toBeInTheDocument();
     expect(screen.getByText("本地鉴权已启用")).toBeInTheDocument();
     expect(invokeMock).toHaveBeenCalledWith("discover_amkr", { configPath: null });
     expect(invokeMock).toHaveBeenCalledWith("get_amkr_health", { configPath: null });
+  });
+
+  it("uses the live AMKR authentication status in the overview", async () => {
+    invokeMock.mockReset();
+    invokeMock.mockImplementation(async (command) => {
+      if (command === "discover_amkr") return { config_path: "C:/config.json", base_url: "http://127.0.0.1:18900", metrics_db_path: null, log_file_path: null, auth_enabled: true };
+      if (command === "get_amkr_health") return { status: "ok", local_auth_enabled: false };
+      if (command === "get_amkr_metrics") return { total: { requests: 0, total_tokens: 0, cached_token_rate: 0, avg_duration_ms: 0 } };
+      return undefined;
+    });
+
+    render(<App />);
+
+    expect(await screen.findByText("本地鉴权未启用")).toHaveClass("status-bad");
+    expect(screen.queryByRole("button", { name: "获取本地鉴权 Key" })).not.toBeInTheDocument();
+  });
+
+  it("copies the existing local authentication key only after an explicit click", async () => {
+    const clipboard = { writeText: vi.fn().mockResolvedValue(undefined) };
+    Object.assign(navigator, { clipboard });
+    invokeMock.mockReset();
+    invokeMock.mockImplementation(async (command) => {
+      if (command === "discover_amkr") return { config_path: "C:/config.json", base_url: "http://127.0.0.1:18900", metrics_db_path: null, log_file_path: null, auth_enabled: true };
+      if (command === "get_amkr_health") return { status: "ok", local_auth_enabled: true };
+      if (command === "get_amkr_metrics") return { total: { requests: 0, total_tokens: 0, cached_token_rate: 0, avg_duration_ms: 0 } };
+      if (command === "get_amkr_local_api_key") return "existing-local-key";
+      return undefined;
+    });
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "获取本地鉴权 Key" }));
+
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("get_amkr_local_api_key", { configPath: null }));
+    expect(clipboard.writeText).toHaveBeenCalledWith("existing-local-key");
+    expect(await screen.findByText("Key 已复制")).toHaveClass("copy-toast");
+    expect(screen.getByRole("button", { name: "获取本地鉴权 Key" })).toHaveTextContent("本地鉴权已启用");
+    expect(screen.queryByText("existing-local-key")).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["green", "status-good"],
+    ["yellow", "status-warn"],
+    ["red", "status-bad"],
+  ])("uses AMKR's %s router status for the running service dot", async (routerStatus, expectedClass) => {
+    invokeMock.mockReset();
+    invokeMock.mockImplementation(async (command) => {
+      if (command === "discover_amkr") return { config_path: "C:/config.json", base_url: "http://127.0.0.1:18900", metrics_db_path: null, log_file_path: null, auth_enabled: true };
+      if (command === "get_amkr_health") return { status: "ok", local_auth_enabled: true };
+      if (command === "get_amkr_metrics") return { router_status: routerStatus, total: { requests: 0, total_tokens: 0, cached_token_rate: 0, avg_duration_ms: 0 } };
+      return undefined;
+    });
+
+    render(<App />);
+
+    const serviceButton = await screen.findByRole("button", { name: /服务状态.*服务运行中/ });
+    await waitFor(() => expect(serviceButton.querySelector(".status-dot")).toHaveClass(expectedClass));
+    expect(within(screen.getByRole("complementary", { name: "主导航" })).getAllByText("服务运行中")).toHaveLength(1);
   });
 
   it("creates and starts a default AMKR instance from the first-run screen", async () => {
@@ -331,7 +465,7 @@ describe("Keyloom application shell", () => {
     });
 
     render(<App />);
-    fireEvent.click(screen.getByRole("button", { name: "服务状态" }));
+    fireEvent.click(screen.getByRole("button", { name: /服务状态/ }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("未找到可用的 AMKR 配置");
     fireEvent.click(screen.getByRole("button", { name: "返回首次设置" }));
@@ -371,13 +505,13 @@ describe("Keyloom application shell", () => {
     render(<App />);
 
     await waitFor(() => {
-      expect(screen.getByRole("status", { name: "服务状态" })).toHaveTextContent("服务运行中");
+      expect(screen.getByRole("button", { name: /服务状态/ })).toHaveTextContent("服务运行中");
     });
     invokeMock
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce({ status: "ok", local_auth_enabled: true });
 
-    fireEvent.click(screen.getByRole("button", { name: "服务状态" }));
+    fireEvent.click(screen.getByRole("button", { name: /服务状态/ }));
     fireEvent.click(screen.getByRole("button", { name: "重启服务" }));
 
     await waitFor(() => {
@@ -397,12 +531,12 @@ describe("Keyloom application shell", () => {
     });
 
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "服务状态" }));
+    fireEvent.click(await screen.findByRole("button", { name: /服务状态/ }));
     expect(screen.getByRole("button", { name: "启动服务" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "停止服务" }));
 
     expect(await screen.findByText("服务已停止。")).toBeInTheDocument();
-    expect(screen.getByRole("status", { name: "服务状态" })).toHaveTextContent("服务未运行");
+    expect(screen.getByRole("button", { name: /服务状态/ })).toHaveTextContent("服务未运行");
     expect(screen.getByRole("button", { name: "停止服务" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "启动服务" })).toBeEnabled();
     expect(screen.queryByText(/服务操作失败/)).not.toBeInTheDocument();
@@ -427,19 +561,20 @@ describe("Keyloom application shell", () => {
 
     render(<App />);
     await act(async () => { await vi.advanceTimersByTimeAsync(1); });
-    fireEvent.click(screen.getByRole("button", { name: "服务状态" }));
+    fireEvent.click(screen.getByRole("button", { name: /服务状态/ }));
     fireEvent.click(screen.getByRole("button", { name: "启动服务" }));
     await act(async () => { await vi.advanceTimersByTimeAsync(1_001); });
 
     expect(screen.getByText("服务已启动。")).toBeInTheDocument();
-    expect(screen.getByRole("status", { name: "服务状态" })).toHaveTextContent("服务运行中");
+    expect(screen.getByRole("button", { name: /服务状态/ })).toHaveTextContent("服务运行中");
+    expect(within(screen.getByRole("complementary", { name: "主导航" })).getAllByText("服务运行中")).toHaveLength(1);
     expect(healthReads).toBe(4);
   });
 
   it("requires confirmation before removing the login task", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(false);
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "服务状态" }));
+    fireEvent.click(await screen.findByRole("button", { name: /服务状态/ }));
 
     fireEvent.click(screen.getByRole("button", { name: "取消注册" }));
 
@@ -458,7 +593,7 @@ describe("Keyloom application shell", () => {
     });
 
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "服务状态" }));
+    fireEvent.click(await screen.findByRole("button", { name: /服务状态/ }));
     fireEvent.click(screen.getByRole("button", { name: "注册登录启动" }));
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("install_user_amkr", { configPath: null }));
 
@@ -481,7 +616,7 @@ describe("Keyloom application shell", () => {
     });
 
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "服务状态" }));
+    fireEvent.click(await screen.findByRole("button", { name: /服务状态/ }));
     fireEvent.click(screen.getByRole("button", { name: "注册开机服务" }));
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("install_system_amkr", { configPath: null }));
@@ -489,6 +624,8 @@ describe("Keyloom application shell", () => {
   });
 
   it("renders the V5 overview with unified model and real metrics", async () => {
+    const clipboard = { writeText: vi.fn().mockResolvedValue(undefined) };
+    Object.assign(navigator, { clipboard });
     invokeMock.mockReset();
     invokeMock
       .mockResolvedValueOnce({
@@ -529,15 +666,25 @@ describe("Keyloom application shell", () => {
     expect(await screen.findByText("统一模型")).toBeInTheDocument();
     expect(screen.getByText("gpt-5.5")).toBeInTheDocument();
     expect(screen.getByText("自动路由 · 2 个目标")).toBeInTheDocument();
-    expect(screen.getByText("已启用")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "统一模型" })).toHaveClass("is-enabled");
+    expect(screen.queryByText("已启用")).not.toBeInTheDocument();
     expect(screen.getByText("数据总览")).toBeInTheDocument();
     expect(screen.getAllByText("1,428").length).toBeGreaterThan(0);
     expect(screen.getByText("2.84M")).toBeInTheDocument();
     expect(screen.getByText("68%")).toBeInTheDocument();
-    expect(screen.getAllByText("1.2s")).toHaveLength(2);
-    expect(screen.getByRole("button", { name: "打开服务" })).toBeInTheDocument();
+    expect(screen.getByLabelText("数据总览")).toHaveTextContent(/RPM\s*23/);
+    expect(screen.getByLabelText("数据总览")).toHaveTextContent(/TPM\s*45,000/);
+    expect(screen.getAllByText("1.2s")).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "打开服务" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "复制服务地址 http://127.0.0.1:18900" }));
+    expect(clipboard.writeText).toHaveBeenCalledWith("http://127.0.0.1:18900");
+    expect(await screen.findByText("地址已复制")).toHaveClass("copy-toast");
+    expect(screen.getByText("本地鉴权已启用")).toHaveClass("status-good");
     expect(screen.getByRole("button", { name: "RPM" })).toBeInTheDocument();
-    expect(screen.getByText("本次运行 · 每 15 秒采样")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "近十分钟用量" })).toBeInTheDocument();
+    expect(screen.queryByText("本次运行 · 每 15 秒采样")).not.toBeInTheDocument();
+    fireEvent.mouseEnter(screen.getByLabelText("历史数据点").querySelector("button")!);
+    expect(screen.getAllByText("1.2s")).toHaveLength(2);
     expect(screen.getByLabelText("所选用量快照")).toHaveTextContent(/输入 Token\s*1,840,000/);
     expect(screen.getByLabelText("所选用量快照")).toHaveTextContent(/输出 Token\s*1,000,000/);
     expect(screen.getByLabelText("所选用量快照")).toHaveTextContent(/成功率\s*98.0%/);
@@ -559,8 +706,9 @@ describe("Keyloom application shell", () => {
     });
 
     render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: "切换" }));
+    fireEvent.click(await screen.findByRole("region", { name: "统一模型" }));
     expect(screen.getByRole("heading", { name: "模型路由" })).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "编辑统一模型" }));
     await screen.findByRole("radio", { name: "自动路由" });
     fireEvent.click(screen.getByRole("radio", { name: "固定 Key" }));
     fireEvent.click(screen.getByRole("button", { name: "保存统一模型" }));
@@ -583,14 +731,87 @@ describe("Keyloom application shell", () => {
 
     expect(await screen.findByText("尚未配置统一路由")).toBeInTheDocument();
     expect(screen.getByText("未设置")).toBeInTheDocument();
-    expect(screen.getByText("未启用")).toBeInTheDocument();
-    expect(screen.getByRole("status", { name: "服务状态" })).toHaveTextContent("服务运行中");
+    expect(screen.getByRole("region", { name: "统一模型" })).toHaveClass("is-disabled");
+    expect(screen.queryByText("未启用")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "启用" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /服务状态/ })).toHaveTextContent("服务运行中");
   });
 
-  it("shows real metric snapshots on the activity page", async () => {
+  it("enables the first available unified model from the overview", async () => {
+    invokeMock.mockReset();
+    invokeMock.mockImplementation(async (command) => {
+      if (command === "discover_amkr") return { config_path: "C:/config.json", base_url: "http://127.0.0.1:18900", metrics_db_path: null, log_file_path: null, auth_enabled: true };
+      if (command === "get_amkr_health") return { status: "ok", local_auth_enabled: true, models: ["model-a", "model-b"], unified_model: null };
+      if (command === "get_amkr_metrics") return { total: { requests: 0, total_tokens: 0, cached_token_rate: 0, avg_duration_ms: 0 } };
+      if (command === "update_amkr_unified_model") return { unified_model: { default: { primary: { model: "model-a", key: null } } } };
+      return undefined;
+    });
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "启用" }));
+
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_amkr_unified_model", {
+      configPath: null,
+      model: "model-a",
+      key: null,
+      fallback: null,
+      image: null,
+    }));
+    expect(screen.getByRole("region", { name: "统一模型" })).toHaveClass("is-enabled");
+  });
+
+  it("requires confirmation before closing the unified model", async () => {
+    invokeMock.mockReset();
+    invokeMock.mockImplementation(async (command) => {
+      if (command === "discover_amkr") return { config_path: "C:/config.json", base_url: "http://127.0.0.1:18900", metrics_db_path: null, log_file_path: null, auth_enabled: true };
+      if (command === "get_amkr_health") return { status: "ok", local_auth_enabled: true, models: ["model-a"], unified_model: { default: { primary: { model: "model-a", key: null } } } };
+      if (command === "get_amkr_metrics") return { total: { requests: 0, total_tokens: 0, cached_token_rate: 0, avg_duration_ms: 0 } };
+      if (command === "delete_amkr_unified_model") return undefined;
+      return undefined;
+    });
+
+    render(<App />);
+    const close = await screen.findByRole("button", { name: "关闭" });
+    fireEvent.click(close);
+    expect(screen.getByRole("dialog", { name: "关闭统一模型？" })).toBeInTheDocument();
+    expect(invokeMock).not.toHaveBeenCalledWith("delete_amkr_unified_model", expect.anything());
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+    expect(screen.queryByRole("dialog", { name: "关闭统一模型？" })).not.toBeInTheDocument();
+    fireEvent.click(close);
+    fireEvent.click(screen.getByRole("button", { name: "确认关闭" }));
+
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("delete_amkr_unified_model", { configPath: null }));
+    expect(screen.queryByRole("dialog", { name: "关闭统一模型？" })).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "统一模型" })).toHaveClass("is-disabled");
+  });
+
+  it("quickly switches the enabled unified model from the overview", async () => {
+    invokeMock.mockReset();
+    invokeMock.mockImplementation(async (command) => {
+      if (command === "discover_amkr") return { config_path: "C:/config.json", base_url: "http://127.0.0.1:18900", metrics_db_path: null, log_file_path: null, auth_enabled: true };
+      if (command === "get_amkr_health") return { status: "ok", local_auth_enabled: true, models: ["model-a", "model-b"], unified_model: { default: { primary: { model: "model-a", key: "key-a" }, fallback: { model: "model-b", key: null } } } };
+      if (command === "get_amkr_metrics") return { total: { requests: 0, total_tokens: 0, cached_token_rate: 0, avg_duration_ms: 0 } };
+      if (command === "update_amkr_unified_model") return { unified_model: { default: { primary: { model: "model-b", key: null }, fallback: null } } };
+      return undefined;
+    });
+
+    render(<App />);
+    fireEvent.change(await screen.findByRole("combobox", { name: "快速选择统一模型" }), { target: { value: "model-b" } });
+
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_amkr_unified_model", {
+      configPath: null,
+      model: "model-b",
+      key: null,
+      fallback: null,
+      image: null,
+    }));
+    expect(screen.getByRole("combobox", { name: "快速选择统一模型" })).toHaveValue("model-b");
+  });
+
+  it("shows the usage table on the activity page", async () => {
     render(<App />);
 
-    await screen.findByRole("status", { name: "服务状态" });
+    await screen.findByRole("button", { name: /服务状态/ });
     fireEvent.click(screen.getByRole("button", { name: "活动" }));
 
     expect(screen.getByRole("button", { name: "活动" })).toHaveAttribute("aria-current", "page");
@@ -600,7 +821,7 @@ describe("Keyloom application shell", () => {
 
   it("shows discovered connection details in settings", async () => {
     render(<App />);
-    await screen.findByRole("status", { name: "服务状态" });
+    await screen.findByRole("button", { name: /服务状态/ });
     fireEvent.click(screen.getByRole("button", { name: "设置" }));
     expect(screen.getByText("当前 AMKR 实例的只读连接摘要。")).toBeInTheDocument();
     expect(screen.getByText("服务地址")).toBeInTheDocument();
@@ -691,7 +912,7 @@ describe("Keyloom application shell", () => {
     vi.useRealTimers();
   });
 
-  it("keeps activity refreshes out of the 15-second trend history", async () => {
+  it("keeps activity refreshes out of the 15-second trend sampler", async () => {
     vi.useFakeTimers();
     invokeMock.mockReset();
     let metricReads = 0;
@@ -724,11 +945,11 @@ describe("Keyloom application shell", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(4_001); });
     expect(metricReads).toBe(4);
     expect(now).toHaveBeenCalledTimes(1);
-    expect(screen.getByText("1 个快照")).toBeInTheDocument();
+    expect(screen.queryByText(/个快照/)).not.toBeInTheDocument();
 
     await act(async () => { await vi.advanceTimersByTimeAsync(11_001); });
     expect(now).toHaveBeenCalledTimes(2);
-    expect(screen.getByText("2 个快照")).toBeInTheDocument();
+    expect(screen.queryByText(/个快照/)).not.toBeInTheDocument();
   });
 
   it("shows a disconnected state when a health refresh fails", async () => {
@@ -754,7 +975,7 @@ describe("Keyloom application shell", () => {
       await vi.advanceTimersByTimeAsync(5_001);
     });
 
-    expect(screen.getByRole("status", { name: "服务状态" })).toHaveTextContent("服务未连接");
+    expect(screen.getByRole("button", { name: /服务状态/ })).toHaveTextContent("服务未连接");
     vi.useRealTimers();
   });
 
@@ -797,7 +1018,7 @@ describe("Keyloom application shell", () => {
 
     await act(async () => { await vi.advanceTimersByTimeAsync(15_001); });
 
-    expect(screen.getByRole("status", { name: "服务状态" })).toHaveTextContent("服务未连接");
+    expect(screen.getByRole("button", { name: /服务状态/ })).toHaveTextContent("服务未连接");
     expect(screen.getByText("cached-model")).toBeInTheDocument();
     expect(screen.getAllByText("321").length).toBeGreaterThan(0);
     expect(screen.getByRole("status", { name: "指标数据状态" })).toHaveTextContent("上次成功数据");
@@ -837,7 +1058,7 @@ describe("Keyloom application shell", () => {
       });
 
     render(<App />);
-    await screen.findByRole("status", { name: "服务状态" });
+    await screen.findByRole("button", { name: /服务状态/ });
     fireEvent.click(screen.getByRole("button", { name: "供应商" }));
 
     expect(await screen.findByText("a.example.test")).toBeInTheDocument();
@@ -863,7 +1084,7 @@ describe("Keyloom application shell", () => {
     await screen.findByText("尚未配置供应商。");
     fireEvent.change(screen.getByLabelText("名称"), { target: { value: "b.example.test" } });
     fireEvent.change(screen.getByLabelText("地址"), { target: { value: "https://b.example.test" } });
-    fireEvent.click(screen.getByRole("button", { name: "添加供应商" }));
+    fireEvent.click(screen.getByRole("button", { name: "添加" }));
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("create_amkr_provider", { configPath: null, configRevision: "revision-a", id: "b.example.test", baseUrl: "https://b.example.test" }));
     expect(await screen.findByText("b.example.test")).toBeInTheDocument();
@@ -893,7 +1114,7 @@ describe("Keyloom application shell", () => {
     });
 
     render(<App />);
-    await screen.findByRole("status", { name: "服务状态" });
+    await screen.findByRole("button", { name: /服务状态/ });
     fireEvent.click(screen.getByRole("button", { name: "模型路由" }));
 
     expect(await screen.findByText("model-a")).toBeInTheDocument();

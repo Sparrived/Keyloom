@@ -17,6 +17,20 @@ $tauriConfig = Get-Content -LiteralPath (Join-Path $repoRoot 'src-tauri\tauri.co
 if (@($tauriConfig.app.windows).Count -ne 1 -or $tauriConfig.app.windows[0].decorations -ne $false) {
     throw 'Keyloom must disable native window decorations for its custom title bar.'
 }
+if ($tauriConfig.app.windows[0].resizable -ne $false -or $tauriConfig.app.windows[0].maximizable -ne $false) {
+    throw 'Keyloom must use a fixed-size, non-maximizable main window.'
+}
+if ($tauriConfig.app.windows[0].devtools -ne $false) {
+    throw 'Keyloom main window must disable browser developer tools.'
+}
+if ($tauriConfig.app.windows[0].width -ne 800 -or $tauriConfig.app.windows[0].height -ne 600) {
+    throw 'Keyloom main window must use the fixed 800x600 logical size.'
+}
+
+$mainFrontend = Get-Content -LiteralPath (Join-Path $repoRoot 'src\main.tsx') -Raw
+if (-not $mainFrontend.Contains('event.key === "F12"')) {
+    throw 'Keyloom main window must suppress the F12 shortcut.'
+}
 
 $subsystem = $null
 if ($ExecutablePath) {

@@ -12,8 +12,8 @@ describe("UsageChart", () => {
     render(<UsageChart history={history} metric="RPM" onMetricChange={() => undefined} />);
     fireEvent.focus(screen.getByLabelText("历史数据点").querySelectorAll("button")[1]);
     expect(screen.getByLabelText("用量趋势图")).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent(/RPM\s*9/);
-    expect(screen.getByRole("status")).toHaveTextContent(/TPM\s*1,800/);
+    expect(screen.getByRole("status").children).toHaveLength(9);
+    expect(screen.getByRole("status")).toHaveTextContent(/RPM \/ TPM\s*9 \/ 1,800/);
     expect(screen.getByRole("status")).toHaveTextContent(/近 60 分钟 Token\s*2,000/);
     expect(screen.getByRole("status")).toHaveTextContent(/输入 Token\s*1,200/);
     expect(screen.getByRole("status")).toHaveTextContent(/输出 Token\s*800/);
@@ -26,17 +26,19 @@ describe("UsageChart", () => {
     const { container } = render(<UsageChart history={history} metric="RPM" onMetricChange={() => undefined} />);
     const firstPoint = screen.getByLabelText("历史数据点").querySelectorAll("button")[0];
     fireEvent.mouseEnter(firstPoint);
-    expect(screen.getByRole("status")).toHaveTextContent(/RPM\s*4/);
+    expect(screen.getByRole("status")).toHaveTextContent(/RPM \/ TPM\s*4 \/ 900/);
     expect(firstPoint).toHaveAttribute("aria-pressed", "true");
     expect(container.querySelectorAll("circle")[0]).toHaveClass("is-selected");
     expect(container.querySelectorAll("circle")[1]).not.toHaveClass("is-selected");
   });
 
-  it("selects a new latest sample when bounded history keeps the same length", () => {
-    const { rerender } = render(<UsageChart history={history} metric="RPM" />);
-    fireEvent.mouseEnter(screen.getByLabelText("历史数据点").querySelectorAll("button")[0]);
-    rerender(<UsageChart history={[history[1], { ...history[1], timestamp: "2026-07-12T10:30:00.000Z", current_rpm: 36 }]} metric="RPM" />);
-    expect(screen.getByRole("status")).toHaveTextContent(/RPM\s*36/);
+  it("hides the point detail when the pointer leaves", () => {
+    render(<UsageChart history={history} metric="RPM" />);
+    const point = screen.getByLabelText("历史数据点").querySelectorAll("button")[0];
+    fireEvent.mouseEnter(point);
+    expect(screen.getByRole("status")).toBeInTheDocument();
+    fireEvent.mouseLeave(point);
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
   it("uses live rate and cache percentage values instead of cumulative totals", () => {
@@ -63,6 +65,7 @@ describe("UsageChart", () => {
 
   it("shows unavailable instead of fabricating legacy metric details", () => {
     render(<UsageChart history={[{ ...history[0], successes: null, failures: null, prompt_tokens: null, completion_tokens: null, cached_tokens: null }]} metric="缓存率" />);
+    fireEvent.mouseEnter(screen.getByLabelText("历史数据点").querySelector("button")!);
     expect(screen.getByRole("status")).toHaveTextContent(/输入 Token\s*暂不可用/);
     expect(screen.getByRole("status")).toHaveTextContent(/输出 Token\s*暂不可用/);
     expect(screen.getByRole("status")).toHaveTextContent(/成功率\s*暂不可用/);

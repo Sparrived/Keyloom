@@ -10,6 +10,7 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $package = Get-Content -LiteralPath (Join-Path $repoRoot 'package.json') -Raw | ConvertFrom-Json
 $tauri = Get-Content -LiteralPath (Join-Path $repoRoot 'src-tauri\tauri.conf.json') -Raw | ConvertFrom-Json
 $cargo = Get-Content -LiteralPath (Join-Path $repoRoot 'src-tauri\Cargo.toml') -Raw
+$capability = Get-Content -LiteralPath (Join-Path $repoRoot 'src-tauri\capabilities\main.json') -Raw
 
 if ($cargo -notmatch '(?m)^version\s*=\s*"([^"]+)"') {
     throw 'Cargo.toml package version is missing.'
@@ -26,13 +27,34 @@ if ($Tag -and $Tag -ne "v$version") {
     throw "Release tag must be v$version, got $Tag."
 }
 
+foreach ($dependency in @('@tauri-apps/plugin-updater', '@tauri-apps/plugin-process')) {
+    if (-not $package.dependencies.$dependency) {
+        throw "package.json is missing $dependency."
+    }
+}
+foreach ($required in @('tauri-plugin-updater', 'tauri-plugin-process')) {
+    if ($cargo -notmatch [Regex]::Escape($required)) {
+        throw "Cargo.toml is missing $required."
+    }
+}
+foreach ($permission in @('updater:default', 'process:allow-restart')) {
+    if ($capability -notmatch [Regex]::Escape($permission)) {
+        throw "main capability is missing $permission."
+    }
+}
+
 $workflow = Get-Content -LiteralPath (Join-Path $repoRoot '.github\workflows\release.yml') -Raw
 if ($workflow -notmatch [Regex]::Escape('tests/release-version-contract.ps1')) {
     throw 'release workflow must run tests/release-version-contract.ps1.'
 }
 foreach ($required in @(
     'KEYLOOM_WINDOWS_CERTIFICATE',
+    'KEYLOOM_UPDATER_PUBLIC_KEY',
+    'TAURI_SIGNING_PRIVATE_KEY',
     'Get-AuthenticodeSignature',
+    'createUpdaterArtifacts',
+    'latest.json',
+    '*.nsis.zip.sig',
     'softprops/action-gh-release@v2',
     'generate_release_notes: true',
     'runtime-smoke.txt'

@@ -38,6 +38,23 @@ fn discover_amkr_returns_connection_metadata_without_the_api_key() {
 }
 
 #[test]
+fn gets_the_existing_local_api_key_only_on_explicit_request() {
+    let path = std::env::temp_dir().join("keyloom-explicit-local-key-config.json");
+    fs::write(
+        &path,
+        r#"{"host":"127.0.0.1","port":18900,"local_api_key":"existing-local-key"}"#,
+    )
+    .unwrap();
+
+    assert_eq!(
+        crate::get_amkr_local_api_key(Some(&path)).unwrap(),
+        "existing-local-key"
+    );
+
+    fs::remove_file(path).unwrap();
+}
+
+#[test]
 fn discovers_runtime_settings_without_returning_the_local_api_key() {
     let path = std::env::temp_dir().join("keyloom-runtime-settings-config.json");
     fs::write(

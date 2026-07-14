@@ -35,6 +35,7 @@ export function RoutingPage({ configPath, onUnifiedModelChange }: RoutingPagePro
   const [createTargets, setCreateTargets] = useState<AmkrRouteTarget[]>([emptyTarget()]);
   const [aliases, setAliases] = useState("");
   const [mode, setMode] = useState("round_robin");
+  const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<RouteDraft | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -56,7 +57,7 @@ export function RoutingPage({ configPath, onUnifiedModelChange }: RoutingPagePro
     }
     try {
       await createAmkrRoute(data.config_revision, id, createTargets, csv(aliases), mode || null, configPath);
-      setId(""); setCreateTargets([emptyTarget()]); setAliases("");
+      setId(""); setCreateTargets([emptyTarget()]); setAliases(""); setMode("round_robin"); setCreating(false);
       await refresh();
       setUnifiedModelRefreshToken((value) => value + 1);
     } catch (reason) {
@@ -108,13 +109,38 @@ export function RoutingPage({ configPath, onUnifiedModelChange }: RoutingPagePro
   const addEditingTarget = () => setEditing((current) => current ? { ...current, targets: [...current.targets, emptyTarget()] } : current);
   const removeEditingTarget = (index: number) => setEditing((current) => current && current.targets.length > 1 ? { ...current, targets: current.targets.filter((_, targetIndex) => targetIndex !== index) } : current);
 
+  const cancelCreate = () => {
+    setId("");
+    setCreateTargets([emptyTarget()]);
+    setAliases("");
+    setMode("round_robin");
+    setError(null);
+    setCreating(false);
+  };
+
+  const toggleCreate = () => {
+    if (creating) cancelCreate();
+    else {
+      setEditing(null);
+      setError(null);
+      setCreating(true);
+    }
+  };
+
   const targetLabel = (prefix: string, index: number) => `${prefix}${index === 0 ? "" : ` ${index + 1}`}`;
 
   return <section className="routes-page" aria-labelledby="routes-heading">
     <header className="page-header"><div><h2 id="routes-heading">模型路由</h2><p>管理模型别名、路由模式和上游目标。</p></div>{data ? <span className="config-revision">版本 {data.config_revision.slice(0, 12)}</span> : null}</header>
     <UnifiedModelPanel configPath={configPath} refreshToken={unifiedModelRefreshToken} onChange={onUnifiedModelChange} />
-    <form className="route-create" onSubmit={(event) => { event.preventDefault(); void create(); }}>
+    <section className="route-rules" aria-labelledby="route-rules-heading">
+      <header className="route-rules-heading">
+        <div><h3 id="route-rules-heading">路由规则</h3><p>将模型 ID 映射到一个或多个上游目标。</p></div>
+        <button aria-expanded={creating} className="secondary-button" type="button" onClick={toggleCreate}>{creating ? "取消新增" : "新增路由"}</button>
+      </header>
+    {creating ? <form className="route-create" onSubmit={(event) => { event.preventDefault(); void create(); }}>
       <label>模型 ID<input required value={id} onChange={(event) => setId(event.target.value)} /></label>
+      <label>别名<input value={aliases} placeholder="逗号分隔" onChange={(event) => setAliases(event.target.value)} /></label>
+      <label>模式<select value={mode} onChange={(event) => setMode(event.target.value)}><option value="round_robin">轮询</option><option value="priority">优先级</option><option value="only_first">首 Key</option></select></label>
       <fieldset className="route-targets" aria-label="创建路由目标">
         <legend>上游目标</legend>
         {createTargets.map((target, index) => <div className="route-target-row" key={index}>
@@ -125,21 +151,24 @@ export function RoutingPage({ configPath, onUnifiedModelChange }: RoutingPagePro
         </div>)}
         <button aria-label="添加路由目标" className="secondary-button" type="button" onClick={addCreateTarget}>添加目标</button>
       </fieldset>
-      <label>别名<input value={aliases} placeholder="逗号分隔" onChange={(event) => setAliases(event.target.value)} /></label>
-      <label>模式<select value={mode} onChange={(event) => setMode(event.target.value)}><option value="round_robin">轮询</option><option value="priority">优先级</option><option value="only_first">首 Key</option></select></label>
-      <button type="submit" disabled={!data || loading}>添加路由</button>
-    </form>
+      <div className="form-actions">
+        <button className="secondary-button" type="button" onClick={cancelCreate}>取消</button>
+        <button type="submit" disabled={!data || loading}>添加路由</button>
+      </div>
+    </form> : null}
     {loading ? <p className="empty-state">正在读取模型路由。</p> : null}
     {error ? <p className="service-action-error">无法读取或写入模型路由: {error}</p> : null}
     {data?.routes.length === 0 ? <p className="empty-state">尚未配置模型路由。</p> : null}
     <div className="route-list">{data?.routes.map((route) => <article className="route-item" key={route.id}>
       <header>
         <div><h3>{route.id}</h3><p>{route.aliases.length ? route.aliases.join(", ") : "无别名"}</p></div>
-        <div className="item-actions"><span>{route.routing_mode ?? "默认策略"}</span><button aria-label={`编辑路由 ${route.id}`} className="secondary-button" type="button" onClick={() => setEditing(draftFromRoute(route))}>编辑</button><button aria-label={`删除路由 ${route.id}`} className="danger-button" type="button" onClick={() => void remove(route.id)}>删除</button></div>
+        <div className="item-actions"><span>{route.routing_mode ?? "默认策略"}</span><button aria-expanded={editing?.originalId === route.id} aria-label={`${editing?.originalId === route.id ? "收起" : "编辑"}路由 ${route.id}`} className="secondary-button" type="button" onClick={() => { cancelCreate(); setEditing((current) => current?.originalId === route.id ? null : draftFromRoute(route)); }}>{editing?.originalId === route.id ? "收起" : "编辑"}</button><button aria-label={`删除路由 ${route.id}`} className="danger-button" type="button" onClick={() => void remove(route.id)}>删除</button></div>
       </header>
       <ul aria-label={`${route.id} 的路由目标`}>{route.targets.map((target, index) => <li key={`${target.provider}:${target.pool}:${target.upstream_model}:${index}`}>{target.provider} / {target.pool} / {target.upstream_model}</li>)}</ul>
       {editing?.originalId === route.id ? <form className="inline-form editor-form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
         <label>编辑模型 ID<input required value={editing.id} onChange={(event) => setEditing({ ...editing, id: event.target.value })} /></label>
+        <label>编辑别名<input value={editing.aliases} onChange={(event) => setEditing({ ...editing, aliases: event.target.value })} /></label>
+        <label>编辑模式<select value={editing.mode} onChange={(event) => setEditing({ ...editing, mode: event.target.value })}><option value="round_robin">轮询</option><option value="priority">优先级</option><option value="only_first">首 Key</option></select></label>
         <fieldset className="route-targets" aria-label={`编辑 ${route.id} 的路由目标`}>
           <legend>上游目标</legend>
           {editing.targets.map((target, index) => <div className="route-target-row" key={index}>
@@ -150,11 +179,12 @@ export function RoutingPage({ configPath, onUnifiedModelChange }: RoutingPagePro
           </div>)}
           <button aria-label="添加编辑路由目标" className="secondary-button" type="button" onClick={addEditingTarget}>添加目标</button>
         </fieldset>
-        <label>编辑别名<input value={editing.aliases} onChange={(event) => setEditing({ ...editing, aliases: event.target.value })} /></label>
-        <label>编辑模式<select value={editing.mode} onChange={(event) => setEditing({ ...editing, mode: event.target.value })}><option value="round_robin">轮询</option><option value="priority">优先级</option><option value="only_first">首 Key</option></select></label>
-        <button type="submit">保存路由</button>
-        <button className="secondary-button" type="button" onClick={() => setEditing(null)}>取消</button>
+        <div className="form-actions">
+          <button className="secondary-button" type="button" onClick={() => setEditing(null)}>取消</button>
+          <button type="submit">保存路由</button>
+        </div>
       </form> : null}
     </article>)}</div>
+    </section>
   </section>;
 }

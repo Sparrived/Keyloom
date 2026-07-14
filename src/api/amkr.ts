@@ -49,12 +49,14 @@ export type AmkrUsageStats = {
   requests: number;
   successes?: number | null;
   failures?: number | null;
+  retries?: number | null;
   prompt_tokens?: number | null;
   completion_tokens?: number | null;
   total_tokens: number;
   cached_token_rate: number;
   cached_tokens?: number | null;
   avg_duration_ms: number;
+  avg_first_token_ms?: number | null;
 };
 
 export type AmkrMetrics = {
@@ -66,6 +68,21 @@ export type AmkrMetrics = {
   caller_types?: Record<string, AmkrUsageStats>;
   models?: Record<string, AmkrUsageStats>;
   keys?: Record<string, Record<string, AmkrUsageStats>>;
+};
+
+export type AmkrMetricHistoryPoint = {
+  timestamp: string;
+  current_rpm: number;
+  current_tpm: number;
+  requests: number;
+  successes: number;
+  failures: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  cached_tokens: number;
+  cached_token_rate: number;
+  avg_duration_ms: number;
 };
 
 export type AmkrSettings = {
@@ -236,6 +253,18 @@ export function getAmkrMetrics(configPath: string | null = null) {
   return invoke<AmkrMetrics>("get_amkr_metrics", { configPath });
 }
 
+export function setAmkrWidgetVisible(visible: boolean) {
+  return invoke<void>("set_amkr_widget_visible", { visible });
+}
+
+export async function getAmkrMetricHistory(configPath: string | null = null) {
+  const points = await invoke<(Omit<AmkrMetricHistoryPoint, "timestamp"> & { timestamp_ms: number })[] | undefined>("get_amkr_metric_history", { configPath });
+  return (points ?? []).map(({ timestamp_ms, ...point }) => ({
+    ...point,
+    timestamp: new Date(timestamp_ms).toISOString(),
+  }));
+}
+
 export function getAmkrSettings(configPath: string | null = null) {
   return invoke<AmkrSettingsResponse>("get_amkr_settings", { configPath });
 }
@@ -255,6 +284,10 @@ export function updateAmkrSettings(configRevision: string, settings: AmkrSetting
 
 export function regenerateAmkrLocalApiKey(configRevision: string, configPath: string | null = null) {
   return invoke<AmkrLocalApiKeyResponse>("regenerate_amkr_local_api_key", { configPath, configRevision });
+}
+
+export function getAmkrLocalApiKey(configPath: string | null = null) {
+  return invoke<string>("get_amkr_local_api_key", { configPath });
 }
 
 export function checkAmkrUpdate(configPath: string | null = null) {

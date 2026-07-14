@@ -1,6 +1,7 @@
 pub mod amkr;
 pub mod installer;
 pub mod integrations;
+pub mod metric_history;
 pub mod tray;
 pub mod windows_service;
 
@@ -121,11 +122,38 @@ pub fn get_amkr_metrics(selected_path: Option<&Path>) -> Result<amkr::client::Am
     amkr::client::get_metrics(&instance.connection)
 }
 
+pub fn get_amkr_metric_history(
+    selected_path: Option<&Path>,
+) -> Result<Vec<metric_history::MetricHistoryPoint>, String> {
+    let instance = discover_local_instance(selected_path)?;
+    let Some(database_path) = instance.connection.metrics_db_path else {
+        return Ok(Vec::new());
+    };
+    let path = PathBuf::from(database_path);
+    let resolved_path = if path.is_absolute() {
+        path
+    } else {
+        instance
+            .config_path
+            .parent()
+            .unwrap_or(Path::new("."))
+            .join(path)
+    };
+    metric_history::read_metric_history(&resolved_path)
+}
+
 pub fn get_amkr_settings(
     selected_path: Option<&Path>,
 ) -> Result<amkr::client::AmkrSettingsResponse, String> {
     let instance = discover_local_instance(selected_path)?;
     amkr::client::get_settings(&instance.connection)
+}
+
+pub fn get_amkr_local_api_key(selected_path: Option<&Path>) -> Result<String, String> {
+    discover_local_instance(selected_path)?
+        .connection
+        .local_api_key
+        .ok_or_else(|| "本地鉴权未启用。".to_owned())
 }
 
 pub fn update_amkr_settings(

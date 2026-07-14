@@ -1,4 +1,4 @@
-name: Windows verification
+name: Verify and release Keyloom
 
 on:
   pull_request:
@@ -109,9 +109,15 @@ jobs:
         env:
           KEYLOOM_WINDOWS_CERTIFICATE: ${{ secrets.KEYLOOM_WINDOWS_CERTIFICATE }}
           KEYLOOM_WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.KEYLOOM_WINDOWS_CERTIFICATE_PASSWORD }}
+          KEYLOOM_UPDATER_PUBLIC_KEY: ${{ vars.KEYLOOM_UPDATER_PUBLIC_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           if (-not $env:KEYLOOM_WINDOWS_CERTIFICATE -or -not $env:KEYLOOM_WINDOWS_CERTIFICATE_PASSWORD) {
             throw 'Tagged releases require KEYLOOM_WINDOWS_CERTIFICATE and KEYLOOM_WINDOWS_CERTIFICATE_PASSWORD.'
+          }
+          if (-not $env:KEYLOOM_UPDATER_PUBLIC_KEY -or -not $env:TAURI_SIGNING_PRIVATE_KEY) {
+            throw 'Tagged releases require KEYLOOM_UPDATER_PUBLIC_KEY and TAURI_SIGNING_PRIVATE_KEY.'
           }
 
       - name: Import Windows signing certificate
@@ -134,13 +140,27 @@ jobs:
         shell: pwsh
         env:
           CERTIFICATE_THUMBPRINT: ${{ steps.signing.outputs.thumbprint }}
+          KEYLOOM_UPDATER_PUBLIC_KEY: ${{ vars.KEYLOOM_UPDATER_PUBLIC_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
+          $tagged = $env:GITHUB_REF -like 'refs/tags/v*'
+          $bundle = @{ createUpdaterArtifacts = $tagged }
           if ($env:CERTIFICATE_THUMBPRINT) {
-            $config = @{ bundle = @{ windows = @{ certificateThumbprint = $env:CERTIFICATE_THUMBPRINT; digestAlgorithm = 'sha256'; timestampUrl = 'http://timestamp.digicert.com' } } } | ConvertTo-Json -Depth 5 -Compress
-            npx tauri build --bundles nsis --ci --config $config
-          } else {
-            npx tauri build --bundles nsis --ci --no-sign
+            $bundle.windows = @{ certificateThumbprint = $env:CERTIFICATE_THUMBPRINT; digestAlgorithm = 'sha256'; timestampUrl = 'http://timestamp.digicert.com' }
           }
+          $configObject = @{ bundle = $bundle }
+          if ($tagged) {
+            $configObject.plugins = @{ updater = @{
+              pubkey = $env:KEYLOOM_UPDATER_PUBLIC_KEY
+              endpoints = @("https://github.com/$env:GITHUB_REPOSITORY/releases/latest/download/latest.json")
+              windows = @{ installMode = 'passive' }
+            } }
+          }
+          $config = $configObject | ConvertTo-Json -Depth 8 -Compress
+          $arguments = @('tauri', 'build', '--bundles', 'nsis', '--ci', '--config', $config)
+          if (-not $tagged) { $arguments += '--no-sign' }
+          & npx @arguments
           if ($LASTEXITCODE -ne 0) { throw 'NSIS release build failed.' }
 
       - name: Verify packaged Windows subsystem
@@ -157,6 +177,30 @@ jobs:
           $installer = $installers[0]
           $hash = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  $($installer.Name)" | Set-Content "$($installer.FullName).sha256" -Encoding ascii
+
+      - name: Generate signed updater manifest
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $bundleDirectory = 'src-tauri/target/release/bundle/nsis'
+          $archives = @(Get-ChildItem $bundleDirectory -Filter '*.nsis.zip')
+          if ($archives.Count -ne 1) { throw "Expected one NSIS updater archive, found $($archives.Count)" }
+          $archive = $archives[0]
+          $signaturePath = "$($archive.FullName).sig"
+          if (-not (Test-Path $signaturePath)) { throw "Missing updater signature: $signaturePath" }
+          $package = Get-Content package.json -Raw | ConvertFrom-Json
+          $manifest = @{
+            version = [string]$package.version
+            notes = "Keyloom $($package.version)"
+            pub_date = (Get-Date).ToUniversalTime().ToString('o')
+            platforms = @{
+              'windows-x86_64' = @{
+                signature = (Get-Content $signaturePath -Raw).Trim()
+                url = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:GITHUB_REF_NAME/$($archive.Name)"
+              }
+            }
+          }
+          $manifest | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $bundleDirectory 'latest.json') -Encoding utf8
 
       - name: Verify release signature and record smoke report
         if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
@@ -179,6 +223,9 @@ jobs:
           path: |
             src-tauri/target/release/bundle/nsis/*-setup.exe
             src-tauri/target/release/bundle/nsis/*.sha256
+            src-tauri/target/release/bundle/nsis/*.nsis.zip
+            src-tauri/target/release/bundle/nsis/*.nsis.zip.sig
+            src-tauri/target/release/bundle/nsis/latest.json
             src-tauri/target/release/bundle/nsis/runtime-smoke.txt
 
       - uses: softprops/action-gh-release@v2
@@ -188,4 +235,7 @@ jobs:
           files: |
             src-tauri/target/release/bundle/nsis/*-setup.exe
             src-tauri/target/release/bundle/nsis/*.sha256
+            src-tauri/target/release/bundle/nsis/*.nsis.zip
+            src-tauri/target/release/bundle/nsis/*.nsis.zip.sig
+            src-tauri/target/release/bundle/nsis/latest.json
             src-tauri/target/release/bundle/nsis/runtime-smoke.txt

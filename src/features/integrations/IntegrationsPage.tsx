@@ -74,6 +74,7 @@ export function IntegrationsPage({ configPath, baseUrl, authEnabled }: Integrati
     <div className="integration-list">{agents.map((agent) => {
       const status = statuses[agent];
       const error = errors[agent];
+      const fields = previewFields(agent, modes[agent]);
       return <article className="integration-item" key={agent}>
         <div className="integration-item-header">
           <div><h3>{status?.display_name ?? (agent === "claude-code" ? "Claude Code" : "Codex")}</h3><p>{status ? `目标文件 ${status.target_path}` : "正在读取配置状态。"}</p></div>
@@ -84,7 +85,10 @@ export function IntegrationsPage({ configPath, baseUrl, authEnabled }: Integrati
           <button type="button" disabled={action !== null || !baseUrl || !authEnabled} onClick={() => void apply(agent)}>{action === agent ? "正在处理" : "应用"}</button>
           <button className="secondary-button" type="button" disabled={action !== null || !status?.backup_available} onClick={() => void rollback(agent)}>回退</button>
         </div>
-        <p className="integration-preview">变更字段 {previewFields(agent, modes[agent]).map((field) => <code key={field}>{field}</code>)}</p>
+        <details className="integration-fields">
+          <summary>变更字段 · {fields.length} 项</summary>
+          <div className="integration-field-list">{fields.map((field) => <code key={field}>{field}</code>)}</div>
+        </details>
         {error ? <p className="service-action-error" role="alert">{error}</p> : null}
       </article>;
     })}</div>

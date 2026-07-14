@@ -73,8 +73,12 @@ export async function installTauriMock(page: Page, scenario: "existing" | "fresh
             case "get_amkr_metrics":
               if (!health) throw new Error("AMKR service is stopped");
               return { current_rpm: 12, current_tpm: 48_000, total: { requests: 1284, successes: 1270, failures: 14, prompt_tokens: 800000, completion_tokens: 240000, total_tokens: 1040000, cached_tokens: 312000, cached_token_rate: 0.3, avg_duration_ms: 840 } };
+            case "get_amkr_metric_history":
+              return [];
             case "get_amkr_settings":
               return { config_revision: providerRevision, settings: { host: metadata.host, port: metadata.port, request_timeout: metadata.request_timeout, stream_first_byte_timeout: metadata.stream_first_byte_timeout, stream_idle_timeout: metadata.stream_idle_timeout, max_retries: metadata.max_retries, local_auth_enabled: true, local_api_key_fingerprint: healthy.local_api_key_fingerprint } };
+            case "get_amkr_local_api_key":
+              return "test-local-api-key";
             case "check_amkr_update":
               return { current_version: "3.1.1", latest_version: "3.1.1", release_url: "https://example.test/amkr", source: "PyPI", artifact_url: null, artifact_sha256: null, update_available: false, error: null };
             case "get_amkr_providers":

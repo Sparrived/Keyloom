@@ -11,7 +11,7 @@ const invokeMock = vi.mocked(invoke);
 describe("ProbePanel", () => {
   beforeEach(() => invokeMock.mockReset());
 
-  it("starts a selected key probe and renders the redacted result", async () => {
+  it("keeps only the all-key probe action and renders the redacted result", async () => {
     invokeMock.mockImplementation(async (command) => {
       if (command === "probe_amkr_keys") return { probe_id: "probe-1", status: "pending" };
       if (command === "get_amkr_probe") {
@@ -35,12 +35,14 @@ describe("ProbePanel", () => {
     });
 
     render(<ProbePanel configPath={null} providerId="a.example.test" keys={["key-a", "key-b"]} pools={["pool-a"]} />);
-    fireEvent.click(screen.getByRole("button", { name: "探测 Key key-a" }));
+    expect(screen.queryByRole("button", { name: "探测 Key key-a" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "探测全部模型池" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "探测全部 Key" }));
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("probe_amkr_keys", {
       configPath: null,
       providerId: "a.example.test",
-      keys: ["key-a"],
+      keys: [],
       timeoutSeconds: 15,
     }));
     expect(await screen.findByText("https://a.example.test/v1/chat/completions")).toBeInTheDocument();
@@ -49,7 +51,7 @@ describe("ProbePanel", () => {
     expect(screen.queryByText("upstream-secret")).not.toBeInTheDocument();
   });
 
-  it("starts a pool probe with the selected pool", async () => {
+  it("automatically probes the pool requested by an editor", async () => {
     invokeMock.mockImplementation(async (command) => {
       if (command === "probe_amkr_pools") return { probe_id: "probe-pool", status: "pending" };
       if (command === "get_amkr_probe") return {
@@ -62,8 +64,7 @@ describe("ProbePanel", () => {
       return undefined;
     });
 
-    render(<ProbePanel configPath="C:/amkr.json" providerId="a.example.test" keys={["key-a"]} pools={["pool-a", "pool-b"]} />);
-    fireEvent.click(screen.getByRole("button", { name: "探测模型池 pool-b" }));
+    render(<ProbePanel configPath="C:/amkr.json" providerId="a.example.test" keys={["key-a"]} pools={["pool-a", "pool-b"]} poolProbeRequest={{ id: 1, pool: "pool-b" }} />);
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("probe_amkr_pools", {
       configPath: "C:/amkr.json",
@@ -94,9 +95,9 @@ describe("ProbePanel", () => {
     });
 
     render(<ProbePanel configPath={null} providerId="a.example.test" keys={["key-a"]} pools={[]} />);
-    fireEvent.click(screen.getByRole("button", { name: "探测 Key key-a" }));
+    fireEvent.click(screen.getByRole("button", { name: "探测全部 Key" }));
     expect(await screen.findByRole("button", { name: "取消探测" })).not.toBeDisabled();
-    expect(screen.getByRole("button", { name: "探测 Key key-a" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "探测全部 Key" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "取消探测" }));
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("cancel_amkr_probe", {
       configPath: null,
@@ -122,7 +123,7 @@ describe("ProbePanel", () => {
     });
 
     const { unmount } = render(<ProbePanel configPath={null} providerId="a.example.test" keys={["key-a"]} pools={[]} />);
-    fireEvent.click(screen.getByRole("button", { name: "探测 Key key-a" }));
+    fireEvent.click(screen.getByRole("button", { name: "探测全部 Key" }));
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("get_amkr_probe", {
       configPath: null,
       probeId: "probe-unmount",
@@ -157,7 +158,7 @@ describe("ProbePanel", () => {
     });
 
     const { unmount } = render(<ProbePanel configPath={null} providerId="a.example.test" keys={["key-a"]} pools={[]} />);
-    fireEvent.click(screen.getByRole("button", { name: "探测 Key key-a" }));
+    fireEvent.click(screen.getByRole("button", { name: "探测全部 Key" }));
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("probe_amkr_keys", expect.anything()));
     unmount();
     resolveStart?.({ probe_id: "probe-late", status: "pending" });

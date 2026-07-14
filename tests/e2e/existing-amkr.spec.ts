@@ -5,11 +5,12 @@ test("shows live rates separately from the rolling 60-minute totals", async ({ p
   await installTauriMock(page);
   await page.goto("/");
 
-  await expect(page.getByRole("heading", { name: "实时用量" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "近十分钟用量" })).toBeVisible();
   await expect(page.getByRole("button", { name: "RPM" })).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByText("12 次/分")).toBeVisible();
   await expect(page.getByText("RPM、TPM 为过去 1 分钟的滚动速率；缓存率为最近 60 分钟汇总。")).toBeVisible();
-  await expect(page.getByLabel("所选用量快照")).toContainText("RPM12TPM48,000近 60 分钟请求1,284");
+  await page.getByLabel("历史数据点").locator("button").hover();
+  await expect(page.getByLabel("所选用量快照")).toContainText("RPM / TPM12 / 48,000近 60 分钟请求1,284");
 });
 
 test("shows the selected CLI config and packaged runtime metadata", async ({ page }) => {

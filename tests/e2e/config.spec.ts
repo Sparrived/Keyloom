@@ -40,6 +40,7 @@ test("switches the unified model to a fixed key", async ({ page }) => {
   await installTauriMock(page);
   await page.goto("/");
   await page.getByRole("button", { name: "模型路由" }).click();
+  await page.getByRole("button", { name: "编辑统一模型" }).click();
   await page.getByRole("radio", { name: "固定 Key" }).click();
   await page.getByRole("button", { name: "保存统一模型" }).click();
   await page.getByRole("button", { name: "概览" }).click();

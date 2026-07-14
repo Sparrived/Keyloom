@@ -6,8 +6,58 @@ use keyloom_core::tray::{action_from_menu_id, TrayAction};
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::TrayIconBuilder,
-    Manager,
+    Manager, WebviewUrl, WebviewWindowBuilder,
 };
+
+const AMKR_WIDGET_LABEL: &str = "amkr-widget";
+
+#[tauri::command]
+async fn set_amkr_widget_visible(app: tauri::AppHandle, visible: bool) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window(AMKR_WIDGET_LABEL) {
+        return if visible {
+            window
+                .show()
+                .and_then(|_| window.unminimize())
+                .and_then(|_| window.set_focus())
+        } else {
+            window.hide()
+        }
+        .map_err(|error| format!("无法切换 AMKR 挂件: {error}"));
+    }
+
+    if !visible {
+        return Ok(());
+    }
+
+    let window = WebviewWindowBuilder::new(
+        &app,
+        AMKR_WIDGET_LABEL,
+        WebviewUrl::App("widget.html".into()),
+    )
+    .title("AMKR 仪表盘")
+    .inner_size(360.0, 390.0)
+    .transparent(false)
+    .decorations(false)
+    .always_on_top(true)
+    .resizable(false)
+    .maximizable(false)
+    .minimizable(false)
+    .skip_taskbar(true)
+    .shadow(false)
+    .devtools(false)
+    .center()
+    .build()
+    .map_err(|error| format!("无法创建 AMKR 挂件: {error}"))?;
+
+    let close_window = window.clone();
+    window.on_window_event(move |event| {
+        if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+            api.prevent_close();
+            let _ = close_window.hide();
+        }
+    });
+    Ok(())
+}
 
 #[tauri::command]
 fn discover_amkr(config_path: Option<String>) -> Result<keyloom_core::AmkrMetadata, String> {
@@ -34,10 +84,22 @@ fn get_amkr_metrics(
 }
 
 #[tauri::command]
+fn get_amkr_metric_history(
+    config_path: Option<String>,
+) -> Result<Vec<keyloom_core::metric_history::MetricHistoryPoint>, String> {
+    keyloom_core::get_amkr_metric_history(config_path.as_deref().map(Path::new))
+}
+
+#[tauri::command]
 fn get_amkr_settings(
     config_path: Option<String>,
 ) -> Result<keyloom_core::amkr::client::AmkrSettingsResponse, String> {
     keyloom_core::get_amkr_settings(config_path.as_deref().map(Path::new))
+}
+
+#[tauri::command]
+fn get_amkr_local_api_key(config_path: Option<String>) -> Result<String, String> {
+    keyloom_core::get_amkr_local_api_key(config_path.as_deref().map(Path::new))
 }
 
 #[tauri::command]
@@ -625,6 +687,8 @@ fn run_tray_action(app: &tauri::AppHandle, action: TrayAction) {
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let open = MenuItem::with_id(app, "open", "打开 Keyloom", true, None::<&str>)?;
             let start = MenuItem::with_id(app, "start", "启动服务", true, None::<&str>)?;
@@ -651,11 +715,14 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            set_amkr_widget_visible,
             discover_amkr,
             initialize_default_amkr_config,
             get_amkr_health,
             get_amkr_metrics,
+            get_amkr_metric_history,
             get_amkr_settings,
+            get_amkr_local_api_key,
             update_amkr_settings,
             regenerate_amkr_local_api_key,
             check_amkr_update,

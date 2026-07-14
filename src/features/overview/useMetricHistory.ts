@@ -1,7 +1,6 @@
-import type { AmkrMetrics } from "../../api/amkr";
+import type { AmkrMetricHistoryPoint, AmkrMetrics } from "../../api/amkr";
 
-export type MetricSnapshot = AmkrMetrics["total"] & {
-  timestamp: string;
+export type MetricSnapshot = Omit<AmkrMetricHistoryPoint, "current_rpm" | "current_tpm" | "cached_tokens" | "successes" | "failures" | "prompt_tokens" | "completion_tokens"> & {
   current_rpm: number | null;
   current_tpm: number | null;
   cached_tokens: number | null;
@@ -10,6 +9,8 @@ export type MetricSnapshot = AmkrMetrics["total"] & {
   prompt_tokens: number | null;
   completion_tokens: number | null;
 };
+
+export const metricHistoryWindowMs = 10 * 60 * 1_000;
 
 export function appendMetricSnapshot(
   history: readonly MetricSnapshot[],
@@ -28,8 +29,9 @@ export function appendMetricSnapshot(
     completion_tokens: metrics.total.completion_tokens ?? null,
   };
 
-  if (history.at(-1)?.timestamp === timestamp) {
-    return [...history.slice(0, -1), snapshot];
-  }
-  return [...history, snapshot].slice(-240);
+  const next = history.at(-1)?.timestamp === timestamp
+    ? [...history.slice(0, -1), snapshot]
+    : [...history, snapshot];
+  const cutoff = new Date(timestamp).getTime() - metricHistoryWindowMs;
+  return next.filter((item) => new Date(item.timestamp).getTime() >= cutoff);
 }

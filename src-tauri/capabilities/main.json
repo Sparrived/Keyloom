@@ -2,12 +2,16 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main",
   "description": "主窗口运行权限",
-  "windows": ["main"],
+  "windows": ["main", "amkr-widget"],
   "permissions": [
     "core:default",
     "core:window:allow-minimize",
     "core:window:allow-hide",
+    "core:window:allow-set-position",
+    "core:window:allow-set-size",
     "core:window:allow-start-dragging",
-    "core:window:allow-close"
+    "core:window:allow-close",
+    "process:allow-restart",
+    "updater:default"
   ]
 }

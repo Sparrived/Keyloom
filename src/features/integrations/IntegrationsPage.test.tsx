@@ -42,6 +42,10 @@ describe("IntegrationsPage", () => {
     expect(screen.getByText(/C:\/Users\/test\/.claude\/settings\.json/)).toBeInTheDocument();
     expect(screen.getByText("未找到配置")).toBeInTheDocument();
     expect(screen.getByText(/C:\/Users\/test\/.codex\/config\.toml/)).toBeInTheDocument();
+    const fields = screen.getByText("变更字段 · 3 项");
+    fireEvent.click(fields);
+    expect(fields.closest("details")).toHaveAttribute("open");
+    expect(screen.getByText("env.ANTHROPIC_AUTH_TOKEN")).toBeInTheDocument();
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("get_agent_integration_status", { agent: "codex" }));
   });
 

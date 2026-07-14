@@ -17,12 +17,16 @@ import {
   type AmkrUpdateCheck,
   type RuntimeInstallationStatus,
 } from "../../api/amkr";
+import { useCopyToast } from "../../components/CopyToast";
+import { KeyloomUpdatePanel } from "./KeyloomUpdatePanel";
 
 type SettingsPageProps = {
+  amkrWidgetEnabled?: boolean;
   closeBehavior?: CloseBehavior;
   configPath: string | null;
   metadata: AmkrMetadata | null;
   health?: AmkrHealth | null;
+  onAmkrWidgetEnabledChange?: (enabled: boolean) => Promise<void> | void;
   onCloseBehaviorChange?: (behavior: CloseBehavior) => void;
   onConfigPathChange: (configPath: string | null) => void;
 };
@@ -37,7 +41,7 @@ function formatNativeEndpointSummary(summary: AmkrHealth["native_endpoint_summar
   return parts.join(" · ");
 }
 
-export function SettingsPage({ closeBehavior = "ask", configPath, metadata, health = null, onCloseBehaviorChange = () => undefined, onConfigPathChange }: SettingsPageProps) {
+export function SettingsPage({ amkrWidgetEnabled = false, closeBehavior = "ask", configPath, metadata, health = null, onAmkrWidgetEnabledChange = () => undefined, onCloseBehaviorChange = () => undefined, onConfigPathChange }: SettingsPageProps) {
   const [draftConfigPath, setDraftConfigPath] = useState(configPath ?? metadata?.config_path ?? "");
   const [transfer, setTransfer] = useState("");
   const [transferAction, setTransferAction] = useState<"export" | "import" | null>(null);
@@ -57,6 +61,15 @@ export function SettingsPage({ closeBehavior = "ask", configPath, metadata, heal
   const [updateChecking, setUpdateChecking] = useState(false);
   const [updateInstalling, setUpdateInstalling] = useState(false);
   const [updateError, setUpdateError] = useState<string | null>(null);
+  const [widgetAction, setWidgetAction] = useState(false);
+  const [widgetError, setWidgetError] = useState<string | null>(null);
+  const { copyToast, showCopyToast } = useCopyToast();
+  const changeWidgetSetting = async (enabled: boolean) => {
+    setWidgetAction(true); setWidgetError(null);
+    try { await onAmkrWidgetEnabledChange(enabled); }
+    catch (reason) { setWidgetError(reason instanceof Error ? reason.message : String(reason)); }
+    finally { setWidgetAction(false); }
+  };
   useEffect(() => setDraftConfigPath(configPath ?? metadata?.config_path ?? ""), [configPath, metadata?.config_path]);
   const refreshRuntimeStatus = async () => {
     setRuntimeLoading(true); setRuntimeError(null);
@@ -148,6 +161,15 @@ export function SettingsPage({ closeBehavior = "ask", configPath, metadata, heal
       setSettingsError(reason instanceof Error ? reason.message : String(reason));
     } finally { setSettingsAction(null); }
   };
+  const copyGeneratedLocalKey = async () => {
+    if (!generatedLocalKey || !navigator.clipboard?.writeText) return;
+    try {
+      await navigator.clipboard.writeText(generatedLocalKey);
+      showCopyToast("Key 已复制");
+    } catch (reason) {
+      setSettingsError(reason instanceof Error ? reason.message : String(reason));
+    }
+  };
   const checkUpdate = async () => {
     setUpdateChecking(true); setUpdateError(null);
     try { setUpdateCheck(await checkAmkrUpdate(configPath)); }
@@ -172,7 +194,10 @@ export function SettingsPage({ closeBehavior = "ask", configPath, metadata, heal
         <option value="quit">退出 Keyloom</option>
         <option value="tray">缩小至托盘</option>
       </select></label>
+      <label className="application-setting">启动 AMKR 桌面挂件<input aria-label="启动 AMKR 桌面挂件" checked={amkrWidgetEnabled} disabled={widgetAction} type="checkbox" onChange={(event) => void changeWidgetSetting(event.target.checked)} /></label>
+      {widgetError ? <p className="service-action-error" role="alert">挂件启动失败: {widgetError}</p> : null}
     </section>
+    <KeyloomUpdatePanel />
     <form className="config-path-form" onSubmit={(event) => { event.preventDefault(); onConfigPathChange(draftConfigPath.trim() || null); }}>
       <label>配置路径<input disabled={transferAction !== null} value={draftConfigPath} onChange={(event) => setDraftConfigPath(event.target.value)} placeholder="留空使用默认 AMKR 配置" /></label>
       <button type="submit" disabled={transferAction !== null}>使用配置</button>
@@ -192,7 +217,7 @@ export function SettingsPage({ closeBehavior = "ask", configPath, metadata, heal
         <div><span>本地鉴权</span><strong>{serviceSettings?.settings.local_api_key_fingerprint ? `指纹 ${serviceSettings.settings.local_api_key_fingerprint}` : "未启用"}</strong></div>
         <button type="button" disabled={!serviceSettings || settingsAction !== null} onClick={() => void regenerateLocalKey()}>{settingsAction === "key" ? "正在重置" : "重置 Key"}</button>
       </div>
-      {generatedLocalKey ? <div className="generated-key" role="status"><label>新 Key<input readOnly value={generatedLocalKey} /></label><button type="button" onClick={() => void navigator.clipboard.writeText(generatedLocalKey)}>复制</button></div> : null}
+      {generatedLocalKey ? <div className="generated-key" role="status"><label>新 Key<input readOnly value={generatedLocalKey} /></label><button type="button" onClick={() => void copyGeneratedLocalKey()}>复制</button></div> : null}
       {settingsNotice ? <p className="status-good" role="status">{settingsNotice}</p> : null}
       {settingsError ? <p className="service-action-error" role="alert">{settingsError}</p> : null}
     </section> : null}
@@ -206,7 +231,7 @@ export function SettingsPage({ closeBehavior = "ask", configPath, metadata, heal
       </dl>
     </section>
     {metadata ? <section className="runtime-panel" aria-labelledby="update-heading">
-      <div className="card-heading"><h3 id="update-heading">版本更新</h3><button type="button" disabled={updateChecking || updateInstalling} onClick={() => void checkUpdate()}>{updateChecking ? "正在检查" : "检查更新"}</button></div>
+      <div className="card-heading"><h3 id="update-heading">AMKR 更新</h3><button type="button" disabled={updateChecking || updateInstalling} onClick={() => void checkUpdate()}>{updateChecking ? "正在检查" : "检查 AMKR 更新"}</button></div>
       {updateCheck ? <dl className="settings-list">
         <div><dt>当前版本</dt><dd>{updateCheck.current_version}</dd></div>
         <div><dt>最新版本</dt><dd className={updateCheck.update_available ? "status-warn" : "status-good"}>{updateCheck.latest_version ?? "暂不可用"}</dd></div>
@@ -237,5 +262,6 @@ export function SettingsPage({ closeBehavior = "ask", configPath, metadata, heal
       </dl>
       <section className="transfer-panel" aria-labelledby="transfer-heading"><div className="card-heading"><h3 id="transfer-heading">配置迁移</h3><button type="button" disabled={transferAction !== null} onClick={() => void exportConfig()}>{transferAction === "export" ? "正在导出" : "导出"}</button></div><textarea aria-label="可迁移配置" disabled={transferAction !== null} value={transfer} onChange={(event) => setTransfer(event.target.value)} placeholder="导出后在此显示，或粘贴可迁移配置以导入。" /><div className="transfer-actions"><button type="button" disabled={transferAction !== null || !transfer.trim()} onClick={() => void importConfig()}>{transferAction === "import" ? "正在导入" : "导入配置"}</button>{notice ? <span className="status-good">{notice}</span> : null}{error ? <span className="service-action-error">{error}</span> : null}</div></section>
     </>}
+    {copyToast}
   </section>;
 }
