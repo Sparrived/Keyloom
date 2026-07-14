@@ -53,7 +53,7 @@ foreach ($required in @(
     'Get-AuthenticodeSignature',
     'createUpdaterArtifacts',
     'latest.json',
-    '*.nsis.zip.sig',
+    '*-setup.exe.sig',
     'softprops/action-gh-release@v2',
     'generate_release_notes: true',
     'runtime-smoke.txt'

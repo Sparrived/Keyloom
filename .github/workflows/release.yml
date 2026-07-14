@@ -159,10 +159,10 @@ jobs:
         shell: pwsh
         run: |
           $bundleDirectory = 'src-tauri/target/release/bundle/nsis'
-          $archives = @(Get-ChildItem $bundleDirectory -Filter '*.nsis.zip')
-          if ($archives.Count -ne 1) { throw "Expected one NSIS updater archive, found $($archives.Count)" }
-          $archive = $archives[0]
-          $signaturePath = "$($archive.FullName).sig"
+          $installers = @(Get-ChildItem $bundleDirectory -Filter '*-setup.exe')
+          if ($installers.Count -ne 1) { throw "Expected one NSIS updater installer, found $($installers.Count)" }
+          $installer = $installers[0]
+          $signaturePath = "$($installer.FullName).sig"
           if (-not (Test-Path $signaturePath)) { throw "Missing updater signature: $signaturePath" }
           $package = Get-Content package.json -Raw | ConvertFrom-Json
           $manifest = @{
@@ -172,7 +172,7 @@ jobs:
             platforms = @{
               'windows-x86_64' = @{
                 signature = (Get-Content $signaturePath -Raw).Trim()
-                url = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:GITHUB_REF_NAME/$($archive.Name)"
+                url = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:GITHUB_REF_NAME/$($installer.Name)"
               }
             }
           }
@@ -198,8 +198,7 @@ jobs:
           path: |
             src-tauri/target/release/bundle/nsis/*-setup.exe
             src-tauri/target/release/bundle/nsis/*.sha256
-            src-tauri/target/release/bundle/nsis/*.nsis.zip
-            src-tauri/target/release/bundle/nsis/*.nsis.zip.sig
+            src-tauri/target/release/bundle/nsis/*-setup.exe.sig
             src-tauri/target/release/bundle/nsis/latest.json
             src-tauri/target/release/bundle/nsis/runtime-smoke.txt
 
@@ -210,7 +209,6 @@ jobs:
           files: |
             src-tauri/target/release/bundle/nsis/*-setup.exe
             src-tauri/target/release/bundle/nsis/*.sha256
-            src-tauri/target/release/bundle/nsis/*.nsis.zip
-            src-tauri/target/release/bundle/nsis/*.nsis.zip.sig
+            src-tauri/target/release/bundle/nsis/*-setup.exe.sig
             src-tauri/target/release/bundle/nsis/latest.json
             src-tauri/target/release/bundle/nsis/runtime-smoke.txt

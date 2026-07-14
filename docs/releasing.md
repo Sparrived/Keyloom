@@ -41,7 +41,7 @@ npm run release -- --type patch --yes
 脚本会同步版本、执行前端和 Rust 测试、验证发布契约、构建前端、创建中文 release commit 和带注释标签，然后推送。当前首发流程不配置 Authenticode 证书，因此 Windows 会将安装器显示为“未知发布者”。标签工作流会发布：
 
 - 未签名的 NSIS 安装器及 SHA-256；
-- Tauri updater 的 `.nsis.zip` 与 `.sig`；
+- Tauri updater 使用的 NSIS 安装器签名 `.exe.sig`；
 - 应用内更新使用的 `latest.json`；
 - 私有运行时冒烟检查报告。
 
