@@ -22,9 +22,13 @@ describe("UsageChart", () => {
   });
 
   it("updates the selected detail on pointer hover as well as keyboard focus", () => {
-    render(<UsageChart history={history} metric="请求" onMetricChange={() => undefined} />);
-    fireEvent.mouseEnter(screen.getByRole("button", { name: "10:00" }));
+    const { container } = render(<UsageChart history={history} metric="请求" onMetricChange={() => undefined} />);
+    const firstPoint = screen.getByRole("button", { name: "10:00" });
+    fireEvent.mouseEnter(firstPoint);
     expect(screen.getByRole("status")).toHaveTextContent("请求 12");
+    expect(firstPoint).toHaveAttribute("aria-pressed", "true");
+    expect(container.querySelectorAll("circle")[0]).toHaveClass("is-selected");
+    expect(container.querySelectorAll("circle")[1]).not.toHaveClass("is-selected");
   });
 
   it("selects a new latest sample when bounded history keeps the same length", () => {

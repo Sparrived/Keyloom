@@ -115,7 +115,7 @@ fn returns_metrics_for_the_discovered_instance() {
         let (mut stream, _) = listener.accept().unwrap();
         let mut buffer = [0_u8; 1024];
         stream.read(&mut buffer).unwrap();
-        assert!(String::from_utf8_lossy(&buffer).starts_with("GET /metrics"));
+        assert!(String::from_utf8_lossy(&buffer).starts_with("GET /metrics?hours=1 "));
         let body = r#"{"total":{"requests":1428,"successes":1400,"failures":28,"prompt_tokens":1840000,"completion_tokens":1000000,"total_tokens":2840000,"cached_tokens":1251200,"cached_token_rate":0.68,"avg_duration_ms":1200}}"#;
         write!(
             stream,

@@ -89,14 +89,14 @@ export function UsageChart({ history, metric, onMetricChange }: UsageChartProps)
         <svg aria-label={`${metric}趋势`} role="img" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
           <path className="usage-chart-grid" d={`M${padding} ${height - padding}H${width - padding}`} />
           <path className="usage-chart-line" d={path} />
-          {points.map(({ x, y }, index) => <circle cx={x} cy={y} key={history[index].timestamp} r="3" />)}
+          {points.map(({ x, y }, index) => <circle className={index === selectedIndex ? "is-selected" : undefined} cx={x} cy={y} key={history[index].timestamp} r={index === selectedIndex ? "5" : "3"} />)}
         </svg>
         <div aria-label="历史数据点" className="usage-chart-points">
           {history.map((snapshot, index) => (
             <button
               aria-label={formatPointTime(snapshot.timestamp)}
               aria-description={`${formatTime(snapshot.timestamp)} ${metric} ${formatCount(valueFor(snapshot, metric))}`}
-              className={index === selectedIndex ? "is-selected" : undefined}
+              aria-pressed={index === selectedIndex}
               key={snapshot.timestamp}
               type="button"
               onClick={() => setSelectedIndex(index)}
@@ -105,7 +105,7 @@ export function UsageChart({ history, metric, onMetricChange }: UsageChartProps)
             />
           ))}
         </div>
-        <figcaption>基于本次运行期间成功获取的汇总指标。</figcaption>
+        <figcaption>每个数据点为采样时刻之前 60 分钟的汇总指标。</figcaption>
       </figure>
       {selectedSnapshot ? (
         <aside aria-label="所选用量快照" className="usage-chart-detail" role="status">

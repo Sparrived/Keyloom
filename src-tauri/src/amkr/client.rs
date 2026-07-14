@@ -373,7 +373,7 @@ pub fn get_health(connection: &AmkrConnection) -> Result<AmkrHealth, String> {
 }
 
 pub fn get_metrics(connection: &AmkrConnection) -> Result<AmkrMetrics, String> {
-    get_json(connection, "/metrics", "指标")
+    get_json(connection, "/metrics?hours=1", "指标")
 }
 
 pub fn get_settings(connection: &AmkrConnection) -> Result<AmkrSettingsResponse, String> {
