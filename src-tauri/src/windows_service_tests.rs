@@ -1,8 +1,9 @@
 use std::path::{Path, PathBuf};
 
 use crate::windows_service::{
-    execute_task_commands, system_service_command, task_commands, task_commands_for_program,
-    ServiceAction, ServiceProgram, SystemServiceAction, TaskCommandResult, WINDOWS_TASK_NAME,
+    config_path_from_arguments, execute_task_commands, system_service_command, task_commands,
+    task_commands_for_program, ServiceAction, ServiceProgram, SystemServiceAction,
+    TaskCommandResult, WINDOWS_TASK_NAME,
 };
 
 #[test]
@@ -38,6 +39,21 @@ fn creates_a_limited_current_user_login_task_without_uac() {
         .map(String::from)
         .collect::<Vec<_>>(),
     );
+}
+
+#[test]
+fn extracts_config_paths_from_registered_task_and_process_arguments() {
+    assert_eq!(
+        config_path_from_arguments(
+            r#""C:\Program Files\Keyloom\pythonw.exe" -m auto_model_key_router --config "C:\Users\Test User\router.json" --serve-foreground"#,
+        ),
+        Some(PathBuf::from(r"C:\Users\Test User\router.json"))
+    );
+    assert_eq!(
+        config_path_from_arguments(r#"amkr --config=D:\amkr\custom.json --serve"#),
+        Some(PathBuf::from(r"D:\amkr\custom.json"))
+    );
+    assert_eq!(config_path_from_arguments("amkr --status"), None);
 }
 
 #[test]

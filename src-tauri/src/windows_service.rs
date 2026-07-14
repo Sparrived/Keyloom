@@ -5,6 +5,71 @@ use serde::Serialize;
 
 pub const WINDOWS_TASK_NAME: &str = "AutoModelKeyRouter";
 
+pub fn config_path_from_arguments(arguments: &str) -> Option<PathBuf> {
+    let mut values = Vec::new();
+    let mut current = String::new();
+    let mut quoted = false;
+    for character in arguments.chars() {
+        match character {
+            '"' => quoted = !quoted,
+            character if character.is_whitespace() && !quoted => {
+                if !current.is_empty() {
+                    values.push(std::mem::take(&mut current));
+                }
+            }
+            _ => current.push(character),
+        }
+    }
+    if !current.is_empty() {
+        values.push(current);
+    }
+
+    values.iter().enumerate().find_map(|(index, value)| {
+        value
+            .strip_prefix("--config=")
+            .map(PathBuf::from)
+            .or_else(|| {
+                (value == "--config")
+                    .then(|| values.get(index + 1))
+                    .flatten()
+                    .map(PathBuf::from)
+            })
+    })
+}
+
+pub fn discovered_config_path() -> Option<PathBuf> {
+    #[cfg(not(windows))]
+    return None;
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+
+        let script = format!(
+            concat!(
+                "$ErrorActionPreference='SilentlyContinue'; ",
+                "(Get-ScheduledTask -TaskName '{}' -ErrorAction SilentlyContinue).Actions.Arguments; ",
+                "Get-CimInstance Win32_Process | ",
+                "Where-Object {{ $_.CommandLine -match '(?i)(auto_model_key_router|amkr)' }} | ",
+                "ForEach-Object {{ $_.CommandLine }}"
+            ),
+            WINDOWS_TASK_NAME
+        );
+        let output = Command::new("powershell")
+            .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+            .creation_flags(0x08000000)
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .filter_map(config_path_from_arguments)
+            .find(|path| path.is_file())
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ServiceAction {
     InstallUser,

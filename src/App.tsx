@@ -6,6 +6,8 @@ import {
   getAmkrMetrics,
   getRuntimeInstallationStatus,
   initializeDefaultAmkrConfig,
+  isAmkrVersionCompatible,
+  minimumCompatibleAmkrVersion,
   type AmkrHealth,
   type AmkrMetrics,
   type AmkrMetadata,
@@ -187,14 +189,17 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
     && normalizeConfigPath(metadata.config_path) !== normalizeConfigPath(health.config_path),
   );
   const serviceUnavailable = Boolean(healthError || discoveryError);
+  const incompatibleVersion = Boolean(health?.version && !isAmkrVersionCompatible(health.version));
   const serviceState = serviceUnavailable
     ? "服务未连接"
+    : incompatibleVersion
+      ? "后端版本不兼容"
     : health?.status === "ok"
       ? configMismatch ? "配置不一致" : "服务运行中"
     : metadata
       ? "服务未运行"
       : "正在查找服务";
-  const serviceTone = serviceUnavailable ? "bad" : health?.status === "ok" ? configMismatch ? "warn" : "good" : "muted";
+  const serviceTone = serviceUnavailable ? "bad" : incompatibleVersion || configMismatch ? "warn" : health?.status === "ok" ? "good" : "muted";
   const serviceRunning = health?.status === "ok";
   const unifiedPlan = health?.unified_model?.default;
   const unifiedTarget = unifiedPlan?.primary;
@@ -457,6 +462,12 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
             {serviceActionNotice ? <p className="status-good">{serviceActionNotice}</p> : null}
             {serviceCommandOutput ? <pre className="service-command-output">{serviceCommandOutput}</pre> : null}
             {serviceActionError ? <p className="service-action-error">服务操作失败: {serviceActionError}</p> : null}
+          </section>
+        ) : incompatibleVersion && ["供应商", "模型路由", "集成"].includes(activePage) ? (
+          <section className="compatibility-page" aria-labelledby="compatibility-heading">
+            <h2 id="compatibility-heading">后端版本不兼容</h2>
+            <p role="alert">当前 AMKR {health?.version}，Keyloom 至少需要 {minimumCompatibleAmkrVersion}。升级前仅开放只读诊断、活动和设置。</p>
+            <button className="primary-action" type="button" onClick={() => setActivePage("设置")}>打开更新设置</button>
           </section>
         ) : activePage === "供应商" ? <ProvidersPage configPath={selectedConfigPath} /> : activePage === "模型路由" ? <RoutingPage configPath={selectedConfigPath} onUnifiedModelChange={applyUnifiedModel} /> : activePage === "活动" ? <ActivityPage configPath={selectedConfigPath} history={metricHistory} metrics={metrics} />
           : activePage === "集成" ? <IntegrationsPage configPath={selectedConfigPath} baseUrl={metadata?.base_url ?? null} authEnabled={metadata?.auth_enabled ?? false} />

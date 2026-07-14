@@ -1,5 +1,18 @@
 import { invoke } from "@tauri-apps/api/core";
 
+export const minimumCompatibleAmkrVersion = "3.1.1";
+
+export function isAmkrVersionCompatible(version: string) {
+  const parse = (value: string) => value.split(".").slice(0, 3).map((part) => Number.parseInt(part, 10));
+  const current = parse(version);
+  const minimum = parse(minimumCompatibleAmkrVersion);
+  if (current.length !== 3 || current.some(Number.isNaN)) return false;
+  for (let index = 0; index < 3; index += 1) {
+    if (current[index] !== minimum[index]) return current[index] > minimum[index];
+  }
+  return true;
+}
+
 export type AmkrMetadata = {
   config_path: string;
   base_url: string;
