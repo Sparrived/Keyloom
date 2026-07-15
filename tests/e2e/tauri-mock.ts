@@ -58,9 +58,15 @@ export async function installTauriMock(page: Page, scenario: "existing" | "fresh
     Object.defineProperty(window, "__KEYLOOM_CALLS__", { value: calls });
     Object.defineProperty(window, "__TAURI_INTERNALS__", {
       value: {
+        metadata: {
+          currentWindow: { label: "main" },
+          currentWebview: { label: "main" },
+        },
         invoke: async (command: string, args: Record<string, unknown> = {}) => {
           calls.push({ command, args });
           switch (command) {
+            case "plugin:updater|check":
+              return null;
             case "plugin:autostart|is_enabled":
               return keyloomAutostartEnabled;
             case "plugin:autostart|enable":
