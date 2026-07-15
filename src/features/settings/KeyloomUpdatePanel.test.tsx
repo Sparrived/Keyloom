@@ -66,6 +66,7 @@ describe("KeyloomUpdatePanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "下载并安装" }));
 
     await waitFor(() => expect(update.downloadAndInstall).toHaveBeenCalledOnce());
+    expect(update.downloadAndInstall).toHaveBeenCalledWith(expect.any(Function), { timeout: 300_000 });
     expect(relaunchMock).toHaveBeenCalledOnce();
     expect(screen.getByRole("button", { name: "正在重启 Keyloom" })).toBeDisabled();
   });

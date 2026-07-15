@@ -234,45 +234,48 @@ export function SettingsPage({ amkrWidgetEnabled = false, closeBehavior = "ask",
         <button type="submit" disabled={transferAction !== null}>使用配置</button>
       </form>
     </section>
-    {metadata ? <section className="runtime-panel" aria-labelledby="service-settings-heading">
-      <div className="card-heading"><h3 id="service-settings-heading">AMKR 运行设置</h3><span className="config-revision">{serviceSettings ? serviceSettings.config_revision.slice(0, 8) : "正在读取"}</span></div>
-      {settingsDraft ? <form className="inline-form settings-form" onSubmit={(event) => { event.preventDefault(); void saveSettings(); }}>
-        <label>监听地址<input required value={settingsDraft.host} onChange={(event) => setSettingsDraft({ ...settingsDraft, host: event.target.value })} /></label>
-        <label>端口<input required type="number" min="1" max="65535" value={settingsDraft.port} onChange={(event) => setSettingsDraft({ ...settingsDraft, port: Number(event.target.value) })} /></label>
-        <label>请求超时<input required type="number" min="0.1" step="0.1" value={settingsDraft.request_timeout} onChange={(event) => setSettingsDraft({ ...settingsDraft, request_timeout: Number(event.target.value) })} /></label>
-        <label>首字节超时<input required type="number" min="0.1" step="0.1" value={settingsDraft.stream_first_byte_timeout} onChange={(event) => setSettingsDraft({ ...settingsDraft, stream_first_byte_timeout: Number(event.target.value) })} /></label>
-        <label>流式空闲超时<input required type="number" min="0.1" step="0.1" value={settingsDraft.stream_idle_timeout} onChange={(event) => setSettingsDraft({ ...settingsDraft, stream_idle_timeout: Number(event.target.value) })} /></label>
-        <label>最大重试<input required type="number" min="0" step="1" value={settingsDraft.max_retries} onChange={(event) => setSettingsDraft({ ...settingsDraft, max_retries: Number(event.target.value) })} /></label>
-        <button type="submit" disabled={settingsAction !== null}>{settingsAction === "save" ? "正在保存" : "保存设置"}</button>
-      </form> : <p className="empty-state">运行设置暂不可用。</p>}
-      <div className="local-key-row">
-        <div><span>本地鉴权</span><strong>{serviceSettings?.settings.local_api_key_fingerprint ? `指纹 ${serviceSettings.settings.local_api_key_fingerprint}` : "未启用"}</strong></div>
-        <button type="button" disabled={!serviceSettings || settingsAction !== null} onClick={() => void regenerateLocalKey()}>{settingsAction === "key" ? "正在重置" : "重置 Key"}</button>
+    <section className="runtime-panel" aria-labelledby="amkr-settings-heading">
+      <div className="card-heading"><h3 id="amkr-settings-heading">AMKR</h3></div>
+      {metadata ? <div className="settings-subsection" aria-labelledby="service-settings-heading">
+        <div className="card-heading"><h4 id="service-settings-heading">运行设置</h4><span className="config-revision">{serviceSettings ? serviceSettings.config_revision.slice(0, 8) : "正在读取"}</span></div>
+        {settingsDraft ? <form className="inline-form settings-form" onSubmit={(event) => { event.preventDefault(); void saveSettings(); }}>
+          <label>监听地址<input required value={settingsDraft.host} onChange={(event) => setSettingsDraft({ ...settingsDraft, host: event.target.value })} /></label>
+          <label>端口<input required type="number" min="1" max="65535" value={settingsDraft.port} onChange={(event) => setSettingsDraft({ ...settingsDraft, port: Number(event.target.value) })} /></label>
+          <label>请求超时<input required type="number" min="0.1" step="0.1" value={settingsDraft.request_timeout} onChange={(event) => setSettingsDraft({ ...settingsDraft, request_timeout: Number(event.target.value) })} /></label>
+          <label>首字节超时<input required type="number" min="0.1" step="0.1" value={settingsDraft.stream_first_byte_timeout} onChange={(event) => setSettingsDraft({ ...settingsDraft, stream_first_byte_timeout: Number(event.target.value) })} /></label>
+          <label>流式空闲超时<input required type="number" min="0.1" step="0.1" value={settingsDraft.stream_idle_timeout} onChange={(event) => setSettingsDraft({ ...settingsDraft, stream_idle_timeout: Number(event.target.value) })} /></label>
+          <label>最大重试<input required type="number" min="0" step="1" value={settingsDraft.max_retries} onChange={(event) => setSettingsDraft({ ...settingsDraft, max_retries: Number(event.target.value) })} /></label>
+          <button type="submit" disabled={settingsAction !== null}>{settingsAction === "save" ? "正在保存" : "保存设置"}</button>
+        </form> : <p className="empty-state">运行设置暂不可用。</p>}
+        <div className="local-key-row">
+          <div><span>本地鉴权</span><strong>{serviceSettings?.settings.local_api_key_fingerprint ? `指纹 ${serviceSettings.settings.local_api_key_fingerprint}` : "未启用"}</strong></div>
+          <button type="button" disabled={!serviceSettings || settingsAction !== null} onClick={() => void regenerateLocalKey()}>{settingsAction === "key" ? "正在重置" : "重置 Key"}</button>
+        </div>
+        {generatedLocalKey ? <div className="generated-key" role="status"><label>新 Key<input readOnly value={generatedLocalKey} /></label><button type="button" onClick={() => void copyGeneratedLocalKey()}>复制</button></div> : null}
+        {settingsNotice ? <p className="status-good" role="status">{settingsNotice}</p> : null}
+        {settingsError ? <p className="service-action-error" role="alert">{settingsError}</p> : null}
+      </div> : null}
+      <div className="settings-subsection" aria-labelledby="amkr-tool-heading">
+        <div className="card-heading"><h4 id="amkr-tool-heading">AMKR CLI</h4><div className="item-actions"><button type="button" disabled={toolLoading || toolInstalling} onClick={() => void refreshToolStatus()}>{toolLoading ? "正在检测" : "重新检测"}</button>{!toolStatus?.installed ? <button type="button" disabled={toolLoading || toolInstalling || (!toolStatus?.uv_available && !toolStatus?.pipx_available)} onClick={() => void installTool()}>{toolInstalling ? "正在安装" : "安装 AMKR"}</button> : null}</div></div>
+        <dl className="settings-list">
+          <div><dt>状态</dt><dd className={toolStatus?.installed ? "status-good" : toolStatus?.diagnostic || toolError ? "status-warn" : "status-muted"}>{toolError ? `操作失败: ${toolError}` : toolLoading && !toolStatus ? "正在检测" : toolStatus?.installed ? `已安装 · AMKR ${toolStatus.version ?? "未知版本"}` : toolStatus?.diagnostic ?? "未安装"}</dd></div>
+          <div><dt>管理方式</dt><dd>{toolStatus?.manager ?? (toolStatus?.uv_available ? "uv（可用）" : toolStatus?.pipx_available ? "pipx（可用）" : "未发现")}</dd></div>
+          <div><dt>可执行文件</dt><dd>{toolStatus?.executable ?? "暂不可用"}</dd></div>
+        </dl>
       </div>
-      {generatedLocalKey ? <div className="generated-key" role="status"><label>新 Key<input readOnly value={generatedLocalKey} /></label><button type="button" onClick={() => void copyGeneratedLocalKey()}>复制</button></div> : null}
-      {settingsNotice ? <p className="status-good" role="status">{settingsNotice}</p> : null}
-      {settingsError ? <p className="service-action-error" role="alert">{settingsError}</p> : null}
-    </section> : null}
-    <section className="runtime-panel" aria-labelledby="amkr-tool-heading">
-      <div className="card-heading"><h3 id="amkr-tool-heading">AMKR CLI</h3><div className="item-actions"><button type="button" disabled={toolLoading || toolInstalling} onClick={() => void refreshToolStatus()}>{toolLoading ? "正在检测" : "重新检测"}</button>{!toolStatus?.installed ? <button type="button" disabled={toolLoading || toolInstalling || (!toolStatus?.uv_available && !toolStatus?.pipx_available)} onClick={() => void installTool()}>{toolInstalling ? "正在安装" : "安装 AMKR"}</button> : null}</div></div>
-      <dl className="settings-list">
-        <div><dt>状态</dt><dd className={toolStatus?.installed ? "status-good" : toolStatus?.diagnostic || toolError ? "status-warn" : "status-muted"}>{toolError ? `操作失败: ${toolError}` : toolLoading && !toolStatus ? "正在检测" : toolStatus?.installed ? `已安装 · AMKR ${toolStatus.version ?? "未知版本"}` : toolStatus?.diagnostic ?? "未安装"}</dd></div>
-        <div><dt>管理方式</dt><dd>{toolStatus?.manager ?? (toolStatus?.uv_available ? "uv（可用）" : toolStatus?.pipx_available ? "pipx（可用）" : "未发现")}</dd></div>
-        <div><dt>可执行文件</dt><dd>{toolStatus?.executable ?? "暂不可用"}</dd></div>
-      </dl>
+      {metadata ? <div className="settings-subsection" id="amkr-update-panel" aria-labelledby="update-heading">
+        <div className="card-heading"><h4 id="update-heading">AMKR 更新</h4><button type="button" disabled={updateChecking || updateInstalling} onClick={() => void checkUpdate()}>{updateChecking ? "正在检查" : "检查 AMKR 更新"}</button></div>
+        {updateCheck ? <dl className="settings-list">
+          <div><dt>当前版本</dt><dd>{updateCheck.current_version}</dd></div>
+          <div><dt>最新版本</dt><dd className={updateCheck.update_available ? "status-warn" : "status-good"}>{updateCheck.latest_version ?? "暂不可用"}</dd></div>
+          <div><dt>状态</dt><dd>{updateCheck.error ? `检查失败: ${updateCheck.error}` : updateCheck.update_available ? "发现新版本" : "当前已是最新版本"}</dd></div>
+          {updateCheck.source ? <div><dt>来源</dt><dd>{updateCheck.source}</dd></div> : null}
+          {updateCheck.release_url ? <div><dt>发布页面</dt><dd>{updateCheck.release_url}</dd></div> : null}
+        </dl> : <p className="empty-state">尚未检查 AMKR 更新。</p>}
+        {updateCheck?.update_available ? <button type="button" disabled={updateInstalling || health?.status === "ok" || !toolStatus?.installed || !["uv", "pipx"].includes(toolStatus.manager ?? "")} title={health?.status === "ok" ? "请先停止 AMKR 服务" : undefined} onClick={() => void installUpdate()}>{updateInstalling ? "正在更新" : "安装更新"}</button> : null}
+        {updateError ? <p className="service-action-error" role="alert">版本检查失败: {updateError}</p> : null}
+      </div> : null}
     </section>
-    {metadata ? <section className="runtime-panel" id="amkr-update-panel" aria-labelledby="update-heading">
-      <div className="card-heading"><h3 id="update-heading">AMKR 更新</h3><button type="button" disabled={updateChecking || updateInstalling} onClick={() => void checkUpdate()}>{updateChecking ? "正在检查" : "检查 AMKR 更新"}</button></div>
-      {updateCheck ? <dl className="settings-list">
-        <div><dt>当前版本</dt><dd>{updateCheck.current_version}</dd></div>
-        <div><dt>最新版本</dt><dd className={updateCheck.update_available ? "status-warn" : "status-good"}>{updateCheck.latest_version ?? "暂不可用"}</dd></div>
-        <div><dt>状态</dt><dd>{updateCheck.error ? `检查失败: ${updateCheck.error}` : updateCheck.update_available ? "发现新版本" : "当前已是最新版本"}</dd></div>
-        {updateCheck.source ? <div><dt>来源</dt><dd>{updateCheck.source}</dd></div> : null}
-        {updateCheck.release_url ? <div><dt>发布页面</dt><dd>{updateCheck.release_url}</dd></div> : null}
-      </dl> : <p className="empty-state">尚未检查 AMKR 更新。</p>}
-      {updateCheck?.update_available ? <button type="button" disabled={updateInstalling || health?.status === "ok" || !toolStatus?.installed || !["uv", "pipx"].includes(toolStatus.manager ?? "")} title={health?.status === "ok" ? "请先停止 AMKR 服务" : undefined} onClick={() => void installUpdate()}>{updateInstalling ? "正在更新" : "安装更新"}</button> : null}
-      {updateError ? <p className="service-action-error" role="alert">版本检查失败: {updateError}</p> : null}
-    </section> : null}
     {!metadata ? <p className="empty-state">正在查找本机 AMKR 配置。</p> : <>
       <section className="runtime-panel" aria-labelledby="instance-summary-heading">
         <div className="card-heading"><h3 id="instance-summary-heading">实例信息</h3></div>

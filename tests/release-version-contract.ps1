@@ -48,7 +48,6 @@ if ($workflow -notmatch [Regex]::Escape('tests/release-version-contract.ps1')) {
     throw 'release workflow must run tests/release-version-contract.ps1.'
 }
 foreach ($required in @(
-    'KEYLOOM_UPDATER_PUBLIC_KEY',
     'TAURI_SIGNING_PRIVATE_KEY',
     'Get-AuthenticodeSignature',
     'createUpdaterArtifacts',
@@ -60,6 +59,10 @@ foreach ($required in @(
     if ($workflow -notmatch [Regex]::Escape($required)) {
         throw "release workflow is missing required updater-release behavior: $required"
     }
+}
+
+if (-not [string]$tauri.plugins.updater.pubkey) {
+    throw 'tauri.conf.json is missing the updater public key.'
 }
 
 [PSCustomObject]@{

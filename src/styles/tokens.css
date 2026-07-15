@@ -726,9 +726,11 @@ button {
 .transfer-panel h3 { margin: 0; font-size: 1rem; }
 .runtime-panel { margin-top: 1rem; padding: 1rem; border: 1px solid #d5d5da; border-radius: 6px; }
 .runtime-panel h3 { margin: 0; font-size: 1rem; }
+.runtime-panel h4 { margin: 0; font-size: 0.9rem; }
 .runtime-panel .settings-list { margin-top: 0.75rem; }
 .runtime-panel button { padding: 0.45rem 0.7rem; color: #1d1d1f; background: #fff; border: 1px solid #b9b9c0; border-radius: 5px; cursor: pointer; }
 .runtime-panel button:disabled { cursor: wait; opacity: 0.55; }
+.settings-subsection { margin-top: 0.9rem; padding-top: 0.9rem; border-top: 1px solid #e5e5e8; }
 .settings-page { width: min(100%, 64rem); margin-inline: auto; }
 .settings-page .page-header p { margin: 0.3rem 0 0; }
 .settings-page .runtime-panel,
@@ -736,7 +738,8 @@ button {
 .settings-page .settings-list { gap: 0; margin-top: 0.65rem; border-top: 1px solid #e5e5e8; }
 .settings-page .settings-list > div { display: grid; grid-template-columns: minmax(7rem, 30%) minmax(0, 1fr); align-items: center; gap: 1rem; padding: 0.65rem 0; border: 0; border-bottom: 1px solid #e5e5e8; border-radius: 0; }
 .settings-page .settings-list dd { min-width: 0; }
-.settings-page .runtime-panel > button { display: block; margin: 0.75rem 0 0 auto; }
+.settings-page .runtime-panel > button,
+.settings-page .settings-subsection > button { display: block; margin: 0.75rem 0 0 auto; }
 .settings-form { display: grid !important; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: 0.75rem; margin-top: 0.75rem; }
 .settings-form label,
 .settings-form input { width: 100%; min-width: 0; }
@@ -1607,6 +1610,7 @@ textarea:focus-visible {
   .connection-summary div,
   .integration-item,
   .settings-list div,
+  .settings-subsection,
   .log-panel,
   .transfer-panel,
   .runtime-panel,

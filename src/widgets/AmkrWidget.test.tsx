@@ -14,18 +14,18 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 
 const invokeMock = vi.mocked(invoke);
 const getCurrentWindowMock = vi.mocked(getCurrentWindow);
-const hideMock = vi.fn().mockResolvedValue(undefined);
+const closeMock = vi.fn().mockResolvedValue(undefined);
 const setSizeMock = vi.fn().mockResolvedValue(undefined);
 const startDraggingMock = vi.fn().mockResolvedValue(undefined);
 
 describe("AmkrWidget", () => {
   beforeEach(() => {
     localStorage.clear();
-    hideMock.mockClear();
+    closeMock.mockClear();
     setSizeMock.mockClear();
     startDraggingMock.mockClear();
     getCurrentWindowMock.mockReturnValue({
-      hide: hideMock,
+      close: closeMock,
       onMoved: vi.fn().mockResolvedValue(() => undefined),
       setPosition: vi.fn().mockResolvedValue(undefined),
       setSize: setSizeMock,
@@ -78,13 +78,30 @@ describe("AmkrWidget", () => {
     }));
   });
 
+  it("starts native dragging only after moving the held widget header", () => {
+    render(<AmkrWidget />);
+
+    const header = screen.getByText("仪表盘").closest("header")!;
+    fireEvent.mouseDown(header, { button: 0, clientX: 20, clientY: 20 });
+    fireEvent.mouseMove(header, { buttons: 1, clientX: 22, clientY: 22 });
+    expect(startDraggingMock).not.toHaveBeenCalled();
+    fireEvent.mouseMove(header, { buttons: 1, clientX: 28, clientY: 20 });
+    expect(startDraggingMock).toHaveBeenCalledOnce();
+
+    startDraggingMock.mockClear();
+    fireEvent.mouseDown(screen.getByRole("button", { name: "关闭 AMKR 挂件" }), { button: 0, clientX: 20, clientY: 20 });
+    fireEvent.mouseMove(header, { buttons: 1, clientX: 40, clientY: 20 });
+    expect(startDraggingMock).not.toHaveBeenCalled();
+  });
+
   it("disables future startup when closed", async () => {
     localStorage.setItem("keyloom.amkrWidgetEnabled", "true");
     render(<AmkrWidget />);
 
     fireEvent.click(screen.getByRole("button", { name: "关闭 AMKR 挂件" }));
 
-    await waitFor(() => expect(hideMock).toHaveBeenCalledOnce());
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("set_amkr_widget_visible", { visible: false }));
+    expect(closeMock).not.toHaveBeenCalled();
     expect(localStorage.getItem("keyloom.amkrWidgetEnabled")).toBe("false");
   });
 });

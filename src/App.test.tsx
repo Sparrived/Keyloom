@@ -20,6 +20,7 @@ import { check } from "@tauri-apps/plugin-updater";
 const invokeMock = vi.mocked(invoke);
 const getCurrentWindowMock = vi.mocked(getCurrentWindow);
 const keyloomUpdateCheckMock = vi.mocked(check);
+const showMock = vi.fn().mockResolvedValue(undefined);
 const minimizeMock = vi.fn();
 const closeMock = vi.fn();
 const hideMock = vi.fn();
@@ -33,13 +34,15 @@ describe("Keyloom application shell", () => {
 
   beforeEach(() => {
     localStorage.clear();
+    showMock.mockReset();
+    showMock.mockResolvedValue(undefined);
     minimizeMock.mockReset();
     closeMock.mockReset();
     hideMock.mockReset();
     startDraggingMock.mockReset();
     keyloomUpdateCheckMock.mockReset();
     keyloomUpdateCheckMock.mockResolvedValue(null);
-    getCurrentWindowMock.mockReturnValue({ minimize: minimizeMock, close: closeMock, hide: hideMock, startDragging: startDraggingMock } as never);
+    getCurrentWindowMock.mockReturnValue({ show: showMock, minimize: minimizeMock, close: closeMock, hide: hideMock, startDragging: startDraggingMock } as never);
     invokeMock.mockReset();
     invokeMock
       .mockResolvedValueOnce({
@@ -63,6 +66,7 @@ describe("Keyloom application shell", () => {
       expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
     }
     expect(screen.getByRole("button", { name: /服务状态/ })).toBeInTheDocument();
+    expect(showMock).toHaveBeenCalledOnce();
   });
 
   it("shows the connected AMKR version in the brand block", async () => {

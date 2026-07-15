@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { getCurrentWindow, LogicalSize, PhysicalPosition } from "@tauri-apps/api/window";
 import {
   getAmkrMetrics,
   getAmkrModels,
   getAmkrUnifiedModel,
+  setAmkrWidgetVisible,
   updateAmkrUnifiedModel,
   type AmkrMetrics,
   type AmkrModel,
@@ -63,6 +64,7 @@ function ModelTable({ models }: { models: Record<string, AmkrUsageStats> }) {
 export function AmkrWidget() {
   const rootRef = useRef<HTMLElement>(null);
   const lastHeight = useRef(0);
+  const widgetDragStart = useRef<{ x: number; y: number } | null>(null);
   const [metrics, setMetrics] = useState<AmkrMetrics | null>(null);
   const [models, setModels] = useState<AmkrModel[]>([]);
   const [unifiedModel, setUnifiedModel] = useState<AmkrUnifiedModel | null>(null);
@@ -134,15 +136,26 @@ export function AmkrWidget() {
     }
   }
 
-  async function closeWidget() {
+  function closeWidget() {
     localStorage.setItem(widgetEnabledStorageKey, "false");
-    await getCurrentWindow().hide();
+    void setAmkrWidgetVisible(false).catch(() => getCurrentWindow().close().catch(() => undefined));
   }
 
-  function startDragging(event: React.MouseEvent) {
-    if (event.button === 0 && !(event.target as Element).closest("button")) {
-      void getCurrentWindow().startDragging().catch(() => undefined);
+  function beginWidgetDrag(event: ReactMouseEvent<HTMLElement>) {
+    if (event.button !== 0 || (event.target as Element).closest("button, input, select, textarea, a")) return;
+    widgetDragStart.current = { x: event.clientX, y: event.clientY };
+  }
+
+  function moveWidgetDrag(event: ReactMouseEvent<HTMLElement>) {
+    const start = widgetDragStart.current;
+    if (!start) return;
+    if ((event.buttons & 1) === 0) {
+      widgetDragStart.current = null;
+      return;
     }
+    if (Math.hypot(event.clientX - start.x, event.clientY - start.y) < 4) return;
+    widgetDragStart.current = null;
+    void getCurrentWindow().startDragging().catch(() => undefined);
   }
 
   const total = metrics?.total;
@@ -150,7 +163,13 @@ export function AmkrWidget() {
   const status = metrics?.router_status === "yellow" ? "重试中" : metrics?.router_status === "red" ? "异常" : metrics ? "正常" : "未连接";
 
   return <main className="amkr-widget-root" ref={rootRef}>
-    <header className="amkr-widget-header" onMouseDown={startDragging}>
+    <header
+      className="amkr-widget-header"
+      onMouseDown={beginWidgetDrag}
+      onMouseLeave={moveWidgetDrag}
+      onMouseMove={moveWidgetDrag}
+      onMouseUp={() => { widgetDragStart.current = null; }}
+    >
       <div className="amkr-widget-title"><span className="amkr-widget-mark"><span>A</span><span>M</span><span>K</span><span>R</span></span><span>仪表盘</span></div>
       <div className="amkr-widget-status" role="status">
         <span className={`amkr-widget-status-dot status-${metrics?.router_status ?? "off"}`} />

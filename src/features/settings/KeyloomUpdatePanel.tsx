@@ -55,7 +55,7 @@ export function KeyloomUpdatePanel({ detectedVersion = null }: { detectedVersion
     setPhase("downloading");
     setError(null);
     try {
-      await update.downloadAndInstall(handleDownload, { timeout: 120_000 });
+      await update.downloadAndInstall(handleDownload, { timeout: 300_000 });
       setPhase("restarting");
       await relaunch();
     } catch (reason) {

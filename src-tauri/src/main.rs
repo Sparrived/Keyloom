@@ -11,6 +11,16 @@ use tauri::{
 
 const AMKR_WIDGET_LABEL: &str = "amkr-widget";
 
+async fn run_blocking<T, F>(task: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, String> + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(task)
+        .await
+        .map_err(|error| format!("后台任务失败: {error}"))?
+}
+
 #[tauri::command]
 async fn set_amkr_widget_visible(app: tauri::AppHandle, visible: bool) -> Result<(), String> {
     if let Some(window) = app.get_webview_window(AMKR_WIDGET_LABEL) {
@@ -20,7 +30,7 @@ async fn set_amkr_widget_visible(app: tauri::AppHandle, visible: bool) -> Result
                 .and_then(|_| window.unminimize())
                 .and_then(|_| window.set_focus())
         } else {
-            window.hide()
+            window.destroy()
         }
         .map_err(|error| format!("无法切换 AMKR 挂件: {error}"));
     }
@@ -29,7 +39,7 @@ async fn set_amkr_widget_visible(app: tauri::AppHandle, visible: bool) -> Result
         return Ok(());
     }
 
-    let window = WebviewWindowBuilder::new(
+    WebviewWindowBuilder::new(
         &app,
         AMKR_WIDGET_LABEL,
         WebviewUrl::App("widget.html".into()),
@@ -49,19 +59,12 @@ async fn set_amkr_widget_visible(app: tauri::AppHandle, visible: bool) -> Result
     .build()
     .map_err(|error| format!("无法创建 AMKR 挂件: {error}"))?;
 
-    let close_window = window.clone();
-    window.on_window_event(move |event| {
-        if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-            api.prevent_close();
-            let _ = close_window.hide();
-        }
-    });
     Ok(())
 }
 
 #[tauri::command]
-fn discover_amkr(config_path: Option<String>) -> Result<keyloom_core::AmkrMetadata, String> {
-    keyloom_core::discover_amkr(config_path.as_deref().map(Path::new))
+async fn discover_amkr(config_path: Option<String>) -> Result<keyloom_core::AmkrMetadata, String> {
+    run_blocking(move || keyloom_core::discover_amkr(config_path.as_deref().map(Path::new))).await
 }
 
 #[tauri::command]
@@ -70,24 +73,27 @@ fn initialize_default_amkr_config() -> Result<keyloom_core::AmkrMetadata, String
 }
 
 #[tauri::command]
-fn get_amkr_health(
+async fn get_amkr_health(
     config_path: Option<String>,
 ) -> Result<keyloom_core::amkr::client::AmkrHealth, String> {
-    keyloom_core::get_amkr_health(config_path.as_deref().map(Path::new))
+    run_blocking(move || keyloom_core::get_amkr_health(config_path.as_deref().map(Path::new))).await
 }
 
 #[tauri::command]
-fn get_amkr_metrics(
+async fn get_amkr_metrics(
     config_path: Option<String>,
 ) -> Result<keyloom_core::amkr::client::AmkrMetrics, String> {
-    keyloom_core::get_amkr_metrics(config_path.as_deref().map(Path::new))
+    run_blocking(move || keyloom_core::get_amkr_metrics(config_path.as_deref().map(Path::new))).await
 }
 
 #[tauri::command]
-fn get_amkr_metric_history(
+async fn get_amkr_metric_history(
     config_path: Option<String>,
 ) -> Result<Vec<keyloom_core::metric_history::MetricHistoryPoint>, String> {
-    keyloom_core::get_amkr_metric_history(config_path.as_deref().map(Path::new))
+    run_blocking(move || {
+        keyloom_core::get_amkr_metric_history(config_path.as_deref().map(Path::new))
+    })
+    .await
 }
 
 #[tauri::command]
@@ -139,15 +145,15 @@ fn regenerate_amkr_local_api_key(
 }
 
 #[tauri::command]
-fn check_amkr_update(
+async fn check_amkr_update(
     config_path: Option<String>,
 ) -> Result<keyloom_core::amkr::client::AmkrUpdateCheck, String> {
-    keyloom_core::check_amkr_update(config_path.as_deref().map(Path::new))
+    run_blocking(move || keyloom_core::check_amkr_update(config_path.as_deref().map(Path::new))).await
 }
 
 #[tauri::command]
-fn read_amkr_log_tail(config_path: Option<String>) -> Result<String, String> {
-    keyloom_core::read_amkr_log_tail(config_path.as_deref().map(Path::new))
+async fn read_amkr_log_tail(config_path: Option<String>) -> Result<String, String> {
+    run_blocking(move || keyloom_core::read_amkr_log_tail(config_path.as_deref().map(Path::new))).await
 }
 
 #[tauri::command]
@@ -461,8 +467,8 @@ fn rollback_agent_integration(
 }
 
 #[tauri::command]
-fn get_amkr_tool_status() -> keyloom_core::amkr_tool::AmkrToolStatus {
-    keyloom_core::amkr_tool::get_status()
+async fn get_amkr_tool_status() -> Result<keyloom_core::amkr_tool::AmkrToolStatus, String> {
+    run_blocking(|| Ok(keyloom_core::amkr_tool::get_status())).await
 }
 
 #[tauri::command]

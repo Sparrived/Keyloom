@@ -104,6 +104,10 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
   const { copyToast, showCopyToast } = useCopyToast();
 
   useEffect(() => {
+    void getCurrentWindow().show().catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
     if (amkrWidgetEnabled && !widgetStartupRequested.current) {
       widgetStartupRequested.current = true;
       void setAmkrWidgetVisible(true).catch(() => { widgetStartupRequested.current = false; });

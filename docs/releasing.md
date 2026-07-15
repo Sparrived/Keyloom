@@ -4,7 +4,7 @@ Keyloom 使用 `v<version>` Git 标签触发 Windows 发布。版本必须在 `p
 
 ## 首次配置
 
-1. 确保仓库的 `origin` 指向 GitHub。应用默认从 `Sparrived/Keyloom` 获取更新；如果仓库名称不同，请同步修改 `src-tauri/tauri.conf.json` 中的 updater endpoint。
+1. 确保仓库的 `origin` 指向 GitHub。应用默认从 `Sparrived/Keyloom` 获取更新；如果仓库名称不同，只需修改 `src-tauri/tauri.conf.json` 中的 updater endpoint。若更换了签名密钥，再同步更新同文件里的公钥。
 2. 生成 Tauri updater 签名密钥：
 
    ```powershell
@@ -16,9 +16,7 @@ Keyloom 使用 `v<version>` Git 标签触发 Windows 发布。版本必须在 `p
    - `TAURI_SIGNING_PRIVATE_KEY`：生成的 updater 私钥全文。
    - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`：生成私钥时使用的密码。
 
-4. 配置 GitHub Actions Variables：
-
-   - `KEYLOOM_UPDATER_PUBLIC_KEY`：生成的 `.pub` 文件全文。
+4. 将生成的 `.pub` 文件内容写入 `src-tauri/tauri.conf.json` 的 updater `pubkey`。
 
 ## 发布
 
@@ -44,4 +42,4 @@ npm run release -- --type patch --yes
 
 Keyloom 安装包不再携带 Python 或 AMKR。首次初始化时若未发现 AMKR，应用优先执行 `uv tool install "auto-model-key-router[visitor]"`，没有 `uv` 时回退到 `pipx install`；后续 AMKR 更新也交给对应工具管理器。
 
-本地开发构建不包含生产 updater 公钥，也不会生成签名更新包。只有 tag 工作流注入公钥和私钥后生成的正式安装包可以完成程序内更新。
+本地开发构建会带着 updater 公钥，但不会生成签名更新包。只有 tag 工作流配好私钥后生成的正式安装包可以完成程序内更新。

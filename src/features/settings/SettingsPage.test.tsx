@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SettingsPage } from "./SettingsPage";
 
@@ -170,6 +170,15 @@ describe("SettingsPage", () => {
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("check_amkr_update", { configPath: null }));
     expect(await screen.findByText("3.2.0")).toBeInTheDocument();
     expect(screen.getByText("发现新版本")).toBeInTheDocument();
+  });
+
+  it("groups AMKR CLI and updates inside the AMKR settings panel", () => {
+    render(<SettingsPage configPath={null} metadata={metadata} onConfigPathChange={() => undefined} />);
+
+    const amkrPanel = screen.getByRole("region", { name: "AMKR" });
+    expect(within(amkrPanel).getByRole("heading", { name: "运行设置" })).toBeInTheDocument();
+    expect(within(amkrPanel).getByRole("heading", { name: "AMKR CLI" })).toBeInTheDocument();
+    expect(within(amkrPanel).getByRole("heading", { name: "AMKR 更新" })).toBeInTheDocument();
   });
 
   it("updates a stopped AMKR through its tool manager", async () => {
