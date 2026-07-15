@@ -71,11 +71,13 @@ export function AmkrWidget() {
   const [modelsOpen, setModelsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [switching, setSwitching] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   const refreshMetrics = useCallback(async () => {
     try {
       setMetrics(await getAmkrMetrics(configPath()));
       setError(null);
+      setLastUpdated(new Date());
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     }
@@ -170,13 +172,13 @@ export function AmkrWidget() {
       onMouseMove={moveWidgetDrag}
       onMouseUp={() => { widgetDragStart.current = null; }}
     >
-      <div className="amkr-widget-title"><span className="amkr-widget-mark"><span>A</span><span>M</span><span>K</span><span>R</span></span><span>仪表盘</span></div>
+      <div className="amkr-widget-title"><span className="amkr-widget-mark"><span>A</span><span>M</span><span>K</span><span>R</span></span><div><span>仪表盘</span><small>实时用量监控</small></div></div>
       <div className="amkr-widget-status" role="status">
         <span className={`amkr-widget-status-dot status-${metrics?.router_status ?? "off"}`} />
         <span>{status}</span>
         {(metrics?.active_requests ?? 0) > 0 ? <strong>{metrics?.active_requests}</strong> : null}
       </div>
-      <button className="amkr-widget-close" aria-label="关闭 AMKR 挂件" title="关闭" type="button" onClick={() => void closeWidget()}>×</button>
+      <button className="amkr-widget-close" aria-label="关闭 AMKR 挂件" title="关闭" type="button" onClick={() => void closeWidget()}><span aria-hidden="true">×</span></button>
     </header>
 
     <section className="amkr-widget-body">
@@ -208,6 +210,11 @@ export function AmkrWidget() {
           <Metric label="输出" value={formatNumber(total.completion_tokens)} />
           <Metric label="缓存" value={formatNumber(total.cached_tokens)} />
           <Metric label="总计" value={formatNumber(total.total_tokens)} />
+        </div>
+
+        <div className="amkr-widget-footer">
+          <span><i className="amkr-widget-footer-dot" />{lastUpdated ? `刚刚更新 ${lastUpdated.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}` : "等待更新"}</span>
+          <span>{formatNumber(total.successes)} 成功 · {formatNumber(Math.max(0, total.requests - (total.successes ?? 0)))} 失败</span>
         </div>
 
         <ModelTable models={metrics.models ?? {}} />
