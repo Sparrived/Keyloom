@@ -15,8 +15,11 @@ const confirmed = args.includes("--yes");
 const releaseType = valueAfter("--type");
 const requestedVersion = valueAfter("--version");
 
-const executable = (command) => process.platform === "win32" && ["npm", "npx"].includes(command) ? `${command}.cmd` : command;
-const run = (command, commandArgs, options = {}) => (execFileSync(executable(command), commandArgs, {
+const executable = (command) => process.platform === "win32" && ["npm", "npx"].includes(command) ? "cmd.exe" : command;
+const argsFor = (command, commandArgs) => process.platform === "win32" && ["npm", "npx"].includes(command)
+  ? ["/d", "/s", "/c", `${command}.cmd`, ...commandArgs]
+  : commandArgs;
+const run = (command, commandArgs, options = {}) => (execFileSync(executable(command), argsFor(command, commandArgs), {
   cwd: root,
   encoding: "utf8",
   stdio: options.capture ? "pipe" : "inherit",
