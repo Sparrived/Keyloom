@@ -6,7 +6,9 @@ import {
   deleteAmkrPool,
   deleteAmkrProvider,
   deleteAmkrProviderKey,
+  getAmkrProbe,
   getAmkrProviders,
+  probeAmkrKeys,
   updateAmkrPool,
   updateAmkrProvider,
   updateAmkrProviderKey,
@@ -22,6 +24,8 @@ import { useCopyToast } from "../../components/CopyToast";
 const csv = (value: string) => value.split(",").map((item) => item.trim()).filter(Boolean);
 const errorMessage = (reason: unknown) => reason instanceof Error ? reason.message : String(reason);
 const isConflict = (message: string) => message.includes("HTTP 409");
+const probePollIntervalMs = 750;
+const terminalProbeStatuses = new Set(["complete", "failed", "cancelled"]);
 const providerRouteModes = [
   ["openai", "OpenAI 路径"],
   ["anthropic", "Anthropic 路径"],
@@ -29,11 +33,15 @@ const providerRouteModes = [
   ["images", "Images 路径"],
 ] as const;
 
+const normalizeModels = (models: string[]) => Array.from(new Set(models.map((model) => model.trim()).filter(Boolean))).sort();
+const sameModels = (left: string[], right: string[]) => normalizeModels(left).join("\n") === normalizeModels(right).join("\n");
+const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
 type ProviderCardProps = {
   configPath: string | null;
   provider: AmkrProvider;
   revision: string;
-  refresh: () => Promise<void>;
+  refresh: () => Promise<AmkrProvidersResponse | null>;
 };
 
 function ProviderCard({ configPath, provider, revision, refresh }: ProviderCardProps) {
@@ -47,34 +55,40 @@ function ProviderCard({ configPath, provider, revision, refresh }: ProviderCardP
   const [keyEditEnabled, setKeyEditEnabled] = useState(true);
   const [keyEditVisitor, setKeyEditVisitor] = useState(false);
   const [editingPool, setEditingPool] = useState<string | null>(null);
-  const [poolProbeRequest, setPoolProbeRequest] = useState<{ id: number; pool: string } | null>(null);
+  const [poolProbeRequest, setPoolProbeRequest] = useState<{ id: number; pool: string; key: string | null } | null>(null);
+  const [poolProbeStatus, setPoolProbeStatus] = useState<string | null>(null);
   const [discoveredModels, setDiscoveredModels] = useState<string[]>([]);
   const [poolEditName, setPoolEditName] = useState("");
   const [poolEditKeys, setPoolEditKeys] = useState("");
   const [poolEditModels, setPoolEditModels] = useState("");
-  const [poolEditCustomModels, setPoolEditCustomModels] = useState("");
+  const [poolEditCustomModels, setPoolEditCustomModels] = useState<string[]>([]);
+  const [addingCustomModel, setAddingCustomModel] = useState(false);
+  const [customModelName, setCustomModelName] = useState("");
   const [addingKey, setAddingKey] = useState(false);
   const [addingPool, setAddingPool] = useState(false);
   const [keyName, setKeyName] = useState("");
   const [keyValue, setKeyValue] = useState("");
   const [allowVisitor, setAllowVisitor] = useState(false);
+  const [keyCreateBusy, setKeyCreateBusy] = useState(false);
+  const [keyCreateStatus, setKeyCreateStatus] = useState<string | null>(null);
   const [poolName, setPoolName] = useState("");
   const [poolKeys, setPoolKeys] = useState("");
   const [poolModels, setPoolModels] = useState("");
   const [error, setError] = useState<string | null>(null);
   const { copyToast, showCopyToast } = useCopyToast();
 
-  const mutate = async (operation: () => Promise<unknown>) => {
+  const mutate = async (operation: () => Promise<unknown>, successMessage = "配置已更新。") => {
     setError(null);
     try {
       await operation();
-      await refresh();
-      return true;
+      const result = await refresh();
+      showCopyToast(successMessage);
+      return result;
     } catch (reason) {
       const message = errorMessage(reason);
       if (isConflict(message)) await refresh();
       setError(message);
-      return false;
+      return null;
     }
   };
 
@@ -90,32 +104,131 @@ function ProviderCard({ configPath, provider, revision, refresh }: ProviderCardP
     setKeyEditVisitor(key.allow_visitor);
   };
 
-  const beginPoolEdit = (pool: AmkrProviderPool) => {
-    if (editingPool === pool.name) {
-      setEditingPool(null);
-      return;
-    }
+  const providerFrom = (data: AmkrProvidersResponse | null) => data?.providers.find((item) => item.id === provider.id) ?? null;
+
+  const openPoolEdit = (pool: AmkrProviderPool, probeKey: string | null = pool.keys[0] ?? null) => {
     setEditingPool(pool.name);
     setPoolEditName(pool.name);
     setPoolEditKeys(pool.keys.join(", "));
     setPoolEditModels(pool.models.join(", "));
-    setPoolEditCustomModels("");
+    setPoolEditCustomModels([]);
+    setAddingCustomModel(false);
+    setCustomModelName("");
     setDiscoveredModels([]);
-    setPoolProbeRequest((value) => ({ id: (value?.id ?? 0) + 1, pool: pool.name }));
+    setPoolProbeStatus(probeKey ? "pending" : null);
+    setPoolProbeRequest((value) => ({
+      id: (value?.id ?? 0) + 1,
+      pool: pool.name,
+      key: probeKey,
+    }));
   };
 
-  const addDiscoveredModel = (model: string) => {
-    if (!model) return;
-    setPoolEditModels((current) => Array.from(new Set([...csv(current), model])).join(", "));
+  const beginPoolEdit = (pool: AmkrProviderPool) => {
+    if (editingPool === pool.name) {
+      setEditingPool(null);
+      setPoolProbeStatus(null);
+      return;
+    }
+    openPoolEdit(pool);
+  };
+
+  const uniquePoolName = (models: string[], fallback: string, pools: AmkrProviderPool[]) => {
+    const base = models[0] || fallback;
+    const used = new Set(pools.map((pool) => pool.name));
+    if (!used.has(base)) return base;
+    for (let index = 2; ; index += 1) {
+      const name = `${base}-${index}`;
+      if (!used.has(name)) return name;
+    }
+  };
+
+  const probeKeyModels = async (name: string) => {
+    const started = await probeAmkrKeys(provider.id, [name], 15, configPath);
+    for (let attempt = 0; attempt < 160; attempt += 1) {
+      const probe = await getAmkrProbe(started.probe_id, configPath);
+      if (terminalProbeStatuses.has(probe.status)) {
+        if (probe.status !== "complete") throw new Error(probe.error || "Key 探测未完成。");
+        return normalizeModels(probe.results.filter((result) => result.key === name).flatMap((result) => result.models));
+      }
+      await wait(probePollIntervalMs);
+    }
+    throw new Error("Key 探测超时。");
+  };
+
+  const createKeyAndAssignPool = async () => {
+    if (keyCreateBusy) return;
+    const name = keyName.trim();
+    if (!name || !keyValue) return;
+    setKeyCreateBusy(true);
+    setKeyCreateStatus("正在保存 Key…");
+    try {
+      let data = await mutate(() => createAmkrProviderKey(revision, provider.id, name, keyValue, allowVisitor, configPath));
+      if (!data) return;
+      setKeyValue("");
+      setKeyCreateStatus("正在探测可用模型…");
+      const models = await probeKeyModels(name);
+      let currentProvider = providerFrom(data);
+      if (!currentProvider) return;
+      const pool = models.length ? currentProvider.pools.find((item) => sameModels(item.models, models)) : null;
+      const configRevision = data.config_revision;
+      const currentPools = currentProvider.pools;
+      setKeyCreateStatus(pool ? "正在加入匹配的模型池…" : "正在创建匹配的模型池…");
+      data = pool
+        ? await mutate(() => updateAmkrPool(configRevision, provider.id, pool.name, pool.name, Array.from(new Set([...pool.keys, name])), pool.models, configPath))
+        : await mutate(() => createAmkrPool(configRevision, provider.id, uniquePoolName(models, name, currentPools), [name], models, configPath));
+      if (!data) return;
+      currentProvider = providerFrom(data);
+      const editedPool = pool
+        ? currentProvider?.pools.find((item) => item.name === pool.name)
+        : currentProvider?.pools.find((item) => sameModels(item.models, models) && item.keys.includes(name));
+      setKeyName("");
+      setAllowVisitor(false);
+      setAddingKey(false);
+      setKeyCreateStatus(null);
+      if (editedPool) openPoolEdit(editedPool, null);
+    } catch (reason) {
+      setError(`Key 已保存，但自动探测和分池失败: ${errorMessage(reason)}`);
+    } finally {
+      setKeyCreateStatus(null);
+      setKeyCreateBusy(false);
+    }
+  };
+
+  const togglePoolModel = (model: string) => {
+    setPoolEditModels((current) => {
+      const selected = csv(current);
+      if (selected.includes(model)) return selected.filter((item) => item !== model).join(", ");
+      return Array.from(new Set([...selected, model])).join(", ");
+    });
   };
 
   const removeSelectedModel = (model: string) => {
     setPoolEditModels((current) => csv(current).filter((item) => item !== model).join(", "));
   };
 
-  const handlePoolProbeResults = (results: AmkrProbeResult[]) => {
-    setDiscoveredModels(Array.from(new Set(results.flatMap((result) => result.models))).sort());
+  const addCustomPoolModel = () => {
+    const model = customModelName.trim();
+    if (!model) return;
+    setPoolEditCustomModels((current) => Array.from(new Set([...current, model])));
+    setPoolEditModels((current) => Array.from(new Set([...csv(current), model])).join(", "));
+    setCustomModelName("");
+    setAddingCustomModel(false);
   };
+
+  const deleteCustomPoolModel = (model: string) => {
+    setPoolEditCustomModels((current) => current.filter((item) => item !== model));
+    removeSelectedModel(model);
+  };
+
+  const handlePoolProbeResults = (results: AmkrProbeResult[]) => {
+    const models = Array.from(new Set(results.flatMap((result) => result.models))).sort();
+    setDiscoveredModels(models);
+    setPoolEditModels((current) => csv(current).length ? current : models.join(", "));
+  };
+
+  const selectedPoolModels = csv(poolEditModels);
+  const poolModelCards = Array.from(new Set([...selectedPoolModels, ...discoveredModels, ...poolEditCustomModels])).filter(Boolean);
+  const poolProbeBusy = poolProbeStatus === "pending" || poolProbeStatus === "running";
 
   const copyFingerprint = async (key: AmkrProviderKey) => {
     if (!navigator.clipboard?.writeText) {
@@ -142,7 +255,10 @@ function ProviderCard({ configPath, provider, revision, refresh }: ProviderCardP
     {editingProvider ? <form className="inline-form editor-form provider-editor" onSubmit={(event) => { event.preventDefault(); void (async () => { if (await mutate(() => updateAmkrProvider(revision, provider.id, providerId, providerUrl, Object.fromEntries(Object.entries(providerRoutes).filter(([, value]) => value.trim()).map(([mode, value]) => [mode, value.trim()])), configPath))) setEditingProvider(false); })(); }}>
       <label>供应商名称<input required value={providerId} onChange={(event) => setProviderId(event.target.value)} /></label>
       <label>供应商地址<input required type="url" value={providerUrl} onChange={(event) => setProviderUrl(event.target.value)} /></label>
-      {providerRouteModes.map(([mode, label]) => <label key={mode}>{label}<input value={providerRoutes[mode] ?? ""} onChange={(event) => setProviderRoutes({ ...providerRoutes, [mode]: event.target.value })} placeholder="留空使用默认路径" /></label>)}
+      <details className="provider-advanced-settings">
+        <summary>高级路径设置</summary>
+        <div className="provider-route-fields">{providerRouteModes.map(([mode, label]) => <label key={mode}>{label}<input value={providerRoutes[mode] ?? ""} onChange={(event) => setProviderRoutes({ ...providerRoutes, [mode]: event.target.value })} placeholder="留空使用默认路径" /></label>)}</div>
+      </details>
       <div className="form-actions"><button type="submit">保存供应商</button><button className="secondary-button" type="button" onClick={() => setEditingProvider(false)}>取消</button></div>
     </form> : null}
 
@@ -165,11 +281,12 @@ function ProviderCard({ configPath, provider, revision, refresh }: ProviderCardP
           <label className="checkbox-label"><input aria-label="允许访客" checked={keyEditVisitor} type="checkbox" onChange={(event) => setKeyEditVisitor(event.target.checked)} />访客访问</label>
           <div className="form-actions"><button type="submit">保存 Key</button><button className="secondary-button" type="button" onClick={() => setEditingKey(null)}>取消</button></div>
         </form> : null}
-        {addingKey ? <form className="inline-form resource-form create-resource-form" onSubmit={(event) => { event.preventDefault(); void (async () => { if (await mutate(() => createAmkrProviderKey(revision, provider.id, keyName, keyValue, allowVisitor, configPath))) { setKeyName(""); setKeyValue(""); setAllowVisitor(false); setAddingKey(false); } })(); }}>
-          <label>名称<input required value={keyName} onChange={(event) => setKeyName(event.target.value)} /></label>
-          <label>API Key<input required type="password" value={keyValue} onChange={(event) => setKeyValue(event.target.value)} /></label>
-          <label className="checkbox-label"><input checked={allowVisitor} type="checkbox" onChange={(event) => setAllowVisitor(event.target.checked)} />访客访问</label>
-          <div className="form-actions"><button type="submit">添加 Key</button></div>
+        {addingKey ? <form className="inline-form resource-form create-resource-form" onSubmit={(event) => { event.preventDefault(); void createKeyAndAssignPool(); }}>
+          <label>Key 名称<input disabled={keyCreateBusy} required value={keyName} onChange={(event) => setKeyName(event.target.value)} /></label>
+          <label>API Key<input disabled={keyCreateBusy} required type="password" value={keyValue} onChange={(event) => setKeyValue(event.target.value)} /></label>
+          <label className="checkbox-label"><input checked={allowVisitor} disabled={keyCreateBusy} type="checkbox" onChange={(event) => setAllowVisitor(event.target.checked)} />访客访问</label>
+          <p className="editor-help">{keyCreateStatus ?? "保存后会自动探测模型，并把可用模型相同的 Key 放进同一个模型池。"}</p>
+          <div className="form-actions"><button disabled={keyCreateBusy} type="submit">{keyCreateBusy ? "正在添加" : "添加 Key"}</button></div>
         </form> : null}
       </section>
 
@@ -182,16 +299,24 @@ function ProviderCard({ configPath, provider, revision, refresh }: ProviderCardP
             <button aria-label={`删除模型池 ${pool.name}`} className="danger-button" type="button" onClick={() => { if (window.confirm(`删除模型池 ${pool.name}？`)) void mutate(() => deleteAmkrPool(revision, provider.id, pool.name, configPath)); }}>删除</button>
           </div>
         </li>)}</ul> : <p>尚无模型池。</p>}
-        {editingPool ? <form className="inline-form editor-form resource-form" onSubmit={(event) => { event.preventDefault(); void (async () => { if (await mutate(() => updateAmkrPool(revision, provider.id, editingPool, poolEditName, csv(poolEditKeys), Array.from(new Set([...csv(poolEditModels), ...csv(poolEditCustomModels)])), configPath))) setEditingPool(null); })(); }}>
+        {editingPool ? <form className="inline-form editor-form resource-form" onSubmit={(event) => { event.preventDefault(); void (async () => { if (await mutate(() => updateAmkrPool(revision, provider.id, editingPool, poolEditName, csv(poolEditKeys), selectedPoolModels, configPath))) setEditingPool(null); })(); }}>
           <label>模型池名称<input required value={poolEditName} onChange={(event) => setPoolEditName(event.target.value)} /></label>
           <label>模型池 Key<input value={poolEditKeys} onChange={(event) => setPoolEditKeys(event.target.value)} /></label>
-          <label>选择探测模型<select aria-label="选择探测模型" value="" disabled={!discoveredModels.length} onChange={(event) => addDiscoveredModel(event.target.value)}>
-            <option value="">{discoveredModels.length ? "选择后加入模型池" : "正在探测模型池"}</option>
-            {discoveredModels.filter((model) => !csv(poolEditModels).includes(model)).map((model) => <option key={model} value={model}>{model}</option>)}
-          </select></label>
-          <label>自定义模型<input aria-label="自定义模型" value={poolEditCustomModels} onChange={(event) => setPoolEditCustomModels(event.target.value)} placeholder="逗号分隔" /></label>
-          <div aria-label="已选模型" className="pool-model-selection">{csv(poolEditModels).map((model) => <span key={model}>{model}<button aria-label={`移除模型 ${model}`} type="button" onClick={() => removeSelectedModel(model)}>×</button></span>)}</div>
-          <p className="editor-help">编辑时会自动探测当前模型池；未探测到的模型可通过自定义输入补充。</p>
+          <div aria-label="模型池模型" className="pool-model-grid">
+            {poolProbeBusy ? <div aria-label="正在探测模型" className="pool-model-probe-indicator" role="status"><span /></div> : null}
+            {poolModelCards.map((model) => {
+              const selected = selectedPoolModels.includes(model);
+              const custom = poolEditCustomModels.includes(model);
+              return <div className="pool-model-card-shell" key={model}>
+                <button aria-label={`${selected ? "关闭" : "打开"}模型 ${model}`} aria-pressed={selected} className={`pool-model-card${selected ? " is-selected" : ""}`} type="button" onClick={() => togglePoolModel(model)}>{model}</button>
+                {custom ? <button aria-label={`删除自定义模型 ${model}`} className="pool-model-remove" type="button" onClick={() => deleteCustomPoolModel(model)}>×</button> : null}
+              </div>;
+            })}
+            {addingCustomModel ? <div className="pool-model-card custom-model-card">
+              <input aria-label="自定义模型名称" autoFocus value={customModelName} onChange={(event) => setCustomModelName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addCustomPoolModel(); } else if (event.key === "Escape") { setAddingCustomModel(false); setCustomModelName(""); } }} />
+              <button aria-label="确认添加自定义模型" type="button" onClick={() => addCustomPoolModel()}>+</button>
+            </div> : <button aria-label="添加自定义模型" className="pool-model-card pool-model-add" type="button" onClick={() => setAddingCustomModel(true)}>+</button>}
+          </div>
           <div className="form-actions"><button type="submit">保存模型池</button><button className="secondary-button" type="button" onClick={() => setEditingPool(null)}>取消</button></div>
         </form> : null}
         {addingPool ? <form className="inline-form resource-form create-resource-form" onSubmit={(event) => { event.preventDefault(); void (async () => { if (await mutate(() => createAmkrPool(revision, provider.id, poolName, csv(poolKeys), csv(poolModels), configPath))) { setPoolName(""); setPoolKeys(""); setPoolModels(""); setAddingPool(false); } })(); }}>
@@ -202,7 +327,7 @@ function ProviderCard({ configPath, provider, revision, refresh }: ProviderCardP
         </form> : null}
       </section>
     </div>
-    <ProbePanel configPath={configPath} providerId={provider.id} keys={provider.keys.map((key) => key.name)} pools={provider.pools.map((pool) => pool.name)} onPoolProbeResults={handlePoolProbeResults} poolProbeRequest={poolProbeRequest} />
+    <ProbePanel configPath={configPath} providerId={provider.id} keys={provider.keys.map((key) => key.name)} pools={provider.pools.map((pool) => pool.name)} onPoolProbeResults={handlePoolProbeResults} onPoolProbeStatus={setPoolProbeStatus} poolProbeRequest={poolProbeRequest} />
     {error ? <p className="service-action-error">操作失败: {error}</p> : null}
     {copyToast}
   </article>;
@@ -217,8 +342,16 @@ export function ProvidersPage({ configPath }: { configPath: string | null }) {
 
   const refresh = async () => {
     setLoading(true);
-    try { setData(await getAmkrProviders(configPath)); setError(null); }
-    catch (reason) { setError(errorMessage(reason)); }
+    try {
+      const next = await getAmkrProviders(configPath);
+      setData(next);
+      setError(null);
+      return next;
+    }
+    catch (reason) {
+      setError(errorMessage(reason));
+      return null;
+    }
     finally { setLoading(false); }
   };
   useEffect(() => { void refresh(); }, [configPath]);

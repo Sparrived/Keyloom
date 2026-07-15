@@ -9,6 +9,7 @@ export function KeyloomUpdatePanel({ detectedVersion = null }: { detectedVersion
   const [update, setUpdate] = useState<Update | null>(null);
   const [checked, setChecked] = useState(false);
   const [phase, setPhase] = useState<UpdatePhase>("idle");
+  const [dialogOpen, setDialogOpen] = useState(false);
   const [downloaded, setDownloaded] = useState(0);
   const [downloadSize, setDownloadSize] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -23,6 +24,7 @@ export function KeyloomUpdatePanel({ detectedVersion = null }: { detectedVersion
     setError(null);
     setDownloaded(0);
     setDownloadSize(null);
+    setDialogOpen(false);
     setUpdate(null);
     try {
       setUpdate(await check({ timeout: 15_000 }));
@@ -51,7 +53,7 @@ export function KeyloomUpdatePanel({ detectedVersion = null }: { detectedVersion
   };
 
   const installUpdate = async () => {
-    if (!update || !window.confirm(`更新 Keyloom 到 ${update.version}？安装完成后应用将自动重启。`)) return;
+    if (!update) return;
     setPhase("downloading");
     setError(null);
     try {
@@ -67,6 +69,16 @@ export function KeyloomUpdatePanel({ detectedVersion = null }: { detectedVersion
   const busy = phase !== "idle";
   const progress = downloadSize ? Math.min(100, Math.round((downloaded / downloadSize) * 100)) : null;
   const availableVersion = update?.version ?? detectedVersion;
+  const dialogBusy = phase === "downloading" || phase === "installing" || phase === "restarting";
+  const dialogTitle = phase === "downloading"
+    ? "正在下载 Keyloom 更新"
+    : phase === "installing"
+      ? "正在安装 Keyloom 更新"
+      : phase === "restarting"
+        ? "正在重启 Keyloom"
+        : error
+          ? "Keyloom 更新失败"
+          : "安装 Keyloom 更新？";
 
   return <section className="runtime-panel" id="keyloom-update-panel" aria-labelledby="keyloom-update-heading">
     <div className="card-heading">
@@ -79,11 +91,24 @@ export function KeyloomUpdatePanel({ detectedVersion = null }: { detectedVersion
       <div><dt>状态</dt><dd>{availableVersion ? "发现新版本" : checked ? "当前已是最新版本" : "等待检查"}</dd></div>
     </dl>
     {update?.body ? <p className="update-notes">{update.body}</p> : null}
-    {phase === "downloading" || phase === "installing" ? <div className="update-progress" role="status">
-      <progress aria-label="Keyloom 更新下载进度" max={100} value={progress ?? undefined} />
-      <span>{phase === "installing" ? "正在安装" : progress == null ? "正在下载" : `正在下载 ${progress}%`}</span>
-    </div> : null}
-    {update ? <button type="button" disabled={busy} onClick={() => void installUpdate()}>{phase === "restarting" ? "正在重启 Keyloom" : busy ? "正在更新" : "下载并安装"}</button> : null}
+    {update ? <button type="button" disabled={busy} onClick={() => setDialogOpen(true)}>{phase === "restarting" ? "正在重启 Keyloom" : busy ? "正在更新" : "下载并安装"}</button> : null}
     {error ? <p className="service-action-error" role="alert">Keyloom 更新失败: {error}</p> : null}
+    {dialogOpen && update ? <div className="close-dialog-backdrop" onKeyDown={(event) => { if (event.key === "Escape" && !dialogBusy) setDialogOpen(false); }}>
+      <section aria-labelledby="keyloom-update-dialog-heading" aria-modal="true" className="close-dialog update-dialog" role="dialog">
+        <h2 id="keyloom-update-dialog-heading">{dialogTitle}</h2>
+        <p>Keyloom {packageMetadata.version} → {update.version}。安装完成后应用将自动重启。</p>
+        {update.body ? <p className="update-notes">{update.body}</p> : null}
+        {phase === "downloading" || phase === "installing" ? <div className="update-progress" role="status">
+          <progress aria-label="Keyloom 更新下载进度" max={100} value={progress ?? undefined} />
+          <span>{phase === "installing" ? "正在安装" : progress == null ? "正在下载" : `正在下载 ${progress}%`}</span>
+        </div> : null}
+        {phase === "restarting" ? <p className="update-dialog-status" role="status">正在重启 Keyloom</p> : null}
+        {error ? <p className="service-action-error" role="alert">{error}</p> : null}
+        <div className="close-dialog-actions">
+          <button autoFocus className="secondary-button" disabled={dialogBusy} type="button" onClick={() => setDialogOpen(false)}>取消</button>
+          <button className="tray-action" disabled={dialogBusy} type="button" onClick={() => void installUpdate()}>{error ? "重试" : "下载并安装"}</button>
+        </div>
+      </section>
+    </div> : null}
   </section>;
 }

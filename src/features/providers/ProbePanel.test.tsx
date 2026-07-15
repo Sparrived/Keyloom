@@ -53,7 +53,7 @@ describe("ProbePanel", () => {
 
   it("automatically probes the pool requested by an editor", async () => {
     invokeMock.mockImplementation(async (command) => {
-      if (command === "probe_amkr_pools") return { probe_id: "probe-pool", status: "pending" };
+      if (command === "probe_amkr_keys") return { probe_id: "probe-pool", status: "pending" };
       if (command === "get_amkr_probe") return {
         probe_id: "probe-pool",
         status: "complete",
@@ -64,14 +64,15 @@ describe("ProbePanel", () => {
       return undefined;
     });
 
-    render(<ProbePanel configPath="C:/amkr.json" providerId="a.example.test" keys={["key-a"]} pools={["pool-a", "pool-b"]} poolProbeRequest={{ id: 1, pool: "pool-b" }} />);
+    render(<ProbePanel configPath="C:/amkr.json" providerId="a.example.test" keys={["key-a"]} pools={["pool-a", "pool-b"]} poolProbeRequest={{ id: 1, pool: "pool-b", key: "key-a" }} />);
 
-    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("probe_amkr_pools", {
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("probe_amkr_keys", {
       configPath: "C:/amkr.json",
       providerId: "a.example.test",
-      pools: ["pool-b"],
+      keys: ["key-a"],
       timeoutSeconds: 15,
     }));
+    expect(invokeMock).not.toHaveBeenCalledWith("probe_amkr_pools", expect.anything());
   });
 
   it("cancels an active probe and disables duplicate starts", async () => {

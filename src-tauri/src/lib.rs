@@ -441,10 +441,7 @@ pub fn import_amkr_config(
 pub fn get_agent_integration_status(
     agent: &str,
 ) -> Result<integrations::AgentIntegrationStatus, String> {
-    match amkr_tool::python() {
-        Ok(python) => integrations::get_agent_status_with_runtime(&python, agent),
-        Err(_) => integrations::get_agent_status(agent),
-    }
+    integrations::get_agent_status(agent)
 }
 
 pub fn configure_agent_integration(

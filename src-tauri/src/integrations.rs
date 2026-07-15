@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct AgentIntegrationStatus {
@@ -63,6 +64,15 @@ struct BackupState {
     agent: Option<String>,
     target_path: Option<String>,
     mode: Option<String>,
+    version: Option<u64>,
+    applied_sha256: Option<String>,
+    extra_targets: Option<Vec<ExtraBackupState>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ExtraBackupState {
+    target_path: Option<String>,
+    applied_sha256: Option<String>,
 }
 
 fn agent_display_name(agent: &str) -> Option<&'static str> {
@@ -107,6 +117,35 @@ fn default_backup_path(agent: &str) -> Result<PathBuf, String> {
         .join(format!("{agent}.json")))
 }
 
+fn backup_mode(state: &BackupState) -> Option<String> {
+    match state.mode.as_deref() {
+        Some("native" | "unified-model") => state.mode.clone(),
+        None if state.version == Some(1) => Some("unified-model".to_owned()),
+        _ => None,
+    }
+}
+
+fn file_matches_hash(path: &Path, expected_sha256: Option<&String>) -> bool {
+    let Some(expected_sha256) = expected_sha256 else {
+        return false;
+    };
+    fs::read(path)
+        .map(|content| format!("{:x}", Sha256::digest(content)) == *expected_sha256)
+        .unwrap_or(false)
+}
+
+fn extra_targets_are_applied(state: &BackupState) -> bool {
+    let Some(extra_targets) = &state.extra_targets else {
+        return true;
+    };
+    extra_targets.iter().all(|target| {
+        let Some(path) = target.target_path.as_deref() else {
+            return false;
+        };
+        file_matches_hash(Path::new(path), target.applied_sha256.as_ref())
+    })
+}
+
 pub fn get_agent_status(agent: &str) -> Result<AgentIntegrationStatus, String> {
     let target = target_path(agent)?;
     let backup = default_backup_path(agent)?;
@@ -121,13 +160,19 @@ pub fn get_agent_status_from_paths(
     let display_name = agent_display_name(agent).ok_or_else(|| format!("不支持的集成: {agent}"))?;
     let mut backup_available = false;
     let mut mode = None;
+    let mut current_is_applied = false;
     if let Ok(raw) = fs::read_to_string(backup) {
         if let Ok(state) = serde_json::from_str::<BackupState>(&raw) {
             let target_text = target.to_string_lossy();
             let target_matches = state.target_path.as_deref() == Some(target_text.as_ref());
             if state.agent.as_deref() == Some(agent) && target_matches {
                 backup_available = true;
-                mode = state.mode;
+                current_is_applied = target.is_file()
+                    && file_matches_hash(target, state.applied_sha256.as_ref())
+                    && extra_targets_are_applied(&state);
+                if current_is_applied {
+                    mode = backup_mode(&state);
+                }
             }
         }
     }
@@ -137,7 +182,7 @@ pub fn get_agent_status_from_paths(
         target_path: target.to_string_lossy().into_owned(),
         target_exists: target.is_file(),
         backup_available,
-        current_is_applied: false,
+        current_is_applied,
         mode,
     })
 }
@@ -207,7 +252,7 @@ fn run_agent_operation(
     mode: Option<&str>,
 ) -> Result<AgentIntegrationStatus, String> {
     let arguments = agent_bridge_arguments(operation, agent, config_path, mode)?;
-    let output = Command::new(python)
+    let output = hidden_command(python)
         .args(arguments)
         .output()
         .map_err(|error| format!("无法启动 AMKR 工具环境: {error}"))?;
@@ -247,9 +292,21 @@ pub fn rollback_agent_with_runtime(
     run_agent_operation(python, AgentOperation::Rollback, agent, None, None)
 }
 
+fn hidden_command(program: impl AsRef<std::ffi::OsStr>) -> Command {
+    let mut command = Command::new(program);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000);
+    }
+    command
+}
+
 #[cfg(test)]
 mod tests {
     use std::{fs, path::Path};
+
+    use sha2::Digest;
 
     use super::{
         agent_bridge_arguments, get_agent_status_from_paths, parse_agent_bridge_output,
@@ -271,15 +328,71 @@ mod tests {
         fs::write(
             &backup,
             format!(
-                r#"{{"agent":"claude-code","target_path":{:?},"mode":"unified-model","local_api_key":"secret"}}"#,
-                target.to_string_lossy()
+                r#"{{"version":2,"agent":"claude-code","target_path":{:?},"mode":"unified-model","applied_sha256":"{:x}","local_api_key":"secret"}}"#,
+                target.to_string_lossy(),
+                sha2::Sha256::digest(fs::read(&target).unwrap())
             ),
         )
         .unwrap();
         let managed = get_agent_status_from_paths("claude-code", &target, &backup).unwrap();
         assert!(managed.backup_available);
+        assert!(managed.current_is_applied);
         assert_eq!(managed.mode.as_deref(), Some("unified-model"));
         assert!(!serde_json::to_string(&managed).unwrap().contains("secret"));
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn reports_unmanaged_when_applied_hashes_do_not_match() {
+        let root = std::env::temp_dir().join("keyloom-agent-status-hash-mismatch");
+        let target = root.join("config.toml");
+        let auth = root.join("auth.json");
+        let backup = root.join("codex.json");
+        fs::create_dir_all(&root).unwrap();
+        fs::write(&target, b"model_provider = \"OpenAI\"\n").unwrap();
+        fs::write(&auth, b"{\"OPENAI_API_KEY\":\"managed\"}\n").unwrap();
+
+        fs::write(
+            &backup,
+            format!(
+                r#"{{"version":2,"agent":"codex","target_path":{:?},"mode":"native","applied_sha256":"{:x}","extra_targets":[{{"target_path":{:?},"applied_sha256":"bad"}}]}}"#,
+                target.to_string_lossy(),
+                sha2::Sha256::digest(fs::read(&target).unwrap()),
+                auth.to_string_lossy()
+            ),
+        )
+        .unwrap();
+
+        let status = get_agent_status_from_paths("codex", &target, &backup).unwrap();
+        assert!(status.backup_available);
+        assert!(!status.current_is_applied);
+        assert_eq!(status.mode, None);
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn reports_legacy_matching_backup_as_unified_model_mode() {
+        let root = std::env::temp_dir().join("keyloom-agent-status-legacy");
+        let target = root.join("config.toml");
+        let backup = root.join("codex.json");
+        fs::create_dir_all(&root).unwrap();
+        fs::write(&target, b"model = \"router/unified\"\n").unwrap();
+
+        fs::write(
+            &backup,
+            format!(
+                r#"{{"version":1,"agent":"codex","target_path":{:?},"applied_sha256":"{:x}"}}"#,
+                target.to_string_lossy(),
+                sha2::Sha256::digest(fs::read(&target).unwrap())
+            ),
+        )
+        .unwrap();
+
+        let status = get_agent_status_from_paths("codex", &target, &backup).unwrap();
+        assert!(status.current_is_applied);
+        assert_eq!(status.mode.as_deref(), Some("unified-model"));
 
         fs::remove_dir_all(root).unwrap();
     }

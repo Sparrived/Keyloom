@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import packageMetadata from "../../../package.json";
 import { KeyloomUpdatePanel } from "./KeyloomUpdatePanel";
@@ -32,7 +32,6 @@ describe("KeyloomUpdatePanel", () => {
   beforeEach(() => {
     checkMock.mockReset();
     relaunchMock.mockReset();
-    vi.spyOn(window, "confirm").mockReturnValue(true);
   });
 
   it("reports when Keyloom is current", async () => {
@@ -57,6 +56,7 @@ describe("KeyloomUpdatePanel", () => {
 
   it("downloads, installs, and relaunches an available update", async () => {
     const update = availableUpdate();
+    const confirm = vi.spyOn(window, "confirm");
     checkMock.mockResolvedValue(update as never);
     relaunchMock.mockResolvedValue(undefined);
     render(<KeyloomUpdatePanel />);
@@ -64,10 +64,31 @@ describe("KeyloomUpdatePanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "检查 Keyloom 更新" }));
     expect(await screen.findByText("0.2.0")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "下载并安装" }));
+    const dialog = screen.getByRole("dialog", { name: "安装 Keyloom 更新？" });
+
+    expect(dialog).toBeInTheDocument();
+    expect(confirm).not.toHaveBeenCalled();
+    expect(update.downloadAndInstall).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "下载并安装" }));
 
     await waitFor(() => expect(update.downloadAndInstall).toHaveBeenCalledOnce());
     expect(update.downloadAndInstall).toHaveBeenCalledWith(expect.any(Function), { timeout: 300_000 });
     expect(relaunchMock).toHaveBeenCalledOnce();
+    expect(screen.getByRole("dialog", { name: "正在重启 Keyloom" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "正在重启 Keyloom" })).toBeDisabled();
+  });
+
+  it("can close the update dialog without starting the download", async () => {
+    const update = availableUpdate();
+    checkMock.mockResolvedValue(update as never);
+    render(<KeyloomUpdatePanel />);
+
+    fireEvent.click(screen.getByRole("button", { name: "检查 Keyloom 更新" }));
+    expect(await screen.findByText("0.2.0")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "下载并安装" }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "安装 Keyloom 更新？" })).getByRole("button", { name: "取消" }));
+
+    expect(screen.queryByRole("dialog", { name: "安装 Keyloom 更新？" })).not.toBeInTheDocument();
+    expect(update.downloadAndInstall).not.toHaveBeenCalled();
   });
 });

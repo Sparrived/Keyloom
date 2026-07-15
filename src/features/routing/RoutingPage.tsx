@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { createAmkrRoute, deleteAmkrRoute, getAmkrRoutes, updateAmkrRoute, type AmkrRoute, type AmkrRouteTarget, type AmkrRoutesResponse, type AmkrUnifiedModel } from "../../api/amkr";
 import { UnifiedModelPanel } from "./UnifiedModelPanel";
+import { useCopyToast } from "../../components/CopyToast";
 
 const csv = (value: string) => value.split(",").map((item) => item.trim()).filter(Boolean);
 const errorMessage = (reason: unknown) => reason instanceof Error ? reason.message : String(reason);
@@ -40,6 +41,7 @@ export function RoutingPage({ configPath, onUnifiedModelChange }: RoutingPagePro
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [unifiedModelRefreshToken, setUnifiedModelRefreshToken] = useState(0);
+  const { copyToast, showCopyToast } = useCopyToast();
 
   const refresh = async () => {
     setLoading(true);
@@ -60,6 +62,7 @@ export function RoutingPage({ configPath, onUnifiedModelChange }: RoutingPagePro
       setId(""); setCreateTargets([emptyTarget()]); setAliases(""); setMode("round_robin"); setCreating(false);
       await refresh();
       setUnifiedModelRefreshToken((value) => value + 1);
+      showCopyToast("路由已添加。");
     } catch (reason) {
       const message = errorMessage(reason);
       if (isConflict(message)) await refresh();
@@ -78,6 +81,7 @@ export function RoutingPage({ configPath, onUnifiedModelChange }: RoutingPagePro
       setEditing(null);
       await refresh();
       setUnifiedModelRefreshToken((value) => value + 1);
+      showCopyToast("路由已保存。");
     } catch (reason) {
       const message = errorMessage(reason);
       if (isConflict(message)) await refresh();
@@ -87,7 +91,7 @@ export function RoutingPage({ configPath, onUnifiedModelChange }: RoutingPagePro
 
   const remove = async (routeId: string) => {
     if (!data || !window.confirm(`删除模型路由 ${routeId}？`)) return;
-    try { await deleteAmkrRoute(data.config_revision, routeId, configPath); await refresh(); setUnifiedModelRefreshToken((value) => value + 1); }
+    try { await deleteAmkrRoute(data.config_revision, routeId, configPath); await refresh(); setUnifiedModelRefreshToken((value) => value + 1); showCopyToast("路由已删除。"); }
     catch (reason) {
       const message = errorMessage(reason);
       if (isConflict(message)) await refresh();
@@ -135,7 +139,7 @@ export function RoutingPage({ configPath, onUnifiedModelChange }: RoutingPagePro
     <section className="route-rules" aria-labelledby="route-rules-heading">
       <header className="route-rules-heading">
         <div><h3 id="route-rules-heading">路由规则</h3><p>将模型 ID 映射到一个或多个上游目标。</p></div>
-        <button aria-expanded={creating} className="secondary-button" type="button" onClick={toggleCreate}>{creating ? "取消新增" : "新增路由"}</button>
+        {data?.routes.length !== 0 ? <button aria-expanded={creating} className="secondary-button" type="button" onClick={toggleCreate}>{creating ? "取消新增" : "新增路由"}</button> : null}
       </header>
     {creating ? <form className="route-create" onSubmit={(event) => { event.preventDefault(); void create(); }}>
       <label>模型 ID<input required value={id} onChange={(event) => setId(event.target.value)} /></label>
@@ -158,7 +162,7 @@ export function RoutingPage({ configPath, onUnifiedModelChange }: RoutingPagePro
     </form> : null}
     {loading ? <p className="empty-state">正在读取模型路由。</p> : null}
     {error ? <p className="service-action-error">无法读取或写入模型路由: {error}</p> : null}
-    {data?.routes.length === 0 ? <p className="empty-state">尚未配置模型路由。</p> : null}
+    {data?.routes.length === 0 ? <div className="empty-state-panel"><div><strong>尚未配置模型路由。</strong><p>为模型 ID 指定一个或多个上游目标后，请求才会被正确转发。</p></div><button type="button" onClick={toggleCreate}>新增路由</button></div> : null}
     <div className="route-list">{data?.routes.map((route) => <article className="route-item" key={route.id}>
       <header>
         <div><h3>{route.id}</h3><p>{route.aliases.length ? route.aliases.join(", ") : "无别名"}</p></div>
@@ -186,5 +190,6 @@ export function RoutingPage({ configPath, onUnifiedModelChange }: RoutingPagePro
       </form> : null}
     </article>)}</div>
     </section>
+    {copyToast}
   </section>;
 }

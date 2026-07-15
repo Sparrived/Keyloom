@@ -83,7 +83,8 @@ async fn get_amkr_health(
 async fn get_amkr_metrics(
     config_path: Option<String>,
 ) -> Result<keyloom_core::amkr::client::AmkrMetrics, String> {
-    run_blocking(move || keyloom_core::get_amkr_metrics(config_path.as_deref().map(Path::new))).await
+    run_blocking(move || keyloom_core::get_amkr_metrics(config_path.as_deref().map(Path::new)))
+        .await
 }
 
 #[tauri::command]
@@ -148,12 +149,14 @@ fn regenerate_amkr_local_api_key(
 async fn check_amkr_update(
     config_path: Option<String>,
 ) -> Result<keyloom_core::amkr::client::AmkrUpdateCheck, String> {
-    run_blocking(move || keyloom_core::check_amkr_update(config_path.as_deref().map(Path::new))).await
+    run_blocking(move || keyloom_core::check_amkr_update(config_path.as_deref().map(Path::new)))
+        .await
 }
 
 #[tauri::command]
 async fn read_amkr_log_tail(config_path: Option<String>) -> Result<String, String> {
-    run_blocking(move || keyloom_core::read_amkr_log_tail(config_path.as_deref().map(Path::new))).await
+    run_blocking(move || keyloom_core::read_amkr_log_tail(config_path.as_deref().map(Path::new)))
+        .await
 }
 
 #[tauri::command]
@@ -444,26 +447,33 @@ fn import_amkr_config(
 }
 
 #[tauri::command]
-fn get_agent_integration_status(
+async fn get_agent_integration_status(
     agent: String,
 ) -> Result<keyloom_core::integrations::AgentIntegrationStatus, String> {
-    keyloom_core::get_agent_integration_status(&agent)
+    run_blocking(move || keyloom_core::get_agent_integration_status(&agent)).await
 }
 
 #[tauri::command]
-fn configure_agent_integration(
+async fn configure_agent_integration(
     config_path: Option<String>,
     agent: String,
     mode: String,
 ) -> Result<keyloom_core::integrations::AgentIntegrationStatus, String> {
-    keyloom_core::configure_agent_integration(config_path.as_deref().map(Path::new), &agent, &mode)
+    run_blocking(move || {
+        keyloom_core::configure_agent_integration(
+            config_path.as_deref().map(Path::new),
+            &agent,
+            &mode,
+        )
+    })
+    .await
 }
 
 #[tauri::command]
-fn rollback_agent_integration(
+async fn rollback_agent_integration(
     agent: String,
 ) -> Result<keyloom_core::integrations::AgentIntegrationStatus, String> {
-    keyloom_core::rollback_agent_integration(&agent)
+    run_blocking(move || keyloom_core::rollback_agent_integration(&agent)).await
 }
 
 #[tauri::command]
@@ -692,7 +702,11 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_autostart::Builder::new().app_name("Keyloom").build())
+        .plugin(
+            tauri_plugin_autostart::Builder::new()
+                .app_name("Keyloom")
+                .build(),
+        )
         .setup(|app| {
             let open = MenuItem::with_id(app, "open", "打开 Keyloom", true, None::<&str>)?;
             let start = MenuItem::with_id(app, "start", "启动服务", true, None::<&str>)?;

@@ -38,6 +38,11 @@ import { useCopyToast } from "./components/CopyToast";
 const primaryNavigation = ["概览", "供应商", "模型路由", "活动", "集成", "设置"] as const;
 const navigation = [...primaryNavigation, "服务状态"] as const;
 type NavigationItem = (typeof navigation)[number];
+const navigationGroups: { label: string; items: readonly NavigationItem[] }[] = [
+  { label: "工作台", items: ["概览", "活动"] },
+  { label: "配置", items: ["供应商", "模型路由", "集成"] },
+  { label: "系统", items: ["设置"] },
+];
 const configPathStorageKey = "keyloom.configPath";
 const closeBehaviorStorageKey = "keyloom.closeBehavior";
 const widgetEnabledStorageKey = "keyloom.amkrWidgetEnabled";
@@ -99,9 +104,16 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
   const [keyloomUpdateVersion, setKeyloomUpdateVersion] = useState<string | null>(null);
   const [settingsUpdateTarget, setSettingsUpdateTarget] = useState<"amkr" | "keyloom" | null>(null);
   const sidebarDragStart = useRef<{ x: number; y: number } | null>(null);
+  const dialogReturnFocus = useRef<HTMLElement | null>(null);
   const widgetStartupRequested = useRef(false);
   const versionCheckRunning = useRef(false);
   const { copyToast, showCopyToast } = useCopyToast();
+
+  useEffect(() => {
+    if (closePromptOpen || unifiedModelPromptOpen) return;
+    dialogReturnFocus.current?.focus();
+    dialogReturnFocus.current = null;
+  }, [closePromptOpen, unifiedModelPromptOpen]);
 
   useEffect(() => {
     void getCurrentWindow().show().catch(() => undefined);
@@ -293,6 +305,13 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
   const routerTone = metrics?.router_status === "red" ? "bad" : metrics?.router_status === "yellow" ? "warn" : "good";
   const serviceTone = serviceUnavailable ? "bad" : incompatibleVersion || configMismatch ? "warn" : health?.status === "ok" ? routerTone : "muted";
   const serviceRunning = health?.status === "ok";
+  const serviceBanner = serviceUnavailable
+    ? { tone: "bad", title: "无法连接本机 AMKR", detail: "检查服务是否已启动，或前往服务状态查看诊断信息。", action: "查看服务状态", page: "服务状态" as NavigationItem }
+    : incompatibleVersion
+      ? { tone: "warn", title: "AMKR 版本需要更新", detail: `当前版本 ${health?.version ?? "未知"} 与 Keyloom 不兼容。`, action: "打开更新设置", page: "设置" as NavigationItem }
+      : configMismatch
+        ? { tone: "warn", title: "运行配置与当前选择不一致", detail: "重启服务后，当前选择的配置才会生效。", action: "查看服务状态", page: "服务状态" as NavigationItem }
+        : null;
   const localAuthEnabled = health?.local_auth_enabled ?? metadata?.auth_enabled ?? false;
   const unifiedPlan = health?.unified_model?.default;
   const unifiedTarget = unifiedPlan?.primary;
@@ -351,7 +370,8 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
         setHealth(null);
         setHealthError(null);
       }
-      setServiceActionNotice(serviceNotice(action));
+      const notice = serviceNotice(action);
+      setServiceActionNotice(notice);
       setServiceCommandOutput(formatServiceCommandResults(results));
     } catch (error: unknown) {
       setServiceActionError(error instanceof Error ? error.message : String(error));
@@ -481,6 +501,7 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
 
   function requestWindowClose() {
     if (closeBehavior === "ask") {
+      dialogReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       setRememberCloseChoice(false);
       setClosePromptOpen(true);
     } else {
@@ -555,16 +576,21 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
           <button aria-label="打开 AMKR 更新" className={`brand-version ${amkrUpdateCheck?.update_available ? "has-update" : ""}`} title="打开 AMKR 更新" type="button" onClick={() => openUpdateSettings("amkr")}>AMKR v{health?.version ?? "—"}</button>
           <button aria-label="打开 Keyloom 更新" className={`brand-version ${keyloomUpdateVersion ? "has-update" : ""}`} title="打开 Keyloom 更新" type="button" onClick={() => openUpdateSettings("keyloom")}>Keyloom v{packageMetadata.version}</button>
         </div>
-        <nav>
-          {primaryNavigation.map((label) => (
-            <button
-              aria-current={activePage === label ? "page" : undefined}
-              key={label}
-              type="button"
-              onClick={() => { setSettingsUpdateTarget(null); setActivePage(label); }}
-            >
-              {label}
-            </button>
+        <nav aria-label="页面导航">
+          {navigationGroups.map((group) => (
+            <div className="nav-group" key={group.label}>
+              <span className="nav-group-label">{group.label}</span>
+              {group.items.map((label) => (
+                <button
+                  aria-current={activePage === label ? "page" : undefined}
+                  key={label}
+                  type="button"
+                  onClick={() => { setSettingsUpdateTarget(null); setActivePage(label); }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           ))}
         </nav>
         <div className="sidebar-service">
@@ -576,11 +602,19 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
             onClick={() => setActivePage("服务状态")}
           >
             <span aria-hidden="true" className={`status-dot status-${serviceTone}`}>●</span>
-            {serviceState}
+            <span>{serviceState}</span>
+            <span aria-hidden="true" className="sidebar-service-arrow">↗</span>
           </button>
+          <p className="sidebar-service-meta" title={metadata?.base_url}>{metadata ? "本机 AMKR · 已连接" : "等待本机 AMKR"}</p>
         </div>
       </aside>
-      <main className="content">
+      <main className={`content${activePage === "概览" ? " overview-content" : ""}`}>
+        {activePage !== "服务状态" && serviceBanner ? (
+          <section className={`status-banner status-banner-${serviceBanner.tone}`} role="status">
+            <div><strong>{serviceBanner.title}</strong><p>{serviceBanner.detail}</p></div>
+            <button aria-label="打开诊断面板" type="button" onClick={() => setActivePage(serviceBanner.page)}>{serviceBanner.action}</button>
+          </section>
+        ) : null}
         {activePage === "概览" && metadata ? (
           <>
             <header className="overview-header">
@@ -600,7 +634,7 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
                 aria-labelledby="unified-model-heading"
                 onClick={(event) => { if (!(event.target as Element).closest("button, select")) setActivePage("模型路由"); }}
               >
-                <div className="card-heading"><h3 id="unified-model-heading">统一模型</h3><button className={unifiedTarget ? "status-bad" : "status-good"} disabled={unifiedModelAction} type="button" onClick={() => unifiedTarget ? setUnifiedModelPromptOpen(true) : void enableUnifiedModel()}>{unifiedTarget ? "关闭" : "启用"}</button></div>
+                <div className="card-heading"><h3 id="unified-model-heading">统一模型</h3><button className={unifiedTarget ? "status-bad" : "status-good"} disabled={unifiedModelAction} type="button" onClick={(event) => { if (unifiedTarget) { dialogReturnFocus.current = event.currentTarget; setUnifiedModelPromptOpen(true); } else void enableUnifiedModel(); }}>{unifiedTarget ? "关闭" : "启用"}</button></div>
                 {unifiedTarget ? <select aria-label="快速选择统一模型" className="unified-model-quick-select" disabled={unifiedModelAction} value={unifiedModel} onChange={(event) => void selectUnifiedModel(event.target.value)}>
                   {Array.from(new Set([unifiedModel, ...(health?.models ?? [])])).map((model) => <option key={model} value={model}>{model}</option>)}
                 </select> : <strong>{unifiedModel}</strong>}
@@ -648,7 +682,12 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
           discoveryError ? (
             <section className="onboarding-page" aria-busy={initializationInProgress} aria-labelledby="onboarding-heading">
               <h2 id="onboarding-heading">开始使用 Keyloom</h2>
-              <p className="empty-state" role="alert">未找到可用的 AMKR 配置。</p>
+              <p className="onboarding-lead" role="alert">未找到可用的 AMKR 配置。</p>
+              <div className="onboarding-steps" aria-label="首次设置步骤">
+                <div className="onboarding-step is-current"><span>01</span><div><strong>准备 AMKR</strong><p>检查本机工具是否已安装。</p></div></div>
+                <div className="onboarding-step"><span>02</span><div><strong>创建配置</strong><p>生成一份可直接使用的默认配置。</p></div></div>
+                <div className="onboarding-step"><span>03</span><div><strong>启动服务</strong><p>启动本机服务并开始接收请求。</p></div></div>
+              </div>
               <p className={toolStatus?.installed ? "status-good" : "status-muted"} role="status">
                 {toolStatusLoading
                   ? "正在检查 AMKR CLI"

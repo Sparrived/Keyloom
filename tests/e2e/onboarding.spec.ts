@@ -3,12 +3,36 @@ import { commandCalls, installTauriMock } from "./tauri-mock";
 
 test("discovers an existing AMKR instance and renders live metrics", async ({ page }) => {
   await installTauriMock(page);
+  await page.setViewportSize({ width: 800, height: 600 });
   await page.goto("/");
 
   await expect(page.getByRole("heading", { name: "概览" })).toBeVisible();
   await expect(page.getByLabel("数据总览").getByText("1,284", { exact: true })).toBeVisible();
   await expect(page.getByText("1.04M")).toBeVisible();
   await expect(page.getByText("服务运行中").first()).toBeVisible();
+
+  const layout = await page.evaluate(() => {
+    const content = document.querySelector<HTMLElement>(".overview-content")!;
+    const unified = document.querySelector<HTMLElement>(".unified-model-card")!.getBoundingClientRect();
+    const metrics = document.querySelector<HTMLElement>(".metrics-overview-card")!.getBoundingClientRect();
+    const trend = document.querySelector<HTMLElement>(".trend-panel")!.getBoundingClientRect();
+    const activityElement = document.querySelector<HTMLElement>(".activity-panel")!;
+    const activity = activityElement.getBoundingClientRect();
+    const activityStyle = getComputedStyle(activityElement);
+    return {
+      fitsViewport: content.scrollHeight <= content.clientHeight,
+      cardHeightDifference: Math.round(Math.abs(unified.height - metrics.height)),
+      trendGap: Math.round(trend.top - Math.max(unified.bottom, metrics.bottom)),
+      bottomClearance: Math.round(content.getBoundingClientRect().bottom - activity.bottom),
+      activityFrameless: activityStyle.borderTopWidth === "0px" && activityStyle.paddingTop === "0px",
+    };
+  });
+  expect(layout.fitsViewport).toBe(true);
+  expect(layout.activityFrameless).toBe(true);
+  expect(layout.bottomClearance).toBeGreaterThanOrEqual(16);
+  expect(layout.cardHeightDifference).toBeLessThanOrEqual(1);
+  expect(layout.trendGap).toBeGreaterThanOrEqual(10);
+  expect(layout.trendGap).toBeLessThanOrEqual(14);
 });
 
 test("keeps navigation and tool controls inside a narrow viewport", async ({ page }) => {

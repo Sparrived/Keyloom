@@ -23,8 +23,9 @@ type ProbePanelProps = {
   providerId: string;
   keys: string[];
   pools: string[];
-  poolProbeRequest?: { id: number; pool: string } | null;
+  poolProbeRequest?: { id: number; pool: string; key: string | null } | null;
   onPoolProbeResults?: (results: AmkrProbeResult[]) => void;
+  onPoolProbeStatus?: (status: string | null) => void;
 };
 
 const errorMessage = (reason: unknown) => reason instanceof Error ? reason.message : String(reason);
@@ -49,7 +50,7 @@ function statusTone(status: string) {
   return "muted";
 }
 
-export function ProbePanel({ configPath, providerId, keys, pools, poolProbeRequest = null, onPoolProbeResults }: ProbePanelProps) {
+export function ProbePanel({ configPath, providerId, keys, pools, poolProbeRequest = null, onPoolProbeResults, onPoolProbeStatus }: ProbePanelProps) {
   const headingId = useId();
   const [timeoutSeconds, setTimeoutSeconds] = useState("15");
   const [probe, setProbe] = useState<AmkrProbe | null>(null);
@@ -76,6 +77,7 @@ export function ProbePanel({ configPath, providerId, keys, pools, poolProbeReque
     const previousProbe = activeProbeRef.current;
     activeProbeRef.current = null;
     activeProbeKindRef.current = null;
+    onPoolProbeStatus?.(null);
     setProbe(null);
     setBusy(false);
     setCancelBusy(false);
@@ -88,6 +90,7 @@ export function ProbePanel({ configPath, providerId, keys, pools, poolProbeReque
       const probeId = activeProbeRef.current;
       activeProbeRef.current = null;
       activeProbeKindRef.current = null;
+      onPoolProbeStatus?.(null);
       if (probeId) void cancelAmkrProbe(probeId, configPath).catch(() => undefined);
     };
   }, [configPath]);
@@ -97,6 +100,7 @@ export function ProbePanel({ configPath, providerId, keys, pools, poolProbeReque
       const result = await getAmkrProbe(probeId, configPath);
       if (generationRef.current !== generation || pollVersionRef.current !== pollVersion || activeProbeRef.current !== probeId) return;
       setProbe(result);
+      if (activeProbeKindRef.current === "pools") onPoolProbeStatus?.(result.status);
       if (terminalStatuses.has(result.status)) {
         if (result.status === "complete" && activeProbeKindRef.current === "pools") onPoolProbeResults?.(result.results);
         activeProbeRef.current = null;
@@ -110,16 +114,19 @@ export function ProbePanel({ configPath, providerId, keys, pools, poolProbeReque
     } catch (reason) {
       if (generationRef.current !== generation || pollVersionRef.current !== pollVersion || activeProbeRef.current !== probeId) return;
       setCancelBusy(false);
+      if (activeProbeKindRef.current === "pools") onPoolProbeStatus?.("failed");
       setError(errorMessage(reason));
       clearTimer();
     }
   }
 
   useEffect(() => {
-    if (poolProbeRequest && pools.includes(poolProbeRequest.pool)) void start("pools", [poolProbeRequest.pool]);
+    if (poolProbeRequest?.key && pools.includes(poolProbeRequest.pool) && keys.includes(poolProbeRequest.key)) {
+      void start("keys", [poolProbeRequest.key], "pools");
+    }
   }, [poolProbeRequest]);
 
-  async function start(kind: "keys" | "pools", selected: string[]) {
+  async function start(kind: "keys" | "pools", selected: string[], resultKind: "keys" | "pools" = kind) {
     if (busy) return;
     const timeout = Number(timeoutSeconds);
     if (!Number.isFinite(timeout) || timeout <= 0 || timeout > 120) {
@@ -135,6 +142,7 @@ export function ProbePanel({ configPath, providerId, keys, pools, poolProbeReque
     setCancelBusy(false);
     setError(null);
     setProbe(null);
+    if (resultKind === "pools") onPoolProbeStatus?.("pending");
     try {
       const started = kind === "keys"
         ? await probeAmkrKeys(providerId, selected, timeout, configPath)
@@ -144,7 +152,8 @@ export function ProbePanel({ configPath, providerId, keys, pools, poolProbeReque
         return;
       }
       activeProbeRef.current = started.probe_id;
-      activeProbeKindRef.current = kind;
+      activeProbeKindRef.current = resultKind;
+      if (resultKind === "pools") onPoolProbeStatus?.(started.status);
       setProbe({
         probe_id: started.probe_id,
         status: started.status,
@@ -156,6 +165,7 @@ export function ProbePanel({ configPath, providerId, keys, pools, poolProbeReque
     } catch (reason) {
       if (generationRef.current !== generation) return;
       setBusy(false);
+      if (resultKind === "pools") onPoolProbeStatus?.("failed");
       setError(errorMessage(reason));
     }
   }
