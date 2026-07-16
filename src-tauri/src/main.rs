@@ -482,15 +482,16 @@ async fn get_amkr_tool_status() -> Result<keyloom_core::amkr_tool::AmkrToolStatu
 }
 
 #[tauri::command]
-fn install_amkr_tool() -> Result<keyloom_core::amkr_tool::AmkrToolStatus, String> {
-    keyloom_core::amkr_tool::ensure_installed()
+async fn install_amkr_tool() -> Result<keyloom_core::amkr_tool::AmkrToolStatus, String> {
+    run_blocking(keyloom_core::amkr_tool::ensure_installed).await
 }
 
 #[tauri::command]
-fn update_amkr_tool(
+async fn update_amkr_tool(
     config_path: Option<String>,
 ) -> Result<keyloom_core::amkr_tool::AmkrToolStatus, String> {
-    keyloom_core::update_amkr_tool(config_path.as_deref().map(Path::new))
+    run_blocking(move || keyloom_core::update_amkr_tool(config_path.as_deref().map(Path::new)))
+        .await
 }
 
 #[tauri::command]

@@ -154,6 +154,8 @@ pub struct AmkrUpdateCheck {
     pub latest_version: Option<String>,
     pub release_url: Option<String>,
     pub source: Option<String>,
+    pub artifact_url: Option<String>,
+    pub artifact_sha256: Option<String>,
     pub update_available: bool,
     pub error: Option<String>,
 }

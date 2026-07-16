@@ -602,8 +602,9 @@ pub fn update_amkr_tool(selected_path: Option<&Path>) -> Result<amkr_tool::AmkrT
                     windows_service::ServiceAction::Stop,
                     Some(&instance.config_path),
                 )?;
+            } else {
+                amkr_tool::stop_background(&instance.config_path)?;
             }
-            amkr_tool::stop_background(&instance.config_path)?;
             wait_for_amkr_state(&instance.config_path, false)
         })();
         if let Err(stop_error) = stop_result {
