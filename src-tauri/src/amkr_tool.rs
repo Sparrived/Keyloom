@@ -114,6 +114,26 @@ pub fn update() -> Result<AmkrToolStatus, String> {
     Ok(get_status())
 }
 
+pub fn stop_background(config_path: &Path) -> Result<(), String> {
+    let installation = require_installation()?;
+    let config = config_path.to_string_lossy().into_owned();
+    let output = hidden_command(&installation.executable)
+        .args(["--config", config.as_str(), "--stop"])
+        .output()
+        .map_err(|error| format!("无法停止 AMKR 后台服务: {error}"))?;
+    ensure_success(output, "停止 AMKR 后台服务")
+}
+
+pub fn start_background(config_path: &Path) -> Result<(), String> {
+    let installation = require_installation()?;
+    let config = config_path.to_string_lossy().into_owned();
+    hidden_command(&installation.executable)
+        .args(["--config", config.as_str(), "--serve"])
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| format!("无法启动 AMKR 后台服务: {error}"))
+}
+
 pub fn service_program() -> Result<ServiceProgram, String> {
     let installation = require_installation()?;
     Ok(ServiceProgram::executable(installation.executable))

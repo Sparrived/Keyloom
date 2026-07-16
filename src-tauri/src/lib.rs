@@ -8,6 +8,8 @@ pub mod windows_service;
 use std::fs::{self, File};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
+use std::thread;
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
@@ -586,6 +588,76 @@ pub fn run_amkr_system_service(
     let instance = discover_local_instance(selected_path)?;
     let program = amkr_tool::service_program()?;
     windows_service::run_system_service_action(action, &program, &instance.config_path)
+}
+
+pub fn update_amkr_tool(selected_path: Option<&Path>) -> Result<amkr_tool::AmkrToolStatus, String> {
+    let instance = discover_local_instance(selected_path)?;
+    let was_running = get_amkr_health(Some(&instance.config_path)).is_ok();
+    let task_registered = windows_service::task_is_registered();
+
+    if was_running {
+        let stop_result = (|| {
+            if task_registered {
+                run_amkr_service(
+                    windows_service::ServiceAction::Stop,
+                    Some(&instance.config_path),
+                )?;
+            }
+            amkr_tool::stop_background(&instance.config_path)?;
+            wait_for_amkr_state(&instance.config_path, false)
+        })();
+        if let Err(stop_error) = stop_result {
+            let restore_error = restore_amkr_service(&instance.config_path, task_registered).err();
+            return Err(match restore_error {
+                Some(restore_error) => {
+                    format!("AMKR 更新前停止失败: {stop_error}；服务恢复失败: {restore_error}")
+                }
+                None => format!("AMKR 更新前停止失败: {stop_error}"),
+            });
+        }
+    }
+
+    let update_result = amkr_tool::update();
+    let restore_result = if was_running {
+        restore_amkr_service(&instance.config_path, task_registered)
+    } else {
+        Ok(())
+    };
+
+    match (update_result, restore_result) {
+        (Ok(status), Ok(())) => Ok(status),
+        (Err(update_error), Ok(())) => Err(update_error),
+        (Ok(_), Err(restore_error)) => {
+            Err(format!("AMKR 更新完成，但服务恢复失败: {restore_error}"))
+        }
+        (Err(update_error), Err(restore_error)) => Err(format!(
+            "AMKR 更新失败: {update_error}；服务恢复失败: {restore_error}"
+        )),
+    }
+}
+
+fn restore_amkr_service(config_path: &Path, task_registered: bool) -> Result<(), String> {
+    if task_registered {
+        run_amkr_service(windows_service::ServiceAction::Start, Some(config_path))?;
+    } else {
+        amkr_tool::start_background(config_path)?;
+    }
+    wait_for_amkr_state(config_path, true)
+}
+
+fn wait_for_amkr_state(config_path: &Path, expected_running: bool) -> Result<(), String> {
+    for _ in 0..50 {
+        let running = get_amkr_health(Some(config_path)).is_ok();
+        if running == expected_running {
+            return Ok(());
+        }
+        thread::sleep(Duration::from_millis(200));
+    }
+    if expected_running {
+        Err("AMKR 服务启动后健康检查未通过".to_owned())
+    } else {
+        Err("AMKR 服务未能在更新前停止".to_owned())
+    }
 }
 
 #[cfg(test)]

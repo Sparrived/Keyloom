@@ -490,10 +490,7 @@ fn install_amkr_tool() -> Result<keyloom_core::amkr_tool::AmkrToolStatus, String
 fn update_amkr_tool(
     config_path: Option<String>,
 ) -> Result<keyloom_core::amkr_tool::AmkrToolStatus, String> {
-    if keyloom_core::get_amkr_health(config_path.as_deref().map(Path::new)).is_ok() {
-        return Err("请先停止 AMKR 服务，再更新 AMKR".to_owned());
-    }
-    keyloom_core::amkr_tool::update()
+    keyloom_core::update_amkr_tool(config_path.as_deref().map(Path::new))
 }
 
 #[tauri::command]

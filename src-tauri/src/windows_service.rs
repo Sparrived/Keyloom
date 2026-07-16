@@ -5,6 +5,21 @@ use serde::Serialize;
 
 pub const WINDOWS_TASK_NAME: &str = "AutoModelKeyRouter";
 
+pub fn task_is_registered() -> bool {
+    #[cfg(not(windows))]
+    return false;
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        Command::new("schtasks")
+            .args(["/Query", "/TN", WINDOWS_TASK_NAME])
+            .creation_flags(0x08000000)
+            .output()
+            .is_ok_and(|output| output.status.success())
+    }
+}
+
 pub fn config_path_from_arguments(arguments: &str) -> Option<PathBuf> {
     let mut values = Vec::new();
     let mut current = String::new();
