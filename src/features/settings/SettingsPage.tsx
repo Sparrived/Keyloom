@@ -272,7 +272,7 @@ export function SettingsPage({ amkrWidgetEnabled = false, closeBehavior = "ask",
           {updateCheck.source ? <div><dt>来源</dt><dd>{updateCheck.source}</dd></div> : null}
           {updateCheck.release_url ? <div><dt>发布页面</dt><dd>{updateCheck.release_url}</dd></div> : null}
         </dl> : <p className="empty-state">尚未检查 AMKR 更新。</p>}
-        {updateCheck?.update_available ? <button type="button" disabled={updateInstalling || health?.status === "ok" || !toolStatus?.installed || !["uv", "pipx"].includes(toolStatus.manager ?? "")} title={health?.status === "ok" ? "请先停止 AMKR 服务" : undefined} onClick={() => void installUpdate()}>{updateInstalling ? "正在更新" : "安装更新"}</button> : null}
+        {updateCheck?.update_available ? <button type="button" disabled={updateInstalling || !toolStatus?.installed || !["uv", "pipx"].includes(toolStatus.manager ?? "")} onClick={() => void installUpdate()}>{updateInstalling ? "正在更新" : "安装更新"}</button> : null}
         {updateError ? <p className="service-action-error" role="alert">版本检查失败: {updateError}</p> : null}
       </div> : null}
     </section>
