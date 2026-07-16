@@ -85,8 +85,6 @@ describe("ProvidersPage", () => {
     await screen.findByText("key-a");
 
     fireEvent.click(screen.getByRole("button", { name: "编辑 Key key-a" }));
-    fireEvent.click(screen.getByLabelText("启用 Key"));
-    fireEvent.click(screen.getByLabelText("允许访客"));
     fireEvent.change(screen.getByLabelText("替换 API Key"), { target: { value: "replacement-secret" } });
     fireEvent.click(screen.getByRole("button", { name: "保存 Key" }));
 
@@ -97,11 +95,12 @@ describe("ProvidersPage", () => {
       keyName: "key-a",
       name: "key-a",
       apiKey: "replacement-secret",
-      enabled: false,
-      allowVisitor: true,
+      enabled: true,
+      allowVisitor: false,
     }));
 
     fireEvent.click(screen.getByRole("button", { name: "删除 Key key-a" }));
+    fireEvent.click(await screen.findByRole("button", { name: "确认" }));
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("delete_amkr_provider_key", {
       configPath: null,
       configRevision: "revision-a",
@@ -209,7 +208,6 @@ describe("ProvidersPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "编辑模型池 pool-a" }));
     fireEvent.change(screen.getByLabelText("模型池名称"), { target: { value: "pool-b" } });
-    fireEvent.change(screen.getByLabelText("模型池 Key"), { target: { value: "key-a,key-b" } });
     fireEvent.click(screen.getByRole("button", { name: "添加自定义模型" }));
     fireEvent.change(screen.getByLabelText("自定义模型名称"), { target: { value: "model-b" } });
     fireEvent.click(screen.getByRole("button", { name: "确认添加自定义模型" }));
@@ -221,11 +219,12 @@ describe("ProvidersPage", () => {
       providerId: "a.example.test",
       poolName: "pool-a",
       name: "pool-b",
-      keys: ["key-a", "key-b"],
+      keys: ["key-a"],
       models: ["model-a", "model-b"],
     }));
 
     fireEvent.click(screen.getByRole("button", { name: "删除模型池 pool-a" }));
+    fireEvent.click(await screen.findByRole("button", { name: "确认" }));
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("delete_amkr_pool", {
       configPath: null,
       configRevision: "revision-a",
@@ -253,6 +252,32 @@ describe("ProvidersPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "编辑模型池 pool-a" }));
 
     expect(await screen.findByLabelText("正在探测模型")).toHaveClass("pool-model-probe-indicator");
+  });
+
+  it("keeps discovered models unselected when the pool has no models", async () => {
+    const emptyPoolResponse = {
+      ...response,
+      providers: [{ ...response.providers[0], pools: [{ ...response.providers[0].pools[0], models: [] }] }],
+    };
+    invokeMock.mockImplementation(async (command) => {
+      if (command === "get_amkr_providers") return emptyPoolResponse;
+      if (command === "probe_amkr_keys") return { probe_id: "probe-pools", status: "pending" };
+      if (command === "get_amkr_probe") return {
+        probe_id: "probe-pools",
+        status: "complete",
+        provider: "a.example.test",
+        results: [{ status: "ok", provider: "a.example.test", key: "key-a", endpoint: "https://a.example.test/v1/models", models: ["model-a", "model-b"], latency_ms: 20, error: null }],
+        error: null,
+      };
+      return undefined;
+    });
+    render(<ProvidersPage configPath={null} />);
+    await screen.findByText("pool-a");
+
+    fireEvent.click(screen.getByRole("button", { name: "编辑模型池 pool-a" }));
+
+    expect(await screen.findByRole("button", { name: "打开模型 model-a" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "打开模型 model-b" })).toHaveAttribute("aria-pressed", "false");
   });
 
   it("probes the edited pool and combines discovered and custom models", async () => {
@@ -312,43 +337,38 @@ describe("ProvidersPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "编辑 Key key-a" }));
     expect(screen.getByLabelText("Key 名称")).toBeInTheDocument();
+    expect(screen.getByLabelText("Key 名称").closest("li")).toHaveClass("provider-row");
     fireEvent.click(screen.getByRole("button", { name: "收起 Key key-a" }));
     expect(screen.queryByLabelText("Key 名称")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "编辑模型池 pool-a" }));
     expect(screen.getByLabelText("模型池名称")).toBeInTheDocument();
+    expect(screen.getByLabelText("模型池名称").closest("li")).toHaveClass("provider-row");
     fireEvent.click(screen.getByRole("button", { name: "收起模型池 pool-a" }));
     expect(screen.queryByLabelText("模型池名称")).not.toBeInTheDocument();
   });
 
   it("does not delete a provider when confirmation is cancelled", async () => {
-    vi.mocked(window.confirm).mockReturnValue(false);
     render(<ProvidersPage configPath={null} />);
     await screen.findByText("a.example.test");
 
     fireEvent.click(screen.getByRole("button", { name: "删除供应商 a.example.test" }));
+    fireEvent.click(await screen.findByRole("button", { name: "取消" }));
 
     expect(invokeMock).not.toHaveBeenCalledWith("delete_amkr_provider", expect.anything());
   });
 
-  it("shows visitor permission and copies only the key fingerprint", async () => {
-    const clipboard = { writeText: vi.fn().mockResolvedValue(undefined) };
-    Object.assign(navigator, { clipboard });
-    invokeMock.mockResolvedValue({
-      ...response,
-      providers: [{
-        ...response.providers[0],
-        keys: [{ ...response.providers[0].keys[0], allow_visitor: true }],
-      }],
-    });
+  it("toggles key status cards directly and removes fingerprint copying", async () => {
     render(<ProvidersPage configPath={null} />);
     await screen.findByText("key-a");
 
-    expect(screen.getByText("允许访客")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "复制 Key 指纹 key-a" }));
+    expect(screen.getByRole("button", { name: "仅本地" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "复制 Key 指纹 key-a" })).not.toBeInTheDocument();
 
-    await waitFor(() => expect(clipboard.writeText).toHaveBeenCalledWith("65bbff9a6cb9"));
-    expect(await screen.findByText("指纹已复制")).toHaveClass("copy-toast");
-    expect(screen.getByRole("button", { name: "复制 Key 指纹 key-a" })).toHaveTextContent("复制指纹");
+    fireEvent.click(screen.getByRole("button", { name: "已启用" }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_amkr_provider_key", expect.objectContaining({ enabled: false, allowVisitor: false })));
+
+    fireEvent.click(screen.getByRole("button", { name: "仅本地" }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_amkr_provider_key", expect.objectContaining({ enabled: true, allowVisitor: true })));
   });
 });

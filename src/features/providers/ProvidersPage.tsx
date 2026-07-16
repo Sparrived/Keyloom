@@ -20,6 +20,7 @@ import {
 import { ProbePanel } from "./ProbePanel";
 import type { AmkrProbeResult } from "../../api/amkr";
 import { useCopyToast } from "../../components/CopyToast";
+import { useConfirmDialog } from "../../components/ConfirmDialog";
 
 const csv = (value: string) => value.split(",").map((item) => item.trim()).filter(Boolean);
 const errorMessage = (reason: unknown) => reason instanceof Error ? reason.message : String(reason);
@@ -52,8 +53,6 @@ function ProviderCard({ configPath, provider, revision, refresh }: ProviderCardP
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [keyEditName, setKeyEditName] = useState("");
   const [keyEditSecret, setKeyEditSecret] = useState("");
-  const [keyEditEnabled, setKeyEditEnabled] = useState(true);
-  const [keyEditVisitor, setKeyEditVisitor] = useState(false);
   const [editingPool, setEditingPool] = useState<string | null>(null);
   const [poolProbeRequest, setPoolProbeRequest] = useState<{ id: number; pool: string; key: string | null } | null>(null);
   const [poolProbeStatus, setPoolProbeStatus] = useState<string | null>(null);
@@ -61,6 +60,7 @@ function ProviderCard({ configPath, provider, revision, refresh }: ProviderCardP
   const [poolEditName, setPoolEditName] = useState("");
   const [poolEditKeys, setPoolEditKeys] = useState("");
   const [poolEditModels, setPoolEditModels] = useState("");
+  const [poolModelOrder, setPoolModelOrder] = useState<string[]>([]);
   const [poolEditCustomModels, setPoolEditCustomModels] = useState<string[]>([]);
   const [addingCustomModel, setAddingCustomModel] = useState(false);
   const [customModelName, setCustomModelName] = useState("");
@@ -76,6 +76,7 @@ function ProviderCard({ configPath, provider, revision, refresh }: ProviderCardP
   const [poolModels, setPoolModels] = useState("");
   const [error, setError] = useState<string | null>(null);
   const { copyToast, showCopyToast } = useCopyToast();
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
 
   const mutate = async (operation: () => Promise<unknown>, successMessage = "配置已更新。") => {
     setError(null);
@@ -100,8 +101,6 @@ function ProviderCard({ configPath, provider, revision, refresh }: ProviderCardP
     setEditingKey(key.name);
     setKeyEditName(key.name);
     setKeyEditSecret("");
-    setKeyEditEnabled(key.enabled);
-    setKeyEditVisitor(key.allow_visitor);
   };
 
   const providerFrom = (data: AmkrProvidersResponse | null) => data?.providers.find((item) => item.id === provider.id) ?? null;
@@ -111,6 +110,7 @@ function ProviderCard({ configPath, provider, revision, refresh }: ProviderCardP
     setPoolEditName(pool.name);
     setPoolEditKeys(pool.keys.join(", "));
     setPoolEditModels(pool.models.join(", "));
+    setPoolModelOrder(pool.models);
     setPoolEditCustomModels([]);
     setAddingCustomModel(false);
     setCustomModelName("");
@@ -210,6 +210,7 @@ function ProviderCard({ configPath, provider, revision, refresh }: ProviderCardP
     const model = customModelName.trim();
     if (!model) return;
     setPoolEditCustomModels((current) => Array.from(new Set([...current, model])));
+    setPoolModelOrder((current) => current.includes(model) ? current : [...current, model]);
     setPoolEditModels((current) => Array.from(new Set([...csv(current), model])).join(", "));
     setCustomModelName("");
     setAddingCustomModel(false);
@@ -217,30 +218,50 @@ function ProviderCard({ configPath, provider, revision, refresh }: ProviderCardP
 
   const deleteCustomPoolModel = (model: string) => {
     setPoolEditCustomModels((current) => current.filter((item) => item !== model));
+    setPoolModelOrder((current) => current.filter((item) => item !== model));
     removeSelectedModel(model);
   };
 
   const handlePoolProbeResults = (results: AmkrProbeResult[]) => {
     const models = Array.from(new Set(results.flatMap((result) => result.models))).sort();
     setDiscoveredModels(models);
-    setPoolEditModels((current) => csv(current).length ? current : models.join(", "));
+    setPoolModelOrder((current) => [...current, ...models.filter((model) => !current.includes(model))]);
   };
 
   const selectedPoolModels = csv(poolEditModels);
-  const poolModelCards = Array.from(new Set([...selectedPoolModels, ...discoveredModels, ...poolEditCustomModels])).filter(Boolean);
+  const poolModelCards = Array.from(new Set([...poolModelOrder, ...discoveredModels, ...selectedPoolModels, ...poolEditCustomModels])).filter(Boolean);
   const poolProbeBusy = poolProbeStatus === "pending" || poolProbeStatus === "running";
 
-  const copyFingerprint = async (key: AmkrProviderKey) => {
-    if (!navigator.clipboard?.writeText) {
-      setError("当前环境不支持复制指纹。");
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(key.api_key_fingerprint);
-      showCopyToast("指纹已复制");
-    } catch (reason) {
-      setError(errorMessage(reason));
-    }
+  const toggleKeySetting = (key: AmkrProviderKey, setting: "enabled" | "allowVisitor") => {
+    void mutate(() => updateAmkrProviderKey(
+      revision,
+      provider.id,
+      key.name,
+      key.name,
+      null,
+      setting === "enabled" ? !key.enabled : key.enabled,
+      setting === "allowVisitor" ? !key.allow_visitor : key.allow_visitor,
+      configPath,
+    ));
+  };
+
+  const togglePoolKeyValue = (current: string, key: string) => {
+    const selected = csv(current);
+    return selected.includes(key)
+      ? selected.filter((item) => item !== key).join(", ")
+      : Array.from(new Set([...selected, key])).join(", ");
+  };
+
+  const removeProvider = async () => {
+    if (await confirm(`删除供应商 ${provider.id} 及其 Key 和模型池？`)) void mutate(() => deleteAmkrProvider(revision, provider.id, configPath));
+  };
+
+  const removeKey = async (name: string) => {
+    if (await confirm(`删除 Key ${name}？`)) void mutate(() => deleteAmkrProviderKey(revision, provider.id, name, configPath));
+  };
+
+  const removePool = async (name: string) => {
+    if (await confirm(`删除模型池 ${name}？`)) void mutate(() => deleteAmkrPool(revision, provider.id, name, configPath));
   };
 
   return <article className="provider-item">
@@ -248,7 +269,7 @@ function ProviderCard({ configPath, provider, revision, refresh }: ProviderCardP
       <div className="provider-identity"><h3>{provider.id}</h3><p>{provider.base_url}</p><span>{provider.keys.length} 个 Key · {provider.pools.length} 个模型池</span></div>
       <div className="item-actions">
         <button aria-expanded={editingProvider} aria-label={`${editingProvider ? "收起" : "编辑"}供应商 ${provider.id}`} className="secondary-button" type="button" onClick={() => { if (editingProvider) { setEditingProvider(false); return; } setProviderId(provider.id); setProviderUrl(provider.base_url); setProviderRoutes(provider.routes ?? {}); setEditingProvider(true); }}>{editingProvider ? "收起" : "编辑"}</button>
-        <button aria-label={`删除供应商 ${provider.id}`} className="danger-button" type="button" onClick={() => { if (window.confirm(`删除供应商 ${provider.id} 及其 Key 和模型池？`)) void mutate(() => deleteAmkrProvider(revision, provider.id, configPath)); }}>删除</button>
+        <button aria-label={`删除供应商 ${provider.id}`} className="danger-button" type="button" onClick={() => void removeProvider()}>删除</button>
       </div>
     </header>
 
@@ -267,20 +288,20 @@ function ProviderCard({ configPath, provider, revision, refresh }: ProviderCardP
         <div className="provider-section-heading"><div><h4>Key</h4><p>用于连接此供应商的凭据</p></div><button className="secondary-button" type="button" onClick={() => setAddingKey((value) => !value)}>{addingKey ? "取消添加" : "添加 Key"}</button></div>
         {provider.keys.length ? <ul>{provider.keys.map((key) => <li className="provider-row" key={key.name}>
           <div className="provider-row-main"><strong>{key.name}</strong><code>{key.api_key_fingerprint}</code></div>
-          <div className="provider-statuses"><span className={key.enabled ? "status-good" : "status-muted"}>{key.enabled ? "已启用" : "已停用"}</span><span className={key.allow_visitor ? "status-good" : "status-muted"}>{key.allow_visitor ? "允许访客" : "仅本地"}</span></div>
-          <div className="row-actions">
-            <button aria-label={`复制 Key 指纹 ${key.name}`} className="secondary-button" type="button" onClick={() => void copyFingerprint(key)}>复制指纹</button>
-            <button aria-expanded={editingKey === key.name} aria-label={`${editingKey === key.name ? "收起" : "编辑"} Key ${key.name}`} className="secondary-button" type="button" onClick={() => beginKeyEdit(key)}>{editingKey === key.name ? "收起" : "编辑"}</button>
-            <button aria-label={`删除 Key ${key.name}`} className="danger-button" type="button" onClick={() => { if (window.confirm(`删除 Key ${key.name}？`)) void mutate(() => deleteAmkrProviderKey(revision, provider.id, key.name, configPath)); }}>删除</button>
+          <div className="provider-statuses">
+            <button aria-pressed={key.enabled} className={`key-status-button ${key.enabled ? "status-good" : "status-muted"}`} type="button" onClick={() => toggleKeySetting(key, "enabled")}>{key.enabled ? "已启用" : "已停用"}</button>
+            <button aria-pressed={key.allow_visitor} className={`key-status-button ${key.allow_visitor ? "status-good" : "status-muted"}`} type="button" onClick={() => toggleKeySetting(key, "allowVisitor")}>{key.allow_visitor ? "允许访客" : "仅本地"}</button>
           </div>
+          <div className="row-actions">
+            <button aria-expanded={editingKey === key.name} aria-label={`${editingKey === key.name ? "收起" : "编辑"} Key ${key.name}`} className="secondary-button" type="button" onClick={() => beginKeyEdit(key)}>{editingKey === key.name ? "收起" : "编辑"}</button>
+            <button aria-label={`删除 Key ${key.name}`} className="danger-button" type="button" onClick={() => void removeKey(key.name)}>删除</button>
+          </div>
+          {editingKey === key.name ? <form className="inline-form editor-form resource-form" onSubmit={(event) => { event.preventDefault(); void (async () => { if (await mutate(() => updateAmkrProviderKey(revision, provider.id, editingKey, keyEditName, keyEditSecret.trim() || null, key.enabled, key.allow_visitor, configPath))) setEditingKey(null); })(); }}>
+            <label>Key 名称<input required value={keyEditName} onChange={(event) => setKeyEditName(event.target.value)} /></label>
+            <label>替换 API Key<input type="password" value={keyEditSecret} onChange={(event) => setKeyEditSecret(event.target.value)} /></label>
+            <div className="form-actions"><button type="submit">保存 Key</button><button className="secondary-button" type="button" onClick={() => setEditingKey(null)}>取消</button></div>
+          </form> : null}
         </li>)}</ul> : <p>尚无 Key。</p>}
-        {editingKey ? <form className="inline-form editor-form resource-form" onSubmit={(event) => { event.preventDefault(); void (async () => { if (await mutate(() => updateAmkrProviderKey(revision, provider.id, editingKey, keyEditName, keyEditSecret.trim() || null, keyEditEnabled, keyEditVisitor, configPath))) setEditingKey(null); })(); }}>
-          <label>Key 名称<input required value={keyEditName} onChange={(event) => setKeyEditName(event.target.value)} /></label>
-          <label>替换 API Key<input type="password" value={keyEditSecret} onChange={(event) => setKeyEditSecret(event.target.value)} /></label>
-          <label className="checkbox-label"><input aria-label="启用 Key" checked={keyEditEnabled} type="checkbox" onChange={(event) => setKeyEditEnabled(event.target.checked)} />启用</label>
-          <label className="checkbox-label"><input aria-label="允许访客" checked={keyEditVisitor} type="checkbox" onChange={(event) => setKeyEditVisitor(event.target.checked)} />访客访问</label>
-          <div className="form-actions"><button type="submit">保存 Key</button><button className="secondary-button" type="button" onClick={() => setEditingKey(null)}>取消</button></div>
-        </form> : null}
         {addingKey ? <form className="inline-form resource-form create-resource-form" onSubmit={(event) => { event.preventDefault(); void createKeyAndAssignPool(); }}>
           <label>Key 名称<input disabled={keyCreateBusy} required value={keyName} onChange={(event) => setKeyName(event.target.value)} /></label>
           <label>API Key<input disabled={keyCreateBusy} required type="password" value={keyValue} onChange={(event) => setKeyValue(event.target.value)} /></label>
@@ -296,32 +317,48 @@ function ProviderCard({ configPath, provider, revision, refresh }: ProviderCardP
           <div className="provider-row-main"><strong>{pool.name}</strong><span>{pool.models.join(", ") || "未绑定模型"}</span></div>
           <div className="row-actions">
             <button aria-expanded={editingPool === pool.name} aria-label={`${editingPool === pool.name ? "收起" : "编辑"}模型池 ${pool.name}`} className="secondary-button" type="button" onClick={() => beginPoolEdit(pool)}>{editingPool === pool.name ? "收起" : "编辑"}</button>
-            <button aria-label={`删除模型池 ${pool.name}`} className="danger-button" type="button" onClick={() => { if (window.confirm(`删除模型池 ${pool.name}？`)) void mutate(() => deleteAmkrPool(revision, provider.id, pool.name, configPath)); }}>删除</button>
+            <button aria-label={`删除模型池 ${pool.name}`} className="danger-button" type="button" onClick={() => void removePool(pool.name)}>删除</button>
           </div>
+          {editingPool === pool.name ? <form className="inline-form editor-form resource-form" onSubmit={(event) => { event.preventDefault(); void (async () => { if (await mutate(() => updateAmkrPool(revision, provider.id, editingPool, poolEditName, csv(poolEditKeys), selectedPoolModels, configPath))) setEditingPool(null); })(); }}>
+            <label>模型池名称<input required value={poolEditName} onChange={(event) => setPoolEditName(event.target.value)} /></label>
+            <fieldset className="pool-key-picker">
+              <legend>模型池 Key</legend>
+              <div aria-label="模型池 Key" className="pool-model-grid">
+                {provider.keys.map((key) => {
+                  const selected = csv(poolEditKeys).includes(key.name);
+                  return <button aria-pressed={selected} aria-label={`${selected ? "移除" : "添加"}模型池 Key ${key.name}`} className={`pool-model-card pool-key-card${selected ? " is-selected" : ""}`} key={key.name} type="button" onClick={() => setPoolEditKeys((current) => togglePoolKeyValue(current, key.name))}>{key.name}</button>;
+                })}
+              </div>
+            </fieldset>
+            <div aria-label="模型池模型" className="pool-model-grid">
+              {poolProbeBusy ? <div aria-label="正在探测模型" className="pool-model-card pool-model-probe-indicator" role="status"><span /><span /><span /></div> : null}
+              {poolModelCards.map((model) => {
+                const selected = selectedPoolModels.includes(model);
+                const custom = poolEditCustomModels.includes(model);
+                return <div className="pool-model-card-shell" key={model}>
+                  <button aria-label={`${selected ? "关闭" : "打开"}模型 ${model}`} aria-pressed={selected} className={`pool-model-card${selected ? " is-selected" : ""}`} type="button" onClick={() => togglePoolModel(model)}>{model}</button>
+                  {custom ? <button aria-label={`删除自定义模型 ${model}`} className="pool-model-remove" type="button" onClick={() => deleteCustomPoolModel(model)}>×</button> : null}
+                </div>;
+              })}
+              {addingCustomModel ? <div className="pool-model-card custom-model-card">
+                <input aria-label="自定义模型名称" autoFocus value={customModelName} onChange={(event) => setCustomModelName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addCustomPoolModel(); } else if (event.key === "Escape") { setAddingCustomModel(false); setCustomModelName(""); } }} />
+                <button aria-label="确认添加自定义模型" type="button" onClick={() => addCustomPoolModel()}>+</button>
+              </div> : <button aria-label="添加自定义模型" className="pool-model-card pool-model-add" type="button" onClick={() => setAddingCustomModel(true)}>+</button>}
+            </div>
+            <div className="form-actions"><button type="submit">保存模型池</button><button className="secondary-button" type="button" onClick={() => setEditingPool(null)}>取消</button></div>
+          </form> : null}
         </li>)}</ul> : <p>尚无模型池。</p>}
-        {editingPool ? <form className="inline-form editor-form resource-form" onSubmit={(event) => { event.preventDefault(); void (async () => { if (await mutate(() => updateAmkrPool(revision, provider.id, editingPool, poolEditName, csv(poolEditKeys), selectedPoolModels, configPath))) setEditingPool(null); })(); }}>
-          <label>模型池名称<input required value={poolEditName} onChange={(event) => setPoolEditName(event.target.value)} /></label>
-          <label>模型池 Key<input value={poolEditKeys} onChange={(event) => setPoolEditKeys(event.target.value)} /></label>
-          <div aria-label="模型池模型" className="pool-model-grid">
-            {poolProbeBusy ? <div aria-label="正在探测模型" className="pool-model-probe-indicator" role="status"><span /></div> : null}
-            {poolModelCards.map((model) => {
-              const selected = selectedPoolModels.includes(model);
-              const custom = poolEditCustomModels.includes(model);
-              return <div className="pool-model-card-shell" key={model}>
-                <button aria-label={`${selected ? "关闭" : "打开"}模型 ${model}`} aria-pressed={selected} className={`pool-model-card${selected ? " is-selected" : ""}`} type="button" onClick={() => togglePoolModel(model)}>{model}</button>
-                {custom ? <button aria-label={`删除自定义模型 ${model}`} className="pool-model-remove" type="button" onClick={() => deleteCustomPoolModel(model)}>×</button> : null}
-              </div>;
-            })}
-            {addingCustomModel ? <div className="pool-model-card custom-model-card">
-              <input aria-label="自定义模型名称" autoFocus value={customModelName} onChange={(event) => setCustomModelName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addCustomPoolModel(); } else if (event.key === "Escape") { setAddingCustomModel(false); setCustomModelName(""); } }} />
-              <button aria-label="确认添加自定义模型" type="button" onClick={() => addCustomPoolModel()}>+</button>
-            </div> : <button aria-label="添加自定义模型" className="pool-model-card pool-model-add" type="button" onClick={() => setAddingCustomModel(true)}>+</button>}
-          </div>
-          <div className="form-actions"><button type="submit">保存模型池</button><button className="secondary-button" type="button" onClick={() => setEditingPool(null)}>取消</button></div>
-        </form> : null}
         {addingPool ? <form className="inline-form resource-form create-resource-form" onSubmit={(event) => { event.preventDefault(); void (async () => { if (await mutate(() => createAmkrPool(revision, provider.id, poolName, csv(poolKeys), csv(poolModels), configPath))) { setPoolName(""); setPoolKeys(""); setPoolModels(""); setAddingPool(false); } })(); }}>
           <label>名称<input required value={poolName} onChange={(event) => setPoolName(event.target.value)} /></label>
-          <label>Key<input value={poolKeys} onChange={(event) => setPoolKeys(event.target.value)} placeholder="逗号分隔" /></label>
+          <fieldset className="pool-key-picker">
+            <legend>Key</legend>
+            <div aria-label="模型池 Key" className="pool-model-grid">
+              {provider.keys.map((key) => {
+                const selected = csv(poolKeys).includes(key.name);
+                return <button aria-pressed={selected} aria-label={`${selected ? "移除" : "添加"}模型池 Key ${key.name}`} className={`pool-model-card pool-key-card${selected ? " is-selected" : ""}`} key={key.name} type="button" onClick={() => setPoolKeys((current) => togglePoolKeyValue(current, key.name))}>{key.name}</button>;
+              })}
+            </div>
+          </fieldset>
           <label>模型<input value={poolModels} onChange={(event) => setPoolModels(event.target.value)} placeholder="逗号分隔" /></label>
           <div className="form-actions"><button type="submit">添加模型池</button></div>
         </form> : null}
@@ -329,6 +366,7 @@ function ProviderCard({ configPath, provider, revision, refresh }: ProviderCardP
     </div>
     <ProbePanel configPath={configPath} providerId={provider.id} keys={provider.keys.map((key) => key.name)} pools={provider.pools.map((pool) => pool.name)} onPoolProbeResults={handlePoolProbeResults} onPoolProbeStatus={setPoolProbeStatus} poolProbeRequest={poolProbeRequest} />
     {error ? <p className="service-action-error">操作失败: {error}</p> : null}
+    {confirmDialog}
     {copyToast}
   </article>;
 }
