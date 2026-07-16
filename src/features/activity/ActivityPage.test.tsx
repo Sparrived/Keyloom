@@ -59,3 +59,19 @@ it("opens the service log at the bottom and colors each log level", async () => 
   expect(within(output).getByText(/ERROR/)).toHaveClass("log-line-error");
   expect(within(output).getByText(/request finished/)).toHaveClass("log-line-default");
 });
+
+it("keeps the current log position when the user is reading older entries", async () => {
+  invokeMock.mockResolvedValue("older entry");
+  const { rerender } = render(<ActivityPage configPath={null} />);
+
+  const output = await screen.findByLabelText("服务日志内容");
+  Object.defineProperty(output, "scrollHeight", { configurable: true, value: 480 });
+  Object.defineProperty(output, "clientHeight", { configurable: true, value: 120 });
+  output.scrollTop = 100;
+  output.dispatchEvent(new Event("scroll"));
+
+  invokeMock.mockResolvedValue("older entry\nnew entry");
+  rerender(<ActivityPage configPath="changed" />);
+  await screen.findByText("new entry");
+  expect(output.scrollTop).toBe(100);
+});

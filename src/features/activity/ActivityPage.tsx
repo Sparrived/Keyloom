@@ -52,6 +52,7 @@ export function ActivityPage({ configPath, metrics = null }: ActivityPageProps) 
   const [logTail, setLogTail] = useState("");
   const [logError, setLogError] = useState<string | null>(null);
   const logOutputRef = useRef<HTMLPreElement>(null);
+  const logPinnedToBottomRef = useRef(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -66,8 +67,13 @@ export function ActivityPage({ configPath, metrics = null }: ActivityPageProps) 
 
   useLayoutEffect(() => {
     const output = logOutputRef.current;
-    if (output) output.scrollTop = output.scrollHeight;
+    if (output && logPinnedToBottomRef.current) output.scrollTop = output.scrollHeight;
   }, [logError, logTail]);
+
+  function handleLogScroll() {
+    const output = logOutputRef.current;
+    if (output) logPinnedToBottomRef.current = output.scrollHeight - output.scrollTop - output.clientHeight <= 8;
+  }
 
   const logLines = logTail.split(/\r?\n/);
   return <section className="activity-page" aria-labelledby="activity-heading">
@@ -87,6 +93,6 @@ export function ActivityPage({ configPath, metrics = null }: ActivityPageProps) 
       <div className="card-heading"><h3 id={id}>{title}</h3><span>{rows.length} 项</span></div>
       {rows.length ? <div className="usage-table-shell"><table className="usage-breakdown-table"><thead><tr><th>{label}</th><th>请求</th><th>成功率</th><th>Token</th><th>缓存率</th><th>平均耗时</th></tr></thead><tbody>{rows.map(([name, stats]) => <tr key={name}><th scope="row">{name}</th><td>{formatCount(stats.requests)}</td><td>{successRate(stats)}</td><td>{formatCompact(stats.total_tokens)}</td><td>{percent(stats.cached_token_rate)}</td><td>{formatCount(stats.avg_duration_ms)}ms</td></tr>)}</tbody></table></div> : <p className="empty-state">{empty}</p>}
     </section>) : null}
-    <section className="log-panel" aria-labelledby="log-heading"><div className="card-heading"><h3 id="log-heading">服务日志</h3><span>最近 64 KiB</span></div>{logError ? <p className="empty-state">日志暂不可用: {logError}</p> : logTail ? <pre aria-label="服务日志内容" ref={logOutputRef}>{logLines.map((line, index) => <span className={`log-line log-line-${logLineTone(line)}`} key={index}>{line}{index < logLines.length - 1 ? "\n" : ""}</span>)}</pre> : <p className="empty-state">正在读取服务日志。</p>}</section>
+    <section className="log-panel" aria-labelledby="log-heading"><div className="card-heading"><h3 id="log-heading">服务日志</h3><span>最近 64 KiB</span></div>{logError ? <p className="empty-state">日志暂不可用: {logError}</p> : logTail ? <pre aria-label="服务日志内容" ref={logOutputRef} onScroll={handleLogScroll}>{logLines.map((line, index) => <span className={`log-line log-line-${logLineTone(line)}`} key={index}>{line}{index < logLines.length - 1 ? "\n" : ""}</span>)}</pre> : <p className="empty-state">正在读取服务日志。</p>}</section>
   </section>;
 }
