@@ -2205,8 +2205,8 @@ textarea,
   width: 22vw;
   min-width: 12rem;
   content: "";
-  background: rgb(255 255 255 / 22%);
-  border-left: 1px solid rgb(255 255 255 / 35%);
+  background: transparent;
+  border-left: 0;
   pointer-events: none;
 }
 
@@ -2704,7 +2704,6 @@ textarea,
 }
 
 @media (prefers-color-scheme: dark) {
-  .content::before { background: rgb(255 255 255 / 2%); border-left-color: rgb(255 255 255 / 4%); }
   .route-create,
   .provider-item .inline-form,
   .route-item .editor-form,
@@ -2982,4 +2981,61 @@ textarea,
 
 .unified-model-form .form-actions {
   padding-top: 0.1rem;
+}
+
+.update-progress progress {
+  appearance: none;
+  height: 0.4rem;
+  overflow: hidden;
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+
+.update-progress progress::-webkit-progress-bar {
+  background: var(--canvas);
+  border-radius: inherit;
+}
+
+.update-progress progress::-webkit-progress-value {
+  background: linear-gradient(90deg, var(--teal), var(--accent));
+  border-radius: inherit;
+  transition: width 180ms ease;
+}
+
+.update-progress progress::-moz-progress-bar {
+  background: linear-gradient(90deg, var(--teal), var(--accent));
+  border-radius: inherit;
+  transition: width 180ms ease;
+}
+
+.update-progress progress:focus-visible {
+  outline: 3px solid rgb(231 111 81 / 28%);
+  outline-offset: 3px;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+  background-clip: padding-box;
 }
