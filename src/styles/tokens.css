@@ -717,7 +717,7 @@ button {
 .settings-list dd { margin: 0; overflow-wrap: anywhere; text-align: right; }
 .log-panel { margin-top: 1rem; padding: 1rem; border: 1px solid #d5d5da; border-radius: 6px; }
 .log-panel h3 { margin: 0; font-size: 1rem; }
-.log-panel pre { max-height: 24rem; margin: 0.75rem 0 0; padding: 0.75rem; overflow: auto; color: #1d1d1f; background: #f5f5f7; border-radius: 5px; font: 0.75rem/1.5 Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.log-panel pre { max-height: 24rem; margin: 0.75rem 0 0; padding: 0.75rem; overflow: auto; color: #1d1d1f; background: #f5f5f7; border-radius: 5px; font: 0.75rem/1.5 Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
 .log-line-info { color: #0067c0; }
 .log-line-warning { color: #9a5800; }
 .log-line-error { color: #b42318; }
@@ -1169,6 +1169,19 @@ button {
   font-size: 0.8rem;
 }
 
+.key-status-button {
+  padding: 0.25rem 0.45rem;
+  border: 1px solid currentColor;
+  border-radius: 5px;
+  background: #ffffff;
+  font: inherit;
+  cursor: pointer;
+}
+
+.key-status-button:hover {
+  background: #f2f2f7;
+}
+
 .item-actions,
 .row-actions {
   display: flex;
@@ -1307,8 +1320,12 @@ button {
 .danger-button { padding: 0.35rem 0.55rem; color: #b42318; background: transparent; border: 1px solid #f1c0bc; border-radius: 5px; cursor: pointer; }
 .secondary-button { padding: 0.35rem 0.55rem; color: #1d1d1f; background: #fff; border: 1px solid #b9b9c0; border-radius: 5px; cursor: pointer; }
 .editor-form { padding-top: 0.75rem; border-top: 1px solid #e5e5e8; }
+.provider-row > .editor-form { grid-column: 1 / -1; }
 .editor-help { grid-column: 1 / -1; margin: 0; color: #6e6e73; font-size: 0.75rem; }
 .pool-model-grid { display: grid; grid-column: 1 / -1; grid-template-columns: repeat(auto-fill, minmax(min(9rem, 100%), 1fr)); gap: 0.5rem; }
+.pool-key-picker { display: grid; grid-column: 1 / -1; gap: 0.4rem; min-width: 0; margin: 0; padding: 0; border: 0; }
+.pool-key-picker legend { padding: 0; color: #6e6e73; font-size: 0.8125rem; }
+.pool-key-card { min-height: 2.6rem; }
 .pool-model-card-shell { position: relative; min-width: 0; }
 .pool-model-card {
   display: flex;
@@ -1327,8 +1344,9 @@ button {
   text-align: center;
   white-space: normal;
 }
+.inline-form .pool-model-card { color: #3d4650; background: #eef1f4; border-color: #c8d0d8; }
 .pool-model-card.is-selected { color: #fff; background: #0b7f55; border-color: #096b49; }
-.pool-model-add { color: #007aff; background: #f5fbff; border-style: dashed; font-size: 1.35rem; }
+.pool-model-add { color: #007aff; background: #f5fbff; border-style: dashed; font-size: 1.35rem; line-height: 1; }
 .pool-model-remove {
   position: absolute;
   top: -0.35rem;
@@ -1347,23 +1365,23 @@ button {
 .custom-model-card input { flex: 1 1 auto; width: 100%; min-width: 0 !important; min-height: 2rem !important; }
 .custom-model-card button { flex: 0 0 2rem; min-width: 0; min-height: 2rem !important; padding: 0 !important; }
 .pool-model-probe-indicator {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 3rem;
-  background: #fff;
-  border: 1px solid #d5d5da;
-  border-radius: 6px;
+  gap: 0.3rem;
+  color: #007aff;
+  cursor: default;
 }
 .pool-model-probe-indicator span {
-  width: 1.25rem;
-  height: 1.25rem;
-  border: 2px solid #c7c7cc;
-  border-top-color: #007aff;
+  width: 0.42rem;
+  height: 0.42rem;
+  background: currentColor;
   border-radius: 50%;
-  animation: pool-model-spin 0.8s linear infinite;
+  animation: pool-model-bounce 0.9s ease-in-out infinite;
 }
-@keyframes pool-model-spin { to { transform: rotate(360deg); } }
+.pool-model-probe-indicator span:nth-child(2) { animation-delay: 0.12s; }
+.pool-model-probe-indicator span:nth-child(3) { animation-delay: 0.24s; }
+@keyframes pool-model-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.45; }
+  30% { transform: translateY(-0.35rem); opacity: 1; }
+}
 
 .route-rules {
   margin-top: 1.25rem;
@@ -1709,12 +1727,12 @@ textarea:focus-visible {
   .pool-model-card,
   .pool-model-probe-indicator,
   .integration-field-list code { background: #3a3a3c; }
-  .pool-model-card,
-  .pool-model-probe-indicator { color: #f5f5f7; border-color: #636366; }
+  .inline-form .pool-model-card,
+  .pool-model-probe-indicator { color: #d1d1d6; background: #3a3a3c; border-color: #636366; }
   .pool-model-card.is-selected { color: #fff; background: #248a3d; border-color: #30d158; }
   .pool-model-add { color: #64d2ff; border-style: dashed; }
   .pool-model-remove { color: #ff6961; background: #2c2c2e; border-color: #7a3330; }
-  .pool-model-probe-indicator span { border-color: #636366; border-top-color: #64d2ff; }
+  .pool-model-probe-indicator { color: #64d2ff; }
   .unified-model-overview div { border-color: #3a3a3c; }
   .usage-summary-table th,
   .usage-breakdown-table thead th { background: #2c2c2e; }
@@ -2588,6 +2606,7 @@ textarea,
   .overview-card,
   .provider-item,
   .integration-item { transition: none; }
+  .pool-model-probe-indicator span { animation: none; }
 }
 
 /* Navigation and configuration hierarchy. */

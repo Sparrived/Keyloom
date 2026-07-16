@@ -57,7 +57,6 @@ describe("UnifiedModelPanel", () => {
   });
 
   it("offers only enabled keys and confirms before disabling the unified model", async () => {
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     const onChange = vi.fn();
     render(<UnifiedModelPanel configPath={null} onChange={onChange} />);
 
@@ -67,8 +66,8 @@ describe("UnifiedModelPanel", () => {
     expect(screen.queryByRole("option", { name: "disabled-key" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "收起统一模型" }));
     fireEvent.click(screen.getByRole("button", { name: "停用" }));
+    fireEvent.click(await screen.findByRole("button", { name: "确认" }));
 
-    expect(confirm).toHaveBeenCalled();
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("delete_amkr_unified_model", { configPath: null }));
     expect(onChange).toHaveBeenCalledWith(null);
   });

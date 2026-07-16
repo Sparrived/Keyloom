@@ -8,6 +8,7 @@ import {
   type AmkrModel,
   type AmkrUnifiedModel,
 } from "../../api/amkr";
+import { useConfirmDialog } from "../../components/ConfirmDialog";
 
 type UnifiedModelPanelProps = {
   configPath: string | null;
@@ -42,6 +43,7 @@ export function UnifiedModelPanel({ configPath, onChange, refreshToken = 0 }: Un
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
 
   useEffect(() => {
     let cancelled = false;
@@ -191,7 +193,7 @@ export function UnifiedModelPanel({ configPath, onChange, refreshToken = 0 }: Un
   };
 
   const disable = async () => {
-    if (!window.confirm("停用统一模型后，统一入口将不再接管请求。是否继续？")) return;
+    if (!await confirm("停用统一模型后，统一入口将不再接管请求。是否继续？")) return;
     setSaving(true);
     setError(null);
     setNotice(null);
@@ -293,6 +295,7 @@ export function UnifiedModelPanel({ configPath, onChange, refreshToken = 0 }: Un
       )}
       {notice ? <p className="status-good" role="status">{notice}</p> : null}
       {error ? <p className="service-action-error" role="alert">统一模型操作失败: {error}</p> : null}
+      {confirmDialog}
     </section>
   );
 }

@@ -122,9 +122,9 @@ describe("IntegrationsPage", () => {
     const claude = (await screen.findByRole("heading", { name: "Claude Code" })).closest("article");
 
     fireEvent.click(within(claude!).getByRole("button", { name: "回退" }));
+    fireEvent.click(await screen.findByRole("button", { name: "确认" }));
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("rollback_agent_integration", { agent: "claude-code" }));
-    expect(window.confirm).toHaveBeenCalled();
     expect(await within(claude!).findByText("检测到配置")).toBeInTheDocument();
   });
 });

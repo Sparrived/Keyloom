@@ -607,17 +607,16 @@ describe("Keyloom application shell", () => {
   });
 
   it("requires confirmation before removing the login task", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(false);
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: /服务状态/ }));
 
     fireEvent.click(screen.getByRole("button", { name: "取消注册" }));
+    fireEvent.click(await screen.findByRole("button", { name: "取消" }));
 
     expect(invokeMock).not.toHaveBeenCalledWith("uninstall_amkr", expect.anything());
   });
 
   it("manages the user startup task through fixed IPC commands", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     invokeMock.mockReset();
     invokeMock.mockImplementation(async (command) => {
       if (command === "discover_amkr") return { config_path: "C:/config.json", base_url: "http://127.0.0.1:18900", metrics_db_path: null, log_file_path: null, auth_enabled: true };
@@ -637,11 +636,11 @@ describe("Keyloom application shell", () => {
     expect(await screen.findByText("Status: Ready")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "取消注册" }));
+    fireEvent.click(await screen.findByRole("button", { name: "确认" }));
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("uninstall_amkr", { configPath: null }));
   });
 
   it("delegates system startup registration to the AMKR UAC command", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     invokeMock.mockReset();
     invokeMock.mockImplementation(async (command) => {
       if (command === "discover_amkr") return { config_path: "C:/config.json", base_url: "http://127.0.0.1:18900", metrics_db_path: null, log_file_path: null, auth_enabled: true };
@@ -653,6 +652,7 @@ describe("Keyloom application shell", () => {
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: /服务状态/ }));
     fireEvent.click(screen.getByRole("button", { name: "注册开机服务" }));
+    fireEvent.click(await screen.findByRole("button", { name: "确认" }));
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("install_system_amkr", { configPath: null }));
     expect(await screen.findByText("系统级服务已注册。")).toBeInTheDocument();

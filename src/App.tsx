@@ -34,6 +34,7 @@ import { SettingsPage, type CloseBehavior } from "./features/settings/SettingsPa
 import { ProvidersPage } from "./features/providers/ProvidersPage";
 import { RoutingPage } from "./features/routing/RoutingPage";
 import { useCopyToast } from "./components/CopyToast";
+import { useConfirmDialog } from "./components/ConfirmDialog";
 
 const primaryNavigation = ["概览", "供应商", "模型路由", "活动", "集成", "设置"] as const;
 const navigation = [...primaryNavigation, "服务状态"] as const;
@@ -108,6 +109,7 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
   const widgetStartupRequested = useRef(false);
   const versionCheckRunning = useRef(false);
   const { copyToast, showCopyToast } = useCopyToast();
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
 
   useEffect(() => {
     if (closePromptOpen || unifiedModelPromptOpen) return;
@@ -380,10 +382,15 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
     }
   }
 
-  function requestServiceAction(action: AmkrServiceAction) {
-    if (action === "uninstall_amkr" && !window.confirm("取消登录启动任务？正在运行的服务也会停止。")) return;
-    if (action === "install_system_amkr" && !window.confirm("注册系统级开机服务？Windows 将请求管理员授权。")) return;
-    if (action === "uninstall_system_amkr" && !window.confirm("取消系统级服务？Windows 将请求管理员授权。")) return;
+  async function requestServiceAction(action: AmkrServiceAction) {
+    const message = action === "uninstall_amkr"
+      ? "取消登录启动任务？正在运行的服务也会停止。"
+      : action === "install_system_amkr"
+        ? "注册系统级开机服务？Windows 将请求管理员授权。"
+        : action === "uninstall_system_amkr"
+          ? "取消系统级服务？Windows 将请求管理员授权。"
+          : null;
+    if (message && !await confirm({ message, danger: action !== "install_system_amkr" })) return;
     void runServiceAction(action);
   }
 
@@ -797,6 +804,7 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
           </div>
         </section>
       </div> : null}
+      {confirmDialog}
       {copyToast}
     </div>
   );

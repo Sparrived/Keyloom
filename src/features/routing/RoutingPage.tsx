@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { createAmkrRoute, deleteAmkrRoute, getAmkrRoutes, updateAmkrRoute, type AmkrRoute, type AmkrRouteTarget, type AmkrRoutesResponse, type AmkrUnifiedModel } from "../../api/amkr";
 import { UnifiedModelPanel } from "./UnifiedModelPanel";
 import { useCopyToast } from "../../components/CopyToast";
+import { useConfirmDialog } from "../../components/ConfirmDialog";
 
 const csv = (value: string) => value.split(",").map((item) => item.trim()).filter(Boolean);
 const errorMessage = (reason: unknown) => reason instanceof Error ? reason.message : String(reason);
@@ -42,6 +43,7 @@ export function RoutingPage({ configPath, onUnifiedModelChange }: RoutingPagePro
   const [loading, setLoading] = useState(true);
   const [unifiedModelRefreshToken, setUnifiedModelRefreshToken] = useState(0);
   const { copyToast, showCopyToast } = useCopyToast();
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
 
   const refresh = async () => {
     setLoading(true);
@@ -90,7 +92,7 @@ export function RoutingPage({ configPath, onUnifiedModelChange }: RoutingPagePro
   };
 
   const remove = async (routeId: string) => {
-    if (!data || !window.confirm(`删除模型路由 ${routeId}？`)) return;
+    if (!data || !await confirm(`删除模型路由 ${routeId}？`)) return;
     try { await deleteAmkrRoute(data.config_revision, routeId, configPath); await refresh(); setUnifiedModelRefreshToken((value) => value + 1); showCopyToast("路由已删除。"); }
     catch (reason) {
       const message = errorMessage(reason);
@@ -190,6 +192,7 @@ export function RoutingPage({ configPath, onUnifiedModelChange }: RoutingPagePro
       </form> : null}
     </article>)}</div>
     </section>
+    {confirmDialog}
     {copyToast}
   </section>;
 }

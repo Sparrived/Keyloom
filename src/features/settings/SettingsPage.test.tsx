@@ -83,6 +83,7 @@ describe("SettingsPage", () => {
 
     fireEvent.change(screen.getByLabelText("可迁移配置"), { target: { value: '{"providers":{},"models":{}}' } });
     fireEvent.click(screen.getByRole("button", { name: "导入配置" }));
+    fireEvent.click(await screen.findByRole("button", { name: "确认" }));
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("get_amkr_providers", { configPath: null }));
     expect(invokeMock).toHaveBeenCalledWith("import_amkr_config", {
@@ -136,6 +137,7 @@ describe("SettingsPage", () => {
     render(<SettingsPage configPath={null} metadata={metadata} onConfigPathChange={() => undefined} />);
 
     fireEvent.click(await screen.findByRole("button", { name: "重置 Key" }));
+    fireEvent.click(await screen.findByRole("button", { name: "确认" }));
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("regenerate_amkr_local_api_key", {
       configPath: null,
@@ -202,8 +204,33 @@ describe("SettingsPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "检查 AMKR 更新" }));
     fireEvent.click(await screen.findByRole("button", { name: "安装更新" }));
+    expect(screen.getByRole("dialog", { name: "安装 AMKR 更新？" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "开始更新" }));
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_amkr_tool", { configPath: "C:/amkr.json" }));
+  });
+
+  it("uses the shared dialog and locks the update action while updating", async () => {
+    let releaseUpdate!: (status: unknown) => void;
+    const update = new Promise((resolve) => { releaseUpdate = resolve; });
+    const confirm = vi.spyOn(window, "confirm");
+    invokeMock.mockImplementation(async (command) => {
+      if (command === "get_amkr_settings") return settingsResponse;
+      if (command === "get_amkr_tool_status") return { installed: true, executable: "C:/amkr.exe", version: "3.1.0", manager: "uv", uv_available: true, pipx_available: false, diagnostic: null };
+      if (command === "check_amkr_update") return { current_version: "3.1.0", latest_version: "3.2.0", update_available: true, error: null };
+      if (command === "update_amkr_tool") return update;
+      return undefined;
+    });
+    render(<SettingsPage configPath="C:/amkr.json" metadata={metadata} onConfigPathChange={() => undefined} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "检查 AMKR 更新" }));
+    fireEvent.click(await screen.findByRole("button", { name: "安装更新" }));
+    fireEvent.click(screen.getByRole("button", { name: "开始更新" }));
+
+    expect(confirm).not.toHaveBeenCalled();
+    expect(await screen.findByRole("button", { name: "更新中..." })).toBeDisabled();
+    expect(screen.getByRole("dialog", { name: "正在更新 AMKR" })).toBeInTheDocument();
+    releaseUpdate({ installed: true, version: "3.2.0" });
   });
 
   it("rejects invalid JSON before calling the service", async () => {
@@ -211,6 +238,7 @@ describe("SettingsPage", () => {
 
     fireEvent.change(screen.getByLabelText("可迁移配置"), { target: { value: "{" } });
     fireEvent.click(screen.getByRole("button", { name: "导入配置" }));
+    fireEvent.click(await screen.findByRole("button", { name: "确认" }));
 
     expect(await screen.findByText("配置内容不是有效 JSON。")).toBeInTheDocument();
     expect(invokeMock).not.toHaveBeenCalledWith("import_amkr_config", expect.anything());
@@ -227,6 +255,7 @@ describe("SettingsPage", () => {
     render(<SettingsPage configPath="C:/amkr.json" metadata={metadata} onConfigPathChange={() => undefined} />);
     fireEvent.change(screen.getByLabelText("可迁移配置"), { target: { value: '{"providers":{}}' } });
     fireEvent.click(screen.getByRole("button", { name: "导入配置" }));
+    fireEvent.click(await screen.findByRole("button", { name: "确认" }));
 
     expect(await screen.findByRole("button", { name: "正在导入" })).toBeDisabled();
     expect(screen.getByLabelText("配置路径")).toBeDisabled();

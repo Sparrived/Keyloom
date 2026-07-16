@@ -19,6 +19,7 @@ import {
   type AmkrToolStatus,
 } from "../../api/amkr";
 import { useCopyToast } from "../../components/CopyToast";
+import { useConfirmDialog } from "../../components/ConfirmDialog";
 import { KeyloomUpdatePanel } from "./KeyloomUpdatePanel";
 
 type SettingsPageProps = {
@@ -64,6 +65,7 @@ export function SettingsPage({ amkrWidgetEnabled = false, closeBehavior = "ask",
   const [updateCheck, setUpdateCheck] = useState<AmkrUpdateCheck | null>(detectedAmkrUpdate);
   const [updateChecking, setUpdateChecking] = useState(false);
   const [updateInstalling, setUpdateInstalling] = useState(false);
+  const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [widgetAction, setWidgetAction] = useState(false);
   const [widgetError, setWidgetError] = useState<string | null>(null);
@@ -71,6 +73,7 @@ export function SettingsPage({ amkrWidgetEnabled = false, closeBehavior = "ask",
   const [autostartLoading, setAutostartLoading] = useState(true);
   const [autostartError, setAutostartError] = useState<string | null>(null);
   const { copyToast, showCopyToast } = useCopyToast();
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
   const changeWidgetSetting = async (enabled: boolean) => {
     setWidgetAction(true); setWidgetError(null);
     try { await onAmkrWidgetEnabledChange(enabled); }
@@ -140,7 +143,7 @@ export function SettingsPage({ amkrWidgetEnabled = false, closeBehavior = "ask",
     finally { setTransferAction(null); }
   };
   const importConfig = async () => {
-    if (!transfer.trim() || !window.confirm("导入将替换供应商与路由配置。是否继续？")) return;
+    if (!transfer.trim() || !await confirm("导入将替换供应商与路由配置。是否继续？")) return;
     setTransferAction("import"); setNotice(null); setError(null);
     try {
       const parsed: unknown = JSON.parse(transfer);
@@ -159,7 +162,7 @@ export function SettingsPage({ amkrWidgetEnabled = false, closeBehavior = "ask",
     if (!serviceSettings || !settingsDraft) return;
     const host = settingsDraft.host.trim();
     const loopbackHosts = new Set(["127.0.0.1", "localhost", "::1"]);
-    if (!loopbackHosts.has(host.toLowerCase()) && !window.confirm("监听地址不是本机回环地址。远程客户端将可能访问 AMKR 管理 API，确定继续吗？")) return;
+    if (!loopbackHosts.has(host.toLowerCase()) && !await confirm("监听地址不是本机回环地址。远程客户端将可能访问 AMKR 管理 API，确定继续吗？")) return;
     if (host !== settingsDraft.host) setSettingsDraft({ ...settingsDraft, host });
     setSettingsAction("save"); setSettingsError(null); setSettingsNotice(null);
     try {
@@ -172,7 +175,7 @@ export function SettingsPage({ amkrWidgetEnabled = false, closeBehavior = "ask",
     } finally { setSettingsAction(null); }
   };
   const regenerateLocalKey = async () => {
-    if (!serviceSettings || !window.confirm("重置本地鉴权 Key？现有客户端需要改用新 Key。")) return;
+    if (!serviceSettings || !await confirm("重置本地鉴权 Key？现有客户端需要改用新 Key。")) return;
     setSettingsAction("key"); setSettingsError(null); setSettingsNotice(null); setGeneratedLocalKey(null);
     try {
       const result = await regenerateAmkrLocalApiKey(serviceSettings.config_revision, configPath);
@@ -204,11 +207,11 @@ export function SettingsPage({ amkrWidgetEnabled = false, closeBehavior = "ask",
     finally { setUpdateChecking(false); }
   };
   const installUpdate = async () => {
-    if (!window.confirm(`通过 ${toolStatus?.manager ?? "工具管理器"} 更新 AMKR 到 ${updateCheck?.latest_version}？`)) return;
     setUpdateInstalling(true); setUpdateError(null);
     try {
       setToolStatus(await updateAmkrTool(configPath));
       setUpdateCheck(null);
+      setUpdateDialogOpen(false);
     } catch (reason) { setUpdateError(reason instanceof Error ? reason.message : String(reason)); }
     finally { setUpdateInstalling(false); }
   };
@@ -272,8 +275,20 @@ export function SettingsPage({ amkrWidgetEnabled = false, closeBehavior = "ask",
           {updateCheck.source ? <div><dt>来源</dt><dd>{updateCheck.source}</dd></div> : null}
           {updateCheck.release_url ? <div><dt>发布页面</dt><dd>{updateCheck.release_url}</dd></div> : null}
         </dl> : <p className="empty-state">尚未检查 AMKR 更新。</p>}
-        {updateCheck?.update_available ? <button type="button" disabled={updateInstalling || !toolStatus?.installed || !["uv", "pipx"].includes(toolStatus.manager ?? "")} onClick={() => void installUpdate()}>{updateInstalling ? "正在更新" : "安装更新"}</button> : null}
+        {updateCheck?.update_available ? <button type="button" disabled={updateInstalling || !toolStatus?.installed || !["uv", "pipx"].includes(toolStatus.manager ?? "")} onClick={() => { setUpdateError(null); setUpdateDialogOpen(true); }}>{updateInstalling ? "更新中..." : "安装更新"}</button> : null}
         {updateError ? <p className="service-action-error" role="alert">版本检查失败: {updateError}</p> : null}
+        {updateDialogOpen && updateCheck ? <div className="close-dialog-backdrop" onKeyDown={(event) => { if (event.key === "Escape" && !updateInstalling) setUpdateDialogOpen(false); }}>
+          <section aria-labelledby="amkr-update-dialog-heading" aria-modal="true" className="close-dialog update-dialog" role="dialog">
+            <h2 id="amkr-update-dialog-heading">{updateInstalling ? "正在更新 AMKR" : updateError ? "AMKR 更新失败" : "安装 AMKR 更新？"}</h2>
+            <p>AMKR {updateCheck.current_version} → {updateCheck.latest_version}。更新过程中 AMKR 服务会短暂重启。</p>
+            {updateInstalling ? <p className="update-dialog-status" role="status">正在后台更新，请稍候...</p> : null}
+            {updateError ? <p className="service-action-error" role="alert">{updateError}</p> : null}
+            <div className="close-dialog-actions">
+              <button autoFocus className="secondary-button" disabled={updateInstalling} type="button" onClick={() => setUpdateDialogOpen(false)}>取消</button>
+              <button className="tray-action" disabled={updateInstalling} type="button" onClick={() => void installUpdate()}>{updateError ? "重试" : "开始更新"}</button>
+            </div>
+          </section>
+        </div> : null}
       </div> : null}
     </section>
     {!metadata ? <p className="empty-state">正在查找本机 AMKR 配置。</p> : <>
@@ -299,6 +314,7 @@ export function SettingsPage({ amkrWidgetEnabled = false, closeBehavior = "ask",
       </section>
       <section className="transfer-panel" aria-labelledby="transfer-heading"><div className="card-heading"><h3 id="transfer-heading">配置迁移</h3><button type="button" disabled={transferAction !== null} onClick={() => void exportConfig()}>{transferAction === "export" ? "正在导出" : "导出"}</button></div><textarea aria-label="可迁移配置" disabled={transferAction !== null} value={transfer} onChange={(event) => setTransfer(event.target.value)} placeholder="导出后在此显示，或粘贴可迁移配置以导入。" /><div className="transfer-actions"><button type="button" disabled={transferAction !== null || !transfer.trim()} onClick={() => void importConfig()}>{transferAction === "import" ? "正在导入" : "导入配置"}</button>{notice ? <span className="status-good">{notice}</span> : null}{error ? <span className="service-action-error">{error}</span> : null}</div></section>
     </>}
+    {confirmDialog}
     {copyToast}
   </section>;
 }

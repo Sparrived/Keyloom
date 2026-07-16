@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { configureAgentIntegration, getAgentIntegrationStatus, rollbackAgentIntegration, type AmkrIntegrationAgent, type AmkrIntegrationMode, type AmkrIntegrationStatus } from "../../api/amkr";
+import { useConfirmDialog } from "../../components/ConfirmDialog";
 
 type IntegrationsPageProps = { configPath: string | null; baseUrl: string | null; authEnabled: boolean };
 
@@ -31,6 +32,7 @@ export function IntegrationsPage({ configPath, baseUrl, authEnabled }: Integrati
   const [errors, setErrors] = useState<Partial<Record<AmkrIntegrationAgent, string>>>({});
   const [modes, setModes] = useState<Record<AmkrIntegrationAgent, AmkrIntegrationMode>>({ "claude-code": "unified-model", codex: "unified-model" });
   const [action, setAction] = useState<AmkrIntegrationAgent | null>(null);
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
 
   useEffect(() => {
     let cancelled = false;
@@ -59,7 +61,7 @@ export function IntegrationsPage({ configPath, baseUrl, authEnabled }: Integrati
   }
 
   async function rollback(agent: AmkrIntegrationAgent) {
-    if (!window.confirm(`回退 ${statuses[agent]?.display_name ?? agent} 的原配置？`)) return;
+    if (!await confirm(`回退 ${statuses[agent]?.display_name ?? agent} 的原配置？`)) return;
     setAction(agent); setErrors((current) => ({ ...current, [agent]: undefined }));
     try {
       const status = await rollbackAgentIntegration(agent);
@@ -93,5 +95,6 @@ export function IntegrationsPage({ configPath, baseUrl, authEnabled }: Integrati
       </article>;
     })}</div>
     {baseUrl ? <p className="integration-note">目标地址 {baseUrl}。{authEnabled ? "本地鉴权已启用。" : "本地鉴权未启用。"}</p> : null}
+    {confirmDialog}
   </section>;
 }

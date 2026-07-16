@@ -54,7 +54,6 @@ export async function installTauriMock(page: Page, scenario: "existing" | "fresh
       },
     };
     localStorage.clear();
-    window.confirm = () => true;
     Object.defineProperty(window, "__KEYLOOM_CALLS__", { value: calls });
     Object.defineProperty(window, "__TAURI_INTERNALS__", {
       value: {
