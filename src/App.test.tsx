@@ -135,6 +135,15 @@ describe("Keyloom application shell", () => {
     expect(screen.getByRole("heading", { name: "活动" })).toBeInTheDocument();
   });
 
+  it("opens activity when the usage trend panel's blank area is clicked", async () => {
+    render(<App />);
+
+    const trendPanel = await screen.findByRole("link", { name: "近十分钟用量" });
+    fireEvent.click(trendPanel);
+
+    expect(screen.getByRole("heading", { name: "活动" })).toBeInTheDocument();
+  });
+
   it("starts dragging only after moving a held pointer from sidebar blank space", () => {
     render(<App />);
 

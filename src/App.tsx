@@ -661,7 +661,19 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
                 ) : <p className="empty-state" role={metricsError ? "alert" : undefined}>指标暂不可用</p>}
               </section>
             </div>
-            <section className="trend-panel" aria-labelledby="trend-heading">
+            <section
+              className="trend-panel"
+              aria-labelledby="trend-heading"
+              role="link"
+              tabIndex={0}
+              onClick={(event) => {
+                if ((event.target as Element).closest("button, a, select")) return;
+                setActivePage("活动");
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") setActivePage("活动");
+              }}
+            >
               <div className="card-heading">
                 <h3 id="trend-heading">近十分钟用量</h3>
               </div>
