@@ -67,6 +67,7 @@ test("applies and rolls back a Codex native integration", async ({ page }) => {
   }]);
 
   await codex.getByRole("button", { name: "回退" }).click();
+  await page.getByRole("button", { name: "确认" }).click();
   await expect(codex.getByText("检测到配置")).toBeVisible();
   expect(await commandCalls(page, "rollback_agent_integration")).toEqual([{
     command: "rollback_agent_integration",
