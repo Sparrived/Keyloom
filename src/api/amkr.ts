@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-export const minimumCompatibleAmkrVersion = "3.1.1";
+export const minimumCompatibleAmkrVersion = "3.2.1";
 
 export function isAmkrVersionCompatible(version: string) {
   const parse = (value: string) => value.split(".").slice(0, 3).map((part) => Number.parseInt(part, 10));
@@ -144,17 +144,17 @@ export type AmkrProvidersResponse = {
   providers: AmkrProvider[];
 };
 
-export type AmkrRouteTarget = {
-  provider: string;
-  pool: string;
-  upstream_model: string;
-};
-
 export type AmkrRoute = {
   id: string;
   targets: AmkrRouteTarget[];
   aliases: string[];
   routing_mode: string | null;
+};
+
+export type AmkrRouteTarget = {
+  provider: string;
+  pool: string;
+  upstream_model: string;
 };
 
 export type AmkrRoutesResponse = {
@@ -364,16 +364,16 @@ export function deleteAmkrPool(configRevision: string, providerId: string, poolN
   return invoke("delete_amkr_pool", { configPath, configRevision, providerId, poolName });
 }
 
-export function createAmkrRoute(configRevision: string, id: string, targets: AmkrRouteTarget[], aliases: string[], routingMode: string | null, configPath: string | null = null) {
-  return invoke("create_amkr_route", { configPath, configRevision, id, targets, aliases, routingMode });
+export function createAmkrRoute(configRevision: string, aliases: string[], routingMode: string | null, configPath: string | null = null) {
+  return invoke("create_amkr_route", { configPath, configRevision, aliases, routingMode });
 }
 
 export function deleteAmkrRoute(configRevision: string, id: string, configPath: string | null = null) {
   return invoke("delete_amkr_route", { configPath, configRevision, id });
 }
 
-export function updateAmkrRoute(configRevision: string, routeId: string, id: string, targets: AmkrRouteTarget[], aliases: string[], routingMode: string | null, configPath: string | null = null) {
-  return invoke("update_amkr_route", { configPath, configRevision, routeId, id, targets, aliases, routingMode });
+export function updateAmkrRoute(configRevision: string, routeId: string, targets: AmkrRouteTarget[], aliases: string[], routingMode: string | null, configPath: string | null = null) {
+  return invoke("update_amkr_route", { configPath, configRevision, routeId, targets, aliases, routingMode });
 }
 
 export function exportAmkrConfig(configPath: string | null = null) { return invoke<AmkrConfigExport>("export_amkr_config", { configPath }); }

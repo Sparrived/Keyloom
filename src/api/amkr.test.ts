@@ -3,8 +3,8 @@ import { isAmkrVersionCompatible } from "./amkr";
 
 describe("AMKR version compatibility", () => {
   it("accepts the minimum and newer semantic versions", () => {
-    expect(isAmkrVersionCompatible("3.1.1")).toBe(true);
-    expect(isAmkrVersionCompatible("3.2.0")).toBe(true);
+    expect(isAmkrVersionCompatible("3.2.1")).toBe(true);
+    expect(isAmkrVersionCompatible("3.2.0")).toBe(false);
     expect(isAmkrVersionCompatible("4.0.0")).toBe(true);
   });
 
