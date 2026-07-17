@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ActivityPage } from "./ActivityPage";
 
@@ -74,4 +74,20 @@ it("keeps the current log position when the user is reading older entries", asyn
   rerender(<ActivityPage configPath="changed" />);
   await screen.findByText("new entry");
   expect(output.scrollTop).toBe(100);
+});
+
+it("shows only a copy action for selected log text", async () => {
+  invokeMock.mockResolvedValue("copy this log");
+  const clipboard = { writeText: vi.fn().mockResolvedValue(undefined) };
+  Object.assign(navigator, { clipboard });
+  render(<ActivityPage configPath={null} />);
+
+  const output = await screen.findByLabelText("服务日志内容");
+  window.getSelection()?.selectAllChildren(output);
+  fireEvent.contextMenu(output, { clientX: 20, clientY: 20 });
+
+  expect(screen.getByRole("menu")).toBeInTheDocument();
+  expect(screen.getByRole("menuitem", { name: "复制" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("menuitem", { name: "复制" }));
+  await vi.waitFor(() => expect(clipboard.writeText).toHaveBeenCalledWith("copy this log"));
 });

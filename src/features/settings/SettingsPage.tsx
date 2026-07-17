@@ -32,6 +32,8 @@ type SettingsPageProps = {
   health?: AmkrHealth | null;
   onAmkrWidgetEnabledChange?: (enabled: boolean) => Promise<void> | void;
   onCloseBehaviorChange?: (behavior: CloseBehavior) => void;
+  reduceMotion?: boolean;
+  onReduceMotionChange?: (enabled: boolean) => void;
   onConfigPathChange: (configPath: string | null) => void;
   updateTarget?: "amkr" | "keyloom" | null;
 };
@@ -46,7 +48,7 @@ function formatNativeEndpointSummary(summary: AmkrHealth["native_endpoint_summar
   return parts.join(" · ");
 }
 
-export function SettingsPage({ amkrWidgetEnabled = false, closeBehavior = "ask", configPath, detectedAmkrUpdate = null, detectedKeyloomVersion = null, metadata, health = null, onAmkrWidgetEnabledChange = () => undefined, onCloseBehaviorChange = () => undefined, onConfigPathChange, updateTarget = null }: SettingsPageProps) {
+export function SettingsPage({ amkrWidgetEnabled = false, closeBehavior = "ask", configPath, detectedAmkrUpdate = null, detectedKeyloomVersion = null, metadata, health = null, onAmkrWidgetEnabledChange = () => undefined, onCloseBehaviorChange = () => undefined, reduceMotion = false, onReduceMotionChange = () => undefined, onConfigPathChange, updateTarget = null }: SettingsPageProps) {
   const [draftConfigPath, setDraftConfigPath] = useState(configPath ?? metadata?.config_path ?? "");
   const [transfer, setTransfer] = useState("");
   const [transferAction, setTransferAction] = useState<"export" | "import" | null>(null);
@@ -226,6 +228,7 @@ export function SettingsPage({ amkrWidgetEnabled = false, closeBehavior = "ask",
       </select></label>
       <label className="application-setting">开机自动启动 Keyloom<input aria-label="开机自动启动 Keyloom" checked={autostartEnabled} disabled={autostartLoading} type="checkbox" onChange={(event) => void changeAutostartSetting(event.target.checked)} /></label>
       <label className="application-setting">启动 AMKR 桌面挂件<input aria-label="启动 AMKR 桌面挂件" checked={amkrWidgetEnabled} disabled={widgetAction} type="checkbox" onChange={(event) => void changeWidgetSetting(event.target.checked)} /></label>
+      <label className="application-setting">减少动画效果<input aria-label="减少动画效果" checked={reduceMotion} type="checkbox" onChange={(event) => onReduceMotionChange(event.target.checked)} /></label>
       {autostartError ? <p className="service-action-error" role="alert">自启动设置失败: {autostartError}</p> : null}
       {widgetError ? <p className="service-action-error" role="alert">挂件启动失败: {widgetError}</p> : null}
     </section>

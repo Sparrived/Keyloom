@@ -1,5 +1,6 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { readAmkrLogTail, type AmkrMetrics, type AmkrUsageStats } from "../../api/amkr";
+import { useCopyToast } from "../../components/CopyToast";
 
 type ActivityPageProps = { configPath: string | null; metrics?: AmkrMetrics | null };
 
@@ -53,6 +54,9 @@ export function ActivityPage({ configPath, metrics = null }: ActivityPageProps) 
   const [logError, setLogError] = useState<string | null>(null);
   const logOutputRef = useRef<HTMLPreElement>(null);
   const logPinnedToBottomRef = useRef(true);
+  const logScrollTopRef = useRef(0);
+  const [logContextMenu, setLogContextMenu] = useState<{ x: number; y: number; text: string } | null>(null);
+  const { copyToast, showCopyToast } = useCopyToast();
 
   useEffect(() => {
     let cancelled = false;
@@ -65,14 +69,52 @@ export function ActivityPage({ configPath, metrics = null }: ActivityPageProps) 
     return () => { cancelled = true; window.clearInterval(interval); };
   }, [configPath]);
 
+  useEffect(() => {
+    if (!logContextMenu) return;
+    const close = (event: MouseEvent) => {
+      if (event.target instanceof Element && event.target.closest(".log-context-menu")) return;
+      setLogContextMenu(null);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") setLogContextMenu(null); };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [logContextMenu]);
+
   useLayoutEffect(() => {
     const output = logOutputRef.current;
-    if (output && logPinnedToBottomRef.current) output.scrollTop = output.scrollHeight;
+    if (!output) return;
+    if (logPinnedToBottomRef.current) output.scrollTop = output.scrollHeight;
+    else output.scrollTop = logScrollTopRef.current;
   }, [logError, logTail]);
 
   function handleLogScroll() {
     const output = logOutputRef.current;
-    if (output) logPinnedToBottomRef.current = output.scrollHeight - output.scrollTop - output.clientHeight <= 8;
+    if (output) {
+      logScrollTopRef.current = output.scrollTop;
+      logPinnedToBottomRef.current = output.scrollHeight - output.scrollTop - output.clientHeight <= 8;
+    }
+  }
+
+  function handleLogContextMenu(event: ReactMouseEvent<HTMLPreElement>) {
+    event.preventDefault();
+    const text = window.getSelection()?.toString() ?? "";
+    if (!text) return setLogContextMenu(null);
+    setLogContextMenu({ x: Math.min(event.clientX, window.innerWidth - 120), y: Math.min(event.clientY, window.innerHeight - 52), text });
+  }
+
+  async function copyLogSelection() {
+    if (!logContextMenu || !navigator.clipboard?.writeText) return;
+    try {
+      await navigator.clipboard.writeText(logContextMenu.text);
+      setLogContextMenu(null);
+      showCopyToast("日志已复制");
+    } catch {
+      setLogContextMenu(null);
+    }
   }
 
   const logLines = logTail.split(/\r?\n/);
@@ -93,6 +135,6 @@ export function ActivityPage({ configPath, metrics = null }: ActivityPageProps) 
       <div className="card-heading"><h3 id={id}>{title}</h3><span>{rows.length} 项</span></div>
       {rows.length ? <div className="usage-table-shell"><table className="usage-breakdown-table"><thead><tr><th>{label}</th><th>请求</th><th>成功率</th><th>Token</th><th>缓存率</th><th>平均耗时</th></tr></thead><tbody>{rows.map(([name, stats]) => <tr key={name}><th scope="row">{name}</th><td>{formatCount(stats.requests)}</td><td>{successRate(stats)}</td><td>{formatCompact(stats.total_tokens)}</td><td>{percent(stats.cached_token_rate)}</td><td>{formatCount(stats.avg_duration_ms)}ms</td></tr>)}</tbody></table></div> : <p className="empty-state">{empty}</p>}
     </section>) : null}
-    <section className="log-panel" aria-labelledby="log-heading"><div className="card-heading"><h3 id="log-heading">服务日志</h3><span>最近 64 KiB</span></div>{logError ? <p className="empty-state">日志暂不可用: {logError}</p> : logTail ? <pre aria-label="服务日志内容" ref={logOutputRef} onScroll={handleLogScroll}>{logLines.map((line, index) => <span className={`log-line log-line-${logLineTone(line)}`} key={index}>{line}{index < logLines.length - 1 ? "\n" : ""}</span>)}</pre> : <p className="empty-state">正在读取服务日志。</p>}</section>
+    <><section className="log-panel" aria-labelledby="log-heading"><div className="card-heading"><h3 id="log-heading">服务日志</h3><span>最近 64 KiB</span></div>{logError ? <p className="empty-state">日志暂不可用: {logError}</p> : logTail ? <pre aria-label="服务日志内容" ref={logOutputRef} onContextMenu={handleLogContextMenu} onScroll={() => { handleLogScroll(); setLogContextMenu(null); }}>{logLines.map((line, index) => <span className={`log-line log-line-${logLineTone(line)}`} key={index}>{line}{index < logLines.length - 1 ? "\n" : ""}</span>)}</pre> : <p className="empty-state">正在读取服务日志。</p>}</section>{logContextMenu ? <div aria-label="日志菜单" className="log-context-menu" role="menu" style={{ left: logContextMenu.x, top: logContextMenu.y }}><button role="menuitem" type="button" onClick={() => void copyLogSelection()}>复制</button></div> : null}{copyToast}</>
   </section>;
 }

@@ -9,7 +9,7 @@ $required = @(
     'async fn set_amkr_widget_visible',
     'WebviewUrl::App("widget.html".into())',
     '.inner_size(360.0, 390.0)',
-    '.transparent(false)',
+    '.transparent(true)',
     '.decorations(false)',
     '.always_on_top(true)',
     '.resizable(false)',

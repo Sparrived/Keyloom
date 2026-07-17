@@ -216,6 +216,21 @@ describe("Keyloom application shell", () => {
     expect(localStorage.getItem("keyloom.closeBehavior")).toBeNull();
   });
 
+  it("changes and remembers the project-only reduced motion preference", () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "设置" }));
+
+    const reduceMotion = screen.getByRole("checkbox", { name: "减少动画效果" });
+    fireEvent.click(reduceMotion);
+
+    expect(localStorage.getItem("keyloom.reduceMotion")).toBe("true");
+    expect(document.documentElement).toHaveClass("keyloom-reduce-motion");
+
+    fireEvent.click(reduceMotion);
+    expect(localStorage.getItem("keyloom.reduceMotion")).toBeNull();
+    expect(document.documentElement).not.toHaveClass("keyloom-reduce-motion");
+  });
+
   it("starts the optional AMKR widget and remembers the choice", async () => {
     invokeMock.mockReset();
     invokeMock.mockImplementation(async (command) => {

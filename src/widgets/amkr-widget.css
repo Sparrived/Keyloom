@@ -1,13 +1,13 @@
 .amkr-widget-document {
   color-scheme: light;
   color: var(--ink);
-  background: var(--canvas);
+  background: transparent;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
   font-size: 13px;
 }
 
 .amkr-widget-document body,
-.amkr-widget-document #root { min-height: 0; background: var(--canvas); }
+.amkr-widget-document #root { min-height: 0; background: transparent; }
 
 .amkr-widget-root {
   --ink: #18212b;
