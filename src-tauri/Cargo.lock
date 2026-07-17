@@ -1752,7 +1752,7 @@ dependencies = [
 
 [[package]]
 name = "keyloom-core"
-version = "0.1.7"
+version = "1.0.0"
 dependencies = [
  "reqwest",
  "rusqlite",
