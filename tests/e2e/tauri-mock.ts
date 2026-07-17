@@ -18,7 +18,7 @@ export async function installTauriMock(page: Page, scenario: "existing" | "fresh
     };
     const healthy = {
       status: "ok",
-      version: "3.1.1",
+      version: "3.2.1",
       local_auth_enabled: true,
       config_path: metadata.config_path,
       models: ["model-a", "model-b"],
@@ -94,7 +94,7 @@ export async function installTauriMock(page: Page, scenario: "existing" | "fresh
             case "get_amkr_local_api_key":
               return "test-local-api-key";
             case "check_amkr_update":
-              return { current_version: "3.1.1", latest_version: "3.1.1", release_url: "https://example.test/amkr", source: "PyPI", artifact_url: null, artifact_sha256: null, update_available: false, error: null };
+              return { current_version: "3.2.1", latest_version: "3.2.1", release_url: "https://example.test/amkr", source: "PyPI", artifact_url: null, artifact_sha256: null, update_available: false, error: null };
             case "get_amkr_providers":
               return { config_revision: providerRevision, providers };
             case "update_amkr_provider":
@@ -110,7 +110,7 @@ export async function installTauriMock(page: Page, scenario: "existing" | "fresh
             case "read_amkr_log_tail":
               return "2026-07-13 INFO request completed status=200";
             case "get_amkr_tool_status":
-              return { installed: true, executable: "C:/Users/test/.local/bin/amkr.exe", version: "3.1.1", manager: "uv", uv_available: true, pipx_available: false, diagnostic: null };
+              return { installed: true, executable: "C:/Users/test/.local/bin/amkr.exe", version: "3.2.1", manager: "uv", uv_available: true, pipx_available: false, diagnostic: null };
             case "get_agent_integration_status":
               return integrations[String(args.agent)];
             case "configure_agent_integration": {

@@ -50,7 +50,7 @@ test("creates, registers, and starts AMKR on a fresh install", async ({ page }) 
   await installTauriMock(page, "fresh");
   await page.goto("/");
 
-  await expect(page.getByText("AMKR 3.1.1 已就绪")).toBeVisible();
+  await expect(page.getByText("AMKR 3.2.1 已就绪")).toBeVisible();
   await page.getByRole("button", { name: "创建默认配置并启动" }).click();
 
   await expect(page.getByText("服务运行中").first()).toBeVisible();

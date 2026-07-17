@@ -24,7 +24,7 @@ test("shows the selected CLI config and uv-managed AMKR metadata", async ({ page
   await expect(autostart).toBeChecked();
   expect(await commandCalls(page, "plugin:autostart|enable")).toHaveLength(1);
   await expect(page.getByLabel("配置路径")).toHaveValue("C:/Users/test/AppData/Local/AutoModelKeyRouter/router-config.json");
-  await expect(page.getByText("已安装 · AMKR 3.1.1")).toBeVisible();
+  await expect(page.getByText("已安装 · AMKR 3.2.1")).toBeVisible();
   await expect(page.getByText("uv", { exact: true })).toBeVisible();
   await expect(page.getByText("C:/Users/test/.local/bin/amkr.exe")).toBeVisible();
   await expect(page.getByText("127.0.0.1:19001", { exact: true })).toBeVisible();
