@@ -5,7 +5,7 @@ use std::path::Path;
 use keyloom_core::tray::{action_from_menu_id, TrayAction};
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
-    tray::TrayIconBuilder,
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Manager, WebviewUrl, WebviewWindowBuilder,
 };
 
@@ -46,7 +46,7 @@ async fn set_amkr_widget_visible(app: tauri::AppHandle, visible: bool) -> Result
     )
     .title("AMKR 仪表盘")
     .inner_size(360.0, 390.0)
-    .transparent(false)
+    .transparent(true)
     .decorations(false)
     .always_on_top(true)
     .resizable(false)
@@ -382,16 +382,12 @@ fn delete_amkr_pool(
 fn create_amkr_route(
     config_path: Option<String>,
     config_revision: String,
-    id: String,
-    targets: Vec<keyloom_core::amkr::client::AmkrRouteTarget>,
     aliases: Vec<String>,
     routing_mode: Option<String>,
 ) -> Result<(), String> {
     keyloom_core::create_amkr_route(
         config_path.as_deref().map(Path::new),
         &config_revision,
-        &id,
-        targets,
         aliases,
         routing_mode,
     )
@@ -402,7 +398,6 @@ fn update_amkr_route(
     config_path: Option<String>,
     config_revision: String,
     route_id: String,
-    id: String,
     targets: Vec<keyloom_core::amkr::client::AmkrRouteTarget>,
     aliases: Vec<String>,
     routing_mode: Option<String>,
@@ -411,7 +406,6 @@ fn update_amkr_route(
         config_path.as_deref().map(Path::new),
         &config_revision,
         &route_id,
-        &id,
         targets,
         aliases,
         routing_mode,
@@ -721,7 +715,18 @@ fn main() {
             TrayIconBuilder::with_id("keyloom-tray")
                 .icon(icon)
                 .menu(&menu)
+                .show_menu_on_left_click(false)
                 .tooltip("Keyloom")
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        show_main_window(tray.app_handle());
+                    }
+                })
                 .on_menu_event(|app, event| {
                     if let Some(action) = action_from_menu_id(event.id().as_ref()) {
                         run_tray_action(app, action);

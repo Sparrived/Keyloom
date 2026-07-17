@@ -379,8 +379,6 @@ pub fn delete_amkr_pool(
 pub fn create_amkr_route(
     selected_path: Option<&Path>,
     config_revision: &str,
-    id: &str,
-    targets: Vec<amkr::client::AmkrRouteTarget>,
     aliases: Vec<String>,
     routing_mode: Option<String>,
 ) -> Result<(), String> {
@@ -388,8 +386,6 @@ pub fn create_amkr_route(
     amkr::client::create_route(
         &instance.connection,
         config_revision,
-        id,
-        targets,
         aliases,
         routing_mode,
     )
@@ -399,7 +395,6 @@ pub fn update_amkr_route(
     selected_path: Option<&Path>,
     config_revision: &str,
     route_id: &str,
-    id: &str,
     targets: Vec<amkr::client::AmkrRouteTarget>,
     aliases: Vec<String>,
     routing_mode: Option<String>,
@@ -409,7 +404,6 @@ pub fn update_amkr_route(
         &instance.connection,
         config_revision,
         route_id,
-        id,
         targets,
         aliases,
         routing_mode,
@@ -593,22 +587,24 @@ pub fn run_amkr_system_service(
 pub fn update_amkr_tool(selected_path: Option<&Path>) -> Result<amkr_tool::AmkrToolStatus, String> {
     let instance = discover_local_instance(selected_path)?;
     let was_running = get_amkr_health(Some(&instance.config_path)).is_ok();
-    let task_registered = windows_service::task_is_registered();
+    let task_kind = windows_service::registered_task_kind();
 
     if was_running {
         let stop_result = (|| {
-            if task_registered {
-                run_amkr_service(
+            if let Some(task_kind) = task_kind {
+                run_registered_task_action(
                     windows_service::ServiceAction::Stop,
-                    Some(&instance.config_path),
+                    task_kind,
+                    &instance.config_path,
                 )?;
             } else {
                 amkr_tool::stop_background(&instance.config_path)?;
             }
+            windows_service::wait_until_task_stopped();
             wait_for_amkr_state(&instance.config_path, false)
         })();
         if let Err(stop_error) = stop_result {
-            let restore_error = restore_amkr_service(&instance.config_path, task_registered).err();
+            let restore_error = restore_amkr_service(&instance.config_path, task_kind).err();
             return Err(match restore_error {
                 Some(restore_error) => {
                     format!("AMKR 更新前停止失败: {stop_error}；服务恢复失败: {restore_error}")
@@ -620,7 +616,7 @@ pub fn update_amkr_tool(selected_path: Option<&Path>) -> Result<amkr_tool::AmkrT
 
     let update_result = amkr_tool::update();
     let restore_result = if was_running {
-        restore_amkr_service(&instance.config_path, task_registered)
+        restore_amkr_service(&instance.config_path, task_kind)
     } else {
         Ok(())
     };
@@ -637,9 +633,36 @@ pub fn update_amkr_tool(selected_path: Option<&Path>) -> Result<amkr_tool::AmkrT
     }
 }
 
-fn restore_amkr_service(config_path: &Path, task_registered: bool) -> Result<(), String> {
-    if task_registered {
-        run_amkr_service(windows_service::ServiceAction::Start, Some(config_path))?;
+fn run_registered_task_action(
+    action: windows_service::ServiceAction,
+    task_kind: windows_service::TaskKind,
+    config_path: &Path,
+) -> Result<Vec<windows_service::TaskCommandResult>, String> {
+    match task_kind {
+        windows_service::TaskKind::System => {
+            let system_action = match action {
+                windows_service::ServiceAction::Start => {
+                    windows_service::SystemServiceAction::Start
+                }
+                windows_service::ServiceAction::Stop => windows_service::SystemServiceAction::Stop,
+                _ => return run_amkr_service(action, Some(config_path)),
+            };
+            run_amkr_system_service(system_action, Some(config_path))
+        }
+        windows_service::TaskKind::User => run_amkr_service(action, Some(config_path)),
+    }
+}
+
+fn restore_amkr_service(
+    config_path: &Path,
+    task_kind: Option<windows_service::TaskKind>,
+) -> Result<(), String> {
+    if let Some(task_kind) = task_kind {
+        run_registered_task_action(
+            windows_service::ServiceAction::Start,
+            task_kind,
+            config_path,
+        )?;
     } else {
         amkr_tool::start_background(config_path)?;
     }

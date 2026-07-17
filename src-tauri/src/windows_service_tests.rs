@@ -2,9 +2,26 @@ use std::path::{Path, PathBuf};
 
 use crate::windows_service::{
     config_path_from_arguments, execute_task_commands, system_service_command, task_commands,
-    task_commands_for_program, ServiceAction, ServiceProgram, SystemServiceAction,
-    TaskCommandResult, WINDOWS_TASK_NAME,
+    task_commands_for_program, task_kind_from_xml, ServiceAction, ServiceProgram,
+    SystemServiceAction, TaskCommandResult, TaskKind, WINDOWS_TASK_NAME,
 };
+
+#[test]
+fn identifies_system_and_user_task_xml() {
+    assert_eq!(
+        task_kind_from_xml(
+            "<Principals><Principal><UserId>S-1-5-18</UserId><RunLevel>HighestAvailable</RunLevel></Principal></Principals>",
+        ),
+        Some(TaskKind::System),
+    );
+    assert_eq!(
+        task_kind_from_xml(
+            "<Principals><Principal><UserId>S-1-5-21-123</UserId><LogonType>InteractiveToken</LogonType></Principal></Principals>",
+        ),
+        Some(TaskKind::User),
+    );
+    assert_eq!(task_kind_from_xml("<Task />"), None);
+}
 
 #[test]
 fn creates_a_limited_current_user_login_task_without_uac() {

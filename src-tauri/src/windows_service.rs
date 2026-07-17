@@ -5,18 +5,77 @@ use serde::Serialize;
 
 pub const WINDOWS_TASK_NAME: &str = "AutoModelKeyRouter";
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TaskKind {
+    User,
+    System,
+}
+
 pub fn task_is_registered() -> bool {
+    registered_task_kind().is_some()
+}
+
+pub fn registered_task_kind() -> Option<TaskKind> {
+    #[cfg(not(windows))]
+    return None;
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+
+        let output = Command::new("schtasks")
+            .args(["/Query", "/TN", WINDOWS_TASK_NAME, "/XML"])
+            .creation_flags(0x08000000)
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        task_kind_from_xml(&String::from_utf8_lossy(&output.stdout))
+    }
+}
+
+pub(crate) fn task_kind_from_xml(xml: &str) -> Option<TaskKind> {
+    let normalized = xml.to_ascii_lowercase();
+    if normalized.contains("<userid>s-1-5-18</userid>")
+        || normalized.contains("<userid>system</userid>")
+        || normalized.contains("<logontype>serviceaccount</logontype>")
+    {
+        Some(TaskKind::System)
+    } else if normalized.contains("<userid>") || normalized.contains("<logontype>") {
+        Some(TaskKind::User)
+    } else {
+        None
+    }
+}
+
+pub fn task_is_running() -> bool {
     #[cfg(not(windows))]
     return false;
 
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
-        Command::new("schtasks")
-            .args(["/Query", "/TN", WINDOWS_TASK_NAME])
+        let output = Command::new("schtasks")
+            .args(["/Query", "/TN", WINDOWS_TASK_NAME, "/XML"])
             .creation_flags(0x08000000)
-            .output()
-            .is_ok_and(|output| output.status.success())
+            .output();
+        output.is_ok_and(|output| {
+            output.status.success()
+                && String::from_utf8_lossy(&output.stdout).contains("<State>Running</State>")
+        })
+    }
+}
+
+pub fn wait_until_task_stopped() {
+    #[cfg(windows)]
+    {
+        for _ in 0..25 {
+            if !task_is_running() {
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(200));
+        }
     }
 }
 

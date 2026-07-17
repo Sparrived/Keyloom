@@ -271,7 +271,6 @@ fn reads_model_routes_with_their_provider_targets() {
     .unwrap();
 
     assert_eq!(response.routes[0].id, "model-a");
-    assert_eq!(response.routes[0].targets[0].provider, "a.example.test");
     assert_eq!(response.routes[0].aliases, ["alias-a"]);
     server.join().unwrap();
 }
@@ -544,10 +543,8 @@ fn sends_provider_configuration_updates_with_the_current_revision() {
             (
                 "PUT /api/routes/model-a HTTP/1.1",
                 vec![
-                    "\"id\":\"model-b\"",
                     "\"aliases\":[\"alias-b\"]",
                     "\"routing_mode\":\"priority\"",
-                    "\"provider\":\"b.example.test\"",
                 ],
             ),
         ] {
@@ -610,7 +607,6 @@ fn sends_provider_configuration_updates_with_the_current_revision() {
         &connection,
         "revision-a",
         "model-a",
-        "model-b",
         vec![AmkrRouteTarget {
             provider: "b.example.test".to_owned(),
             pool: "pool-b".to_owned(),
@@ -664,7 +660,7 @@ fn updates_model_reasoning_effort_with_an_encoded_model_id() {
 }
 
 #[test]
-fn creates_a_route_with_all_targets() {
+fn creates_a_route_without_model_or_upstream_configuration() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap();
     let server = thread::spawn(move || {
@@ -674,9 +670,8 @@ fn creates_a_route_with_all_targets() {
         let request = String::from_utf8_lossy(&buffer[..read]);
         assert!(request.starts_with("POST /api/routes HTTP/1.1"));
         assert!(request.contains("\"config_revision\":\"revision-a\""));
-        assert!(request.contains("\"provider\":\"provider-a\""));
-        assert!(request.contains("\"provider\":\"provider-b\""));
-        assert!(request.contains("\"upstream_model\":\"upstream-b\""));
+        assert!(!request.contains("\"id\""));
+        assert!(!request.contains("\"targets\""));
         write!(
             stream,
             "HTTP/1.1 201 Created\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{{}}"
@@ -692,19 +687,6 @@ fn creates_a_route_with_all_targets() {
             log_file_path: None,
         },
         "revision-a",
-        "model-b",
-        vec![
-            AmkrRouteTarget {
-                provider: "provider-a".to_owned(),
-                pool: "pool-a".to_owned(),
-                upstream_model: "upstream-a".to_owned(),
-            },
-            AmkrRouteTarget {
-                provider: "provider-b".to_owned(),
-                pool: "pool-b".to_owned(),
-                upstream_model: "upstream-b".to_owned(),
-            },
-        ],
         vec![],
         Some("round_robin".to_owned()),
     )

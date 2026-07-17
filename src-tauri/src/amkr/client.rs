@@ -209,6 +209,7 @@ pub struct AmkrRouteTarget {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct AmkrRoute {
     pub id: String,
+    #[serde(default)]
     pub targets: Vec<AmkrRouteTarget>,
     #[serde(default)]
     pub aliases: Vec<String>,
@@ -709,8 +710,6 @@ pub fn delete_pool(
 pub fn create_route(
     connection: &AmkrConnection,
     config_revision: &str,
-    id: &str,
-    targets: Vec<AmkrRouteTarget>,
     aliases: Vec<String>,
     routing_mode: Option<String>,
 ) -> Result<(), String> {
@@ -721,8 +720,6 @@ pub fn create_route(
         "创建模型路由",
         serde_json::json!({
             "config_revision": config_revision,
-            "id": id,
-            "targets": targets,
             "aliases": aliases,
             "routing_mode": routing_mode
         }),
@@ -833,7 +830,6 @@ pub fn update_route(
     connection: &AmkrConnection,
     config_revision: &str,
     route_id: &str,
-    id: &str,
     targets: Vec<AmkrRouteTarget>,
     aliases: Vec<String>,
     routing_mode: Option<String>,
@@ -845,7 +841,6 @@ pub fn update_route(
         "更新模型路由",
         serde_json::json!({
             "config_revision": config_revision,
-            "id": id,
             "targets": targets,
             "aliases": aliases,
             "routing_mode": routing_mode,
