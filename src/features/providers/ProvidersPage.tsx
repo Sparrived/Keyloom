@@ -34,6 +34,8 @@ const providerRouteModes = [
   ["images", "Images 路径"],
 ] as const;
 
+type KeyProbeState = "idle" | "pending" | "success" | "error";
+
 const normalizeModels = (models: string[]) => Array.from(new Set(models.map((model) => model.trim()).filter(Boolean))).sort();
 const sameModels = (left: string[], right: string[]) => normalizeModels(left).join("\n") === normalizeModels(right).join("\n");
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -70,7 +72,8 @@ function ProviderCard({ configPath, provider, revision, refresh }: ProviderCardP
   const [keyValue, setKeyValue] = useState("");
   const [allowVisitor, setAllowVisitor] = useState(false);
   const [keyCreateBusy, setKeyCreateBusy] = useState(false);
-  const [keyCreateStatus, setKeyCreateStatus] = useState<string | null>(null);
+  const [keyCreateStep, setKeyCreateStep] = useState<"idle" | "saving" | "probing" | "assigning" | "complete" | "error">("idle");
+  const [keyProbeStates, setKeyProbeStates] = useState<Record<string, KeyProbeState>>({});
   const [poolName, setPoolName] = useState("");
   const [poolKeys, setPoolKeys] = useState("");
   const [poolModels, setPoolModels] = useState("");
@@ -132,8 +135,8 @@ function ProviderCard({ configPath, provider, revision, refresh }: ProviderCardP
     openPoolEdit(pool);
   };
 
-  const uniquePoolName = (models: string[], fallback: string, pools: AmkrProviderPool[]) => {
-    const base = models[0] || fallback;
+  const uniquePoolName = (pools: AmkrProviderPool[]) => {
+    const base = "default";
     const used = new Set(pools.map((pool) => pool.name));
     if (!used.has(base)) return base;
     for (let index = 2; ; index += 1) {
@@ -155,43 +158,85 @@ function ProviderCard({ configPath, provider, revision, refresh }: ProviderCardP
     throw new Error("Key 探测超时。");
   };
 
+  const probeKey = async (name: string) => {
+    if (keyProbeStates[name] === "pending") return;
+    setKeyProbeStates((current) => ({ ...current, [name]: "pending" }));
+    setError(null);
+    try {
+      const started = await probeAmkrKeys(provider.id, [name], 15, configPath);
+      for (let attempt = 0; attempt < 160; attempt += 1) {
+        const probe = await getAmkrProbe(started.probe_id, configPath);
+        if (terminalProbeStatuses.has(probe.status)) {
+          const result = probe.results.find((item) => item.key === name);
+          if (probe.status !== "complete" || !result || result.error) throw new Error(result?.error || probe.error || "Key 探测未通过。");
+          setKeyProbeStates((current) => ({ ...current, [name]: "success" }));
+          window.setTimeout(() => setKeyProbeStates((current) => current[name] === "success" ? { ...current, [name]: "idle" } : current), 2400);
+          return;
+        }
+        await wait(probePollIntervalMs);
+      }
+      throw new Error("Key 探测超时。");
+    } catch (reason) {
+      setKeyProbeStates((current) => ({ ...current, [name]: "error" }));
+      setError(`Key ${name} 探测失败: ${errorMessage(reason)}`);
+    }
+  };
+
   const createKeyAndAssignPool = async () => {
     if (keyCreateBusy) return;
     const name = keyName.trim();
     if (!name || !keyValue) return;
     setKeyCreateBusy(true);
-    setKeyCreateStatus("正在保存 Key…");
+    setError(null);
+    setKeyCreateStep("saving");
     try {
       let data = await mutate(() => createAmkrProviderKey(revision, provider.id, name, keyValue, allowVisitor, configPath));
-      if (!data) return;
+      if (!data) throw new Error("Key 保存失败。");
       setKeyValue("");
-      setKeyCreateStatus("正在探测可用模型…");
+      setKeyCreateStep("probing");
       const models = await probeKeyModels(name);
       let currentProvider = providerFrom(data);
-      if (!currentProvider) return;
+      if (!currentProvider) throw new Error("保存后的 Key 未出现在供应商配置中。");
       const pool = models.length ? currentProvider.pools.find((item) => sameModels(item.models, models)) : null;
       const configRevision = data.config_revision;
       const currentPools = currentProvider.pools;
-      setKeyCreateStatus(pool ? "正在加入匹配的模型池…" : "正在创建匹配的模型池…");
+      setKeyCreateStep("assigning");
       data = pool
         ? await mutate(() => updateAmkrPool(configRevision, provider.id, pool.name, pool.name, Array.from(new Set([...pool.keys, name])), pool.models, configPath))
-        : await mutate(() => createAmkrPool(configRevision, provider.id, uniquePoolName(models, name, currentPools), [name], models, configPath));
-      if (!data) return;
+        : await mutate(() => createAmkrPool(configRevision, provider.id, uniquePoolName(currentPools), [name], models, configPath));
+      if (!data) throw new Error("模型池更新失败。");
       currentProvider = providerFrom(data);
       const editedPool = pool
         ? currentProvider?.pools.find((item) => item.name === pool.name)
         : currentProvider?.pools.find((item) => sameModels(item.models, models) && item.keys.includes(name));
       setKeyName("");
       setAllowVisitor(false);
+      setKeyCreateStep("complete");
+      await wait(450);
       setAddingKey(false);
-      setKeyCreateStatus(null);
+      setKeyCreateStep("idle");
       if (editedPool) openPoolEdit(editedPool, null);
     } catch (reason) {
+      setKeyCreateStep("error");
       setError(`Key 已保存，但自动探测和分池失败: ${errorMessage(reason)}`);
     } finally {
-      setKeyCreateStatus(null);
       setKeyCreateBusy(false);
     }
+  };
+
+  const keyCreateStatus = keyCreateStep === "saving"
+    ? "正在保存 Key"
+    : keyCreateStep === "probing"
+      ? "正在探测可用模型"
+      : keyCreateStep === "assigning"
+        ? "正在加入对应模型池"
+        : keyCreateStep === "complete"
+          ? "已加入模型池"
+          : null;
+  const closeKeyDialog = () => {
+    if (keyCreateBusy) return;
+    setAddingKey(false);
+    setKeyCreateStep("idle");
   };
 
   const togglePoolModel = (model: string) => {
@@ -231,6 +276,10 @@ function ProviderCard({ configPath, provider, revision, refresh }: ProviderCardP
   const selectedPoolModels = csv(poolEditModels);
   const poolModelCards = Array.from(new Set([...poolModelOrder, ...discoveredModels, ...selectedPoolModels, ...poolEditCustomModels])).filter(Boolean);
   const poolProbeBusy = poolProbeStatus === "pending" || poolProbeStatus === "running";
+  const isMissingFromProbe = (model: string) => poolProbeStatus === "complete"
+    && selectedPoolModels.includes(model)
+    && !poolEditCustomModels.includes(model)
+    && !discoveredModels.includes(model);
 
   const toggleKeySetting = (key: AmkrProviderKey, setting: "enabled" | "allowVisitor") => {
     void mutate(() => updateAmkrProviderKey(
@@ -287,12 +336,17 @@ function ProviderCard({ configPath, provider, revision, refresh }: ProviderCardP
       <section className="provider-resource" aria-label={`${provider.id} 的 Key`}>
         <div className="provider-section-heading"><div><h4>Key</h4><p>用于连接此供应商的凭据</p></div><button className="secondary-button" type="button" onClick={() => setAddingKey((value) => !value)}>{addingKey ? "取消添加" : "添加 Key"}</button></div>
         {provider.keys.length ? <ul>{provider.keys.map((key) => <li className="provider-row" key={key.name}>
-          <div className="provider-row-main"><strong>{key.name}</strong><code>{key.api_key_fingerprint}</code></div>
+          <div className={`provider-row-main${keyProbeStates[key.name] === "success" ? " key-probe-success" : ""}`}>
+            <strong>{key.name}</strong><code>{key.api_key_fingerprint}</code>
+            {keyProbeStates[key.name] === "success" ? <span className="key-probe-feedback" role="status">探测成功</span> : null}
+            {keyProbeStates[key.name] === "error" ? <span className="key-probe-feedback key-probe-error" role="status">探测失败</span> : null}
+          </div>
           <div className="provider-statuses">
             <button aria-pressed={key.enabled} className={`key-status-button ${key.enabled ? "status-good" : "status-muted"}`} type="button" onClick={() => toggleKeySetting(key, "enabled")}>{key.enabled ? "已启用" : "已停用"}</button>
             <button aria-pressed={key.allow_visitor} className={`key-status-button ${key.allow_visitor ? "status-good" : "status-muted"}`} type="button" onClick={() => toggleKeySetting(key, "allowVisitor")}>{key.allow_visitor ? "允许访客" : "仅本地"}</button>
           </div>
           <div className="row-actions">
+            <button aria-label={`探测 Key ${key.name}`} className={`secondary-button key-probe-button${keyProbeStates[key.name] === "success" ? " is-success" : ""}`} disabled={keyProbeStates[key.name] === "pending" || keyProbeStates[key.name] === "success"} type="button" onClick={() => void probeKey(key.name)}>{keyProbeStates[key.name] === "pending" ? "探测中" : keyProbeStates[key.name] === "success" ? "已通过" : "探测"}</button>
             <button aria-expanded={editingKey === key.name} aria-label={`${editingKey === key.name ? "收起" : "编辑"} Key ${key.name}`} className="secondary-button" type="button" onClick={() => beginKeyEdit(key)}>{editingKey === key.name ? "收起" : "编辑"}</button>
             <button aria-label={`删除 Key ${key.name}`} className="danger-button" type="button" onClick={() => void removeKey(key.name)}>删除</button>
           </div>
@@ -302,13 +356,6 @@ function ProviderCard({ configPath, provider, revision, refresh }: ProviderCardP
             <div className="form-actions"><button type="submit">保存 Key</button><button className="secondary-button" type="button" onClick={() => setEditingKey(null)}>取消</button></div>
           </form> : null}
         </li>)}</ul> : <p>尚无 Key。</p>}
-        {addingKey ? <form className="inline-form resource-form create-resource-form" onSubmit={(event) => { event.preventDefault(); void createKeyAndAssignPool(); }}>
-          <label>Key 名称<input disabled={keyCreateBusy} required value={keyName} onChange={(event) => setKeyName(event.target.value)} /></label>
-          <label>API Key<input disabled={keyCreateBusy} required type="password" value={keyValue} onChange={(event) => setKeyValue(event.target.value)} /></label>
-          <label className="checkbox-label"><input checked={allowVisitor} disabled={keyCreateBusy} type="checkbox" onChange={(event) => setAllowVisitor(event.target.checked)} />访客访问</label>
-          <p className="editor-help">{keyCreateStatus ?? "保存后会自动探测模型，并把可用模型相同的 Key 放进同一个模型池。"}</p>
-          <div className="form-actions"><button disabled={keyCreateBusy} type="submit">{keyCreateBusy ? "正在添加" : "添加 Key"}</button></div>
-        </form> : null}
       </section>
 
       <section className="provider-resource" aria-label={`${provider.id} 的模型池`}>
@@ -319,7 +366,7 @@ function ProviderCard({ configPath, provider, revision, refresh }: ProviderCardP
             <button aria-expanded={editingPool === pool.name} aria-label={`${editingPool === pool.name ? "收起" : "编辑"}模型池 ${pool.name}`} className="secondary-button" type="button" onClick={() => beginPoolEdit(pool)}>{editingPool === pool.name ? "收起" : "编辑"}</button>
             <button aria-label={`删除模型池 ${pool.name}`} className="danger-button" type="button" onClick={() => void removePool(pool.name)}>删除</button>
           </div>
-          {editingPool === pool.name ? <form className="inline-form editor-form resource-form" onSubmit={(event) => { event.preventDefault(); void (async () => { if (await mutate(() => updateAmkrPool(revision, provider.id, editingPool, poolEditName, csv(poolEditKeys), selectedPoolModels, configPath))) setEditingPool(null); })(); }}>
+          {editingPool === pool.name ? <form className="inline-form editor-form resource-form pool-editor-form" onSubmit={(event) => { event.preventDefault(); void (async () => { if (await mutate(() => updateAmkrPool(revision, provider.id, editingPool, poolEditName, csv(poolEditKeys), selectedPoolModels, configPath))) setEditingPool(null); })(); }}>
             <label>模型池名称<input required value={poolEditName} onChange={(event) => setPoolEditName(event.target.value)} /></label>
             <fieldset className="pool-key-picker">
               <legend>模型池 Key</legend>
@@ -330,16 +377,17 @@ function ProviderCard({ configPath, provider, revision, refresh }: ProviderCardP
                 })}
               </div>
             </fieldset>
+            <div className="pool-model-section-label">启用模型</div>
             <div aria-label="模型池模型" className="pool-model-grid">
-              {poolProbeBusy ? <div aria-label="正在探测模型" className="pool-model-card pool-model-probe-indicator" role="status"><span /><span /><span /></div> : null}
               {poolModelCards.map((model) => {
                 const selected = selectedPoolModels.includes(model);
                 const custom = poolEditCustomModels.includes(model);
                 return <div className="pool-model-card-shell" key={model}>
-                  <button aria-label={`${selected ? "关闭" : "打开"}模型 ${model}`} aria-pressed={selected} className={`pool-model-card${selected ? " is-selected" : ""}`} type="button" onClick={() => togglePoolModel(model)}>{model}</button>
+                  <button aria-label={`${selected ? "关闭" : "打开"}模型 ${model}`} aria-pressed={selected} className={`pool-model-card${selected ? " is-selected" : ""}${isMissingFromProbe(model) ? " is-probe-missing" : ""}`} type="button" onClick={() => togglePoolModel(model)}>{model}</button>
                   {custom ? <button aria-label={`删除自定义模型 ${model}`} className="pool-model-remove" type="button" onClick={() => deleteCustomPoolModel(model)}>×</button> : null}
                 </div>;
               })}
+              {poolProbeBusy ? <div aria-label="正在探测模型" className="pool-model-card pool-model-probe-indicator" role="status"><span /><span /><span /></div> : null}
               {addingCustomModel ? <div className="pool-model-card custom-model-card">
                 <input aria-label="自定义模型名称" autoFocus value={customModelName} onChange={(event) => setCustomModelName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addCustomPoolModel(); } else if (event.key === "Escape") { setAddingCustomModel(false); setCustomModelName(""); } }} />
                 <button aria-label="确认添加自定义模型" type="button" onClick={() => addCustomPoolModel()}>+</button>
@@ -366,6 +414,24 @@ function ProviderCard({ configPath, provider, revision, refresh }: ProviderCardP
     </div>
     <ProbePanel configPath={configPath} providerId={provider.id} keys={provider.keys.map((key) => key.name)} pools={provider.pools.map((pool) => pool.name)} onPoolProbeResults={handlePoolProbeResults} onPoolProbeStatus={setPoolProbeStatus} poolProbeRequest={poolProbeRequest} />
     {error ? <p className="service-action-error">操作失败: {error}</p> : null}
+    {addingKey ? <div className="close-dialog-backdrop key-create-backdrop" onKeyDown={(event) => { if (event.key === "Escape") closeKeyDialog(); }}>
+      <section aria-labelledby="key-create-dialog-heading" aria-modal="true" className="close-dialog key-create-dialog" role="dialog">
+        <div className="key-create-dialog-heading"><div><span className="eyebrow">供应商 / {provider.id}</span><h2 id="key-create-dialog-heading">添加 Key</h2></div><span className={`key-create-orbit key-create-orbit-${keyCreateStep}`} aria-hidden="true" /></div>
+        {keyCreateStep === "idle" || keyCreateStep === "error" ? <form className="key-create-form" onSubmit={(event) => { event.preventDefault(); void createKeyAndAssignPool(); }}>
+          <label>Key 名称<input autoFocus disabled={keyCreateBusy} required value={keyName} onChange={(event) => setKeyName(event.target.value)} /></label>
+          <label>API Key<input disabled={keyCreateBusy} required type="password" value={keyValue} onChange={(event) => setKeyValue(event.target.value)} /></label>
+          <label className="checkbox-label"><input checked={allowVisitor} disabled={keyCreateBusy} type="checkbox" onChange={(event) => setAllowVisitor(event.target.checked)} />访客访问</label>
+          <p className="editor-help">保存后会自动探测模型，并把 Key 加入匹配的模型池。</p>
+          {keyCreateStep === "error" ? <p className="service-action-error" role="alert">{error}</p> : null}
+          <div className="close-dialog-actions"><button className="secondary-button" type="button" onClick={closeKeyDialog}>取消</button><button className="tray-action" type="submit">添加 Key</button></div>
+        </form> : <div className="key-create-progress" aria-live="polite">
+          <p className="key-create-progress-title">{keyCreateStatus}</p>
+          <ol className="key-create-steps">
+            {[["saving", "保存 Key"], ["probing", "探测可用模型"], ["assigning", "加入模型池"]].map(([step, label]) => <li className={keyCreateStep === step ? "is-active" : (["saving", "probing", "assigning", "complete"].indexOf(keyCreateStep) > ["saving", "probing", "assigning"].indexOf(step) ? "is-done" : "")} key={step}><span aria-hidden="true">{["saving", "probing", "assigning", "complete"].indexOf(keyCreateStep) > ["saving", "probing", "assigning"].indexOf(step) ? "✓" : ""}</span>{label}</li>)}
+          </ol>
+        </div>}
+      </section>
+    </div> : null}
     {confirmDialog}
     {copyToast}
   </article>;
