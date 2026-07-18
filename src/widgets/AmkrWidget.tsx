@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
-import { getCurrentWindow, LogicalSize, PhysicalPosition } from "@tauri-apps/api/window";
+import { availableMonitors, getCurrentWindow, LogicalSize, PhysicalPosition, primaryMonitor, type Monitor } from "@tauri-apps/api/window";
 import {
   getAmkrMetrics,
   getAmkrModels,
@@ -15,6 +15,66 @@ import {
 const configPathStorageKey = "keyloom.configPath";
 const widgetEnabledStorageKey = "keyloom.amkrWidgetEnabled";
 const widgetPositionStorageKey = "keyloom.amkrWidgetPosition";
+
+const MIN_VISIBLE_OVERLAP = 48;
+
+type Rect = { x: number; y: number; width: number; height: number };
+
+function monitorWorkArea(monitor: Monitor): Rect {
+  return {
+    x: monitor.workArea.position.x,
+    y: monitor.workArea.position.y,
+    width: monitor.workArea.size.width,
+    height: monitor.workArea.size.height,
+  };
+}
+
+function rectsOverlapEnough(a: Rect, b: Rect, minWidth = MIN_VISIBLE_OVERLAP, minHeight = MIN_VISIBLE_OVERLAP) {
+  const left = Math.max(a.x, b.x);
+  const top = Math.max(a.y, b.y);
+  const right = Math.min(a.x + a.width, b.x + b.width);
+  const bottom = Math.min(a.y + a.height, b.y + b.height);
+  return right - left >= minWidth && bottom - top >= minHeight;
+}
+
+/** True when enough of the widget sits on any monitor work area to stay reachable. */
+export function isWidgetVisibleOnMonitors(
+  position: { x: number; y: number },
+  size: { width: number; height: number },
+  monitors: Monitor[],
+) {
+  if (monitors.length === 0) return true;
+  const windowRect = { x: position.x, y: position.y, width: size.width, height: size.height };
+  return monitors.some((monitor) => rectsOverlapEnough(windowRect, monitorWorkArea(monitor)));
+}
+
+export function defaultWidgetPosition(
+  size: { width: number; height: number },
+  monitor: Monitor,
+) {
+  const work = monitorWorkArea(monitor);
+  const margin = Math.round(24 * monitor.scaleFactor);
+  return {
+    x: Math.max(work.x, work.x + work.width - size.width - margin),
+    y: work.y + margin,
+  };
+}
+
+async function ensureWidgetVisible(currentWindow: ReturnType<typeof getCurrentWindow>) {
+  const [position, size, monitors] = await Promise.all([
+    currentWindow.outerPosition(),
+    currentWindow.outerSize(),
+    availableMonitors(),
+  ]);
+  if (isWidgetVisibleOnMonitors(position, size, monitors)) return;
+
+  const target = (await primaryMonitor()) ?? monitors[0];
+  if (!target) return;
+
+  const next = defaultWidgetPosition(size, target);
+  await currentWindow.setPosition(new PhysicalPosition(next.x, next.y));
+  localStorage.setItem(widgetPositionStorageKey, JSON.stringify(next));
+}
 
 function configPath() {
   return localStorage.getItem(configPathStorageKey) || null;
@@ -85,16 +145,31 @@ export function AmkrWidget() {
 
   useEffect(() => {
     const currentWindow = getCurrentWindow();
-    try {
-      const saved = JSON.parse(localStorage.getItem(widgetPositionStorageKey) ?? "null") as { x: number; y: number } | null;
-      if (saved) void currentWindow.setPosition(new PhysicalPosition(saved.x, saved.y));
-    } catch {
-      localStorage.removeItem(widgetPositionStorageKey);
+    let cancelled = false;
+
+    async function restorePosition() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(widgetPositionStorageKey) ?? "null") as { x: number; y: number } | null;
+        if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) {
+          await currentWindow.setPosition(new PhysicalPosition(saved.x, saved.y));
+        }
+      } catch {
+        localStorage.removeItem(widgetPositionStorageKey);
+      }
+      if (!cancelled) await ensureWidgetVisible(currentWindow);
     }
-    const unlistenMoved = currentWindow.onMoved(({ payload }) => localStorage.setItem(widgetPositionStorageKey, JSON.stringify(payload)));
+
+    void restorePosition();
+    const unlistenMoved = currentWindow.onMoved(({ payload }) => {
+      localStorage.setItem(widgetPositionStorageKey, JSON.stringify(payload));
+    });
     void refreshMetrics();
-    const interval = window.setInterval(() => void refreshMetrics(), 2_000);
+    const interval = window.setInterval(() => {
+      void refreshMetrics();
+      void ensureWidgetVisible(currentWindow);
+    }, 2_000);
     return () => {
+      cancelled = true;
       window.clearInterval(interval);
       void unlistenMoved.then((unlisten) => unlisten());
     };

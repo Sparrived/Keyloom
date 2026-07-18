@@ -6,28 +6,55 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/api/window", () => ({
   LogicalSize: class LogicalSize { constructor(public width: number, public height: number) {} },
   PhysicalPosition: class PhysicalPosition { constructor(public x: number, public y: number) {} },
+  availableMonitors: vi.fn(),
+  primaryMonitor: vi.fn(),
   getCurrentWindow: vi.fn(),
 }));
 
 import { invoke } from "@tauri-apps/api/core";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { availableMonitors, getCurrentWindow, primaryMonitor } from "@tauri-apps/api/window";
+import { defaultWidgetPosition, isWidgetVisibleOnMonitors } from "./AmkrWidget";
 
 const invokeMock = vi.mocked(invoke);
 const getCurrentWindowMock = vi.mocked(getCurrentWindow);
+const availableMonitorsMock = vi.mocked(availableMonitors);
+const primaryMonitorMock = vi.mocked(primaryMonitor);
 const closeMock = vi.fn().mockResolvedValue(undefined);
 const setSizeMock = vi.fn().mockResolvedValue(undefined);
+const setPositionMock = vi.fn().mockResolvedValue(undefined);
+const outerPositionMock = vi.fn().mockResolvedValue({ x: 100, y: 100 });
+const outerSizeMock = vi.fn().mockResolvedValue({ width: 360, height: 390 });
 const startDraggingMock = vi.fn().mockResolvedValue(undefined);
+
+const primaryMonitorFixture = {
+  name: "Primary",
+  size: { width: 1920, height: 1080 },
+  position: { x: 0, y: 0 },
+  workArea: { position: { x: 0, y: 0 }, size: { width: 1920, height: 1040 } },
+  scaleFactor: 1,
+};
 
 describe("AmkrWidget", () => {
   beforeEach(() => {
     localStorage.clear();
     closeMock.mockClear();
     setSizeMock.mockClear();
+    setPositionMock.mockClear();
+    outerPositionMock.mockReset();
+    outerPositionMock.mockResolvedValue({ x: 100, y: 100 });
+    outerSizeMock.mockReset();
+    outerSizeMock.mockResolvedValue({ width: 360, height: 390 });
     startDraggingMock.mockClear();
+    availableMonitorsMock.mockReset();
+    availableMonitorsMock.mockResolvedValue([primaryMonitorFixture] as never);
+    primaryMonitorMock.mockReset();
+    primaryMonitorMock.mockResolvedValue(primaryMonitorFixture as never);
     getCurrentWindowMock.mockReturnValue({
       close: closeMock,
       onMoved: vi.fn().mockResolvedValue(() => undefined),
-      setPosition: vi.fn().mockResolvedValue(undefined),
+      outerPosition: outerPositionMock,
+      outerSize: outerSizeMock,
+      setPosition: setPositionMock,
       setSize: setSizeMock,
       startDragging: startDraggingMock,
     } as never);
@@ -92,6 +119,34 @@ describe("AmkrWidget", () => {
     fireEvent.mouseDown(screen.getByRole("button", { name: "关闭 AMKR 挂件" }), { button: 0, clientX: 20, clientY: 20 });
     fireEvent.mouseMove(header, { buttons: 1, clientX: 40, clientY: 20 });
     expect(startDraggingMock).not.toHaveBeenCalled();
+  });
+
+
+  it("keeps a saved on-screen position", async () => {
+    localStorage.setItem("keyloom.amkrWidgetPosition", JSON.stringify({ x: 120, y: 80 }));
+    outerPositionMock.mockResolvedValue({ x: 120, y: 80 });
+
+    render(<AmkrWidget />);
+
+    await waitFor(() => expect(setPositionMock).toHaveBeenCalledWith(expect.objectContaining({ x: 120, y: 80 })));
+    expect(setPositionMock).toHaveBeenCalledTimes(1);
+    expect(localStorage.getItem("keyloom.amkrWidgetPosition")).toBe(JSON.stringify({ x: 120, y: 80 }));
+  });
+
+  it("resets the widget when the saved position is off every monitor", async () => {
+    localStorage.setItem("keyloom.amkrWidgetPosition", JSON.stringify({ x: 5000, y: 100 }));
+    outerPositionMock.mockResolvedValue({ x: 5000, y: 100 });
+
+    render(<AmkrWidget />);
+
+    const expected = defaultWidgetPosition({ width: 360, height: 390 }, primaryMonitorFixture as never);
+    await waitFor(() => expect(setPositionMock).toHaveBeenCalledWith(expect.objectContaining(expected)));
+    expect(localStorage.getItem("keyloom.amkrWidgetPosition")).toBe(JSON.stringify(expected));
+  });
+
+  it("detects off-screen positions with the visibility helper", () => {
+    expect(isWidgetVisibleOnMonitors({ x: 100, y: 100 }, { width: 360, height: 390 }, [primaryMonitorFixture as never])).toBe(true);
+    expect(isWidgetVisibleOnMonitors({ x: 5000, y: 100 }, { width: 360, height: 390 }, [primaryMonitorFixture as never])).toBe(false);
   });
 
   it("disables future startup when closed", async () => {
