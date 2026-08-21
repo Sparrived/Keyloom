@@ -8,6 +8,9 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 use super::AmkrConnection;
 
+const LOCAL_REQUEST_TIMEOUT: Duration = Duration::from_secs(2);
+const UPDATE_CHECK_TIMEOUT: Duration = Duration::from_secs(25);
+
 #[derive(Debug, Default, Serialize)]
 pub struct AmkrNativeEndpointSummary {
     pub supported: u64,
@@ -415,14 +418,34 @@ pub fn regenerate_local_api_key(
 }
 
 pub fn check_update(connection: &AmkrConnection) -> Result<AmkrUpdateCheck, String> {
-    request_json(
+    let mut update = request_json_with_timeout(
         connection,
         "POST",
         "/api/update/check",
         "检查更新",
         None,
         &[200],
-    )
+        UPDATE_CHECK_TIMEOUT,
+    )?;
+    normalize_update_release_url(&mut update);
+    Ok(update)
+}
+
+fn normalize_update_release_url(update: &mut AmkrUpdateCheck) {
+    const PYPI_PROJECT_URL: &str = "https://pypi.org/project/auto-model-key-router";
+
+    if update.source.as_deref() != Some("PyPI") {
+        return;
+    }
+    let Some(latest_version) = update.latest_version.as_deref() else {
+        return;
+    };
+    let Some(release_url) = update.release_url.as_deref() else {
+        return;
+    };
+    if release_url.trim_end_matches('/') == PYPI_PROJECT_URL {
+        update.release_url = Some(format!("{PYPI_PROJECT_URL}/{latest_version}/"));
+    }
 }
 
 pub fn get_providers(connection: &AmkrConnection) -> Result<AmkrProvidersResponse, String> {
@@ -899,6 +922,26 @@ fn request_json<T: DeserializeOwned>(
     payload: Option<serde_json::Value>,
     success_statuses: &[u16],
 ) -> Result<T, String> {
+    request_json_with_timeout(
+        connection,
+        method,
+        path,
+        label,
+        payload,
+        success_statuses,
+        LOCAL_REQUEST_TIMEOUT,
+    )
+}
+
+fn request_json_with_timeout<T: DeserializeOwned>(
+    connection: &AmkrConnection,
+    method: &str,
+    path: &str,
+    label: &str,
+    payload: Option<serde_json::Value>,
+    success_statuses: &[u16],
+    timeout: Duration,
+) -> Result<T, String> {
     let authority = connection
         .base_url
         .strip_prefix("http://")
@@ -908,7 +951,6 @@ fn request_json<T: DeserializeOwned>(
         .map_err(|error| format!("无法解析 AMKR 服务地址: {error}"))?
         .next()
         .ok_or_else(|| "无法解析 AMKR 服务地址".to_owned())?;
-    let timeout = Duration::from_secs(2);
     let mut stream = TcpStream::connect_timeout(&address, timeout)
         .map_err(|error| format!("无法连接 AMKR 服务: {error}"))?;
     stream

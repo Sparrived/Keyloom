@@ -141,6 +141,70 @@ fn reads_updates_and_regenerates_amkr_settings_with_revision_checks() {
 }
 
 #[test]
+fn allows_update_check_to_wait_for_slow_network_response() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let mut buffer = [0_u8; 4096];
+        let _ = stream.read(&mut buffer).unwrap();
+        thread::sleep(std::time::Duration::from_secs(3));
+        let body = r#"{"current_version":"3.1.0","latest_version":"3.2.0","release_url":"https://example.test/amkr/3.2.0","source":"PyPI","update_available":true,"error":null}"#;
+        write!(
+            stream,
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            body.len(),
+            body
+        )
+        .unwrap();
+    });
+
+    let update = check_update(&AmkrConnection {
+        base_url: format!("http://{address}"),
+        local_api_key: Some("local-api-key".to_owned()),
+        metrics_db_path: None,
+        log_file_path: None,
+    })
+    .unwrap();
+
+    assert_eq!(update.latest_version.as_deref(), Some("3.2.0"));
+    server.join().unwrap();
+}
+
+#[test]
+fn normalizes_legacy_pypi_project_url_to_the_specific_release() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let mut buffer = [0_u8; 4096];
+        let _ = stream.read(&mut buffer).unwrap();
+        let body = r#"{"current_version":"3.2.8","latest_version":"3.2.9","release_url":"https://pypi.org/project/auto-model-key-router/","source":"PyPI","update_available":true,"error":null}"#;
+        write!(
+            stream,
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            body.len(),
+            body
+        )
+        .unwrap();
+    });
+
+    let update = check_update(&AmkrConnection {
+        base_url: format!("http://{address}"),
+        local_api_key: None,
+        metrics_db_path: None,
+        log_file_path: None,
+    })
+    .unwrap();
+
+    assert_eq!(
+        update.release_url.as_deref(),
+        Some("https://pypi.org/project/auto-model-key-router/3.2.9/")
+    );
+    server.join().unwrap();
+}
+
+#[test]
 fn reads_rich_health_capabilities_without_returning_secret_values() {
     let health: AmkrHealth = serde_json::from_str(
         r#"{
