@@ -59,10 +59,13 @@ def main() -> None:
         "configure_agent",
         "get_agent_config_status",
         "rollback_agent",
+        "PI_AGENT",
     }
     missing_agent_exports = sorted(name for name in required_agent_exports if not hasattr(agent_config, name))
     if missing_agent_exports:
         raise SystemExit(f"AMKR agent integration API is incompatible with Keyloom: missing {', '.join(missing_agent_exports)}")
+    if agent_config.agent_display_name(agent_config.PI_AGENT) != "Pi Agent":
+        raise SystemExit("AMKR agent integration API is incompatible with Keyloom: Pi Agent is missing")
     if "mode" not in signature(agent_config.configure_agent).parameters:
         raise SystemExit("AMKR agent integration API is incompatible with Keyloom: configure_agent lacks mode")
     required_status_fields = {"target_path", "backup_available", "current_is_applied", "mode"}

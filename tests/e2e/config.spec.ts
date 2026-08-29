@@ -74,3 +74,19 @@ test("applies and rolls back a Codex native integration", async ({ page }) => {
     args: { agent: "codex" },
   }]);
 });
+
+test("applies Pi Agent with unified-model mode only", async ({ page }) => {
+  await installTauriMock(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "集成" }).click();
+  const pi = page.locator("article").filter({ has: page.getByRole("heading", { name: "Pi Agent" }) });
+
+  await expect(pi.getByText("统一模型")).toBeVisible();
+  await expect(pi.getByRole("combobox", { name: "路由模式" })).toHaveCount(0);
+  await pi.getByRole("button", { name: "应用" }).click();
+  await expect(pi.getByText("已接管 · unified-model")).toBeVisible();
+  expect(await commandCalls(page, "configure_agent_integration")).toEqual([{
+    command: "configure_agent_integration",
+    args: { configPath: null, agent: "pi-agent", mode: "unified-model" },
+  }]);
+});

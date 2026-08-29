@@ -52,6 +52,15 @@ export async function installTauriMock(page: Page, scenario: "existing" | "fresh
         current_is_applied: false,
         mode: null,
       },
+      "pi-agent": {
+        agent: "pi-agent",
+        display_name: "Pi Agent",
+        target_path: "C:/Users/test/.pi/agent/models.json",
+        target_exists: false,
+        backup_available: false,
+        current_is_applied: false,
+        mode: null,
+      },
     };
     localStorage.clear();
     Object.defineProperty(window, "__KEYLOOM_CALLS__", { value: calls });

@@ -21,11 +21,18 @@ describe("IntegrationsPage", () => {
         backup_available: true,
         current_is_applied: true,
         mode: "unified-model",
-      }
-      : command === "get_agent_integration_status" ? {
+      } : command === "get_agent_integration_status" && (args as { agent?: string } | undefined)?.agent === "codex" ? {
         agent: "codex",
         display_name: "Codex",
         target_path: "C:/Users/test/.codex/config.toml",
+        target_exists: false,
+        backup_available: false,
+        current_is_applied: false,
+        mode: null,
+      } : command === "get_agent_integration_status" ? {
+        agent: "pi-agent",
+        display_name: "Pi Agent",
+        target_path: "C:/Users/test/.pi/agent/models.json",
         target_exists: false,
         backup_available: false,
         current_is_applied: false,
@@ -40,8 +47,9 @@ describe("IntegrationsPage", () => {
 
     expect(await screen.findByText("已接管 · unified-model")).toBeInTheDocument();
     expect(screen.getByText(/C:\/Users\/test\/.claude\/settings\.json/)).toBeInTheDocument();
-    expect(screen.getByText("未找到配置")).toBeInTheDocument();
+    expect(screen.getAllByText("未找到配置")).toHaveLength(2);
     expect(screen.getByText(/C:\/Users\/test\/.codex\/config\.toml/)).toBeInTheDocument();
+    expect(screen.getByText(/C:\/Users\/test\/\.pi\/agent\/models\.json/)).toBeInTheDocument();
     const fields = screen.getByText("变更字段 · 3 项");
     fireEvent.click(fields);
     expect(fields.closest("details")).toHaveAttribute("open");
@@ -53,8 +61,8 @@ describe("IntegrationsPage", () => {
     invokeMock.mockRejectedValue(new Error("无法读取集成状态"));
     render(<IntegrationsPage configPath={null} baseUrl="http://127.0.0.1:18900" authEnabled={false} />);
 
-    expect(await screen.findAllByText("操作失败")).toHaveLength(2);
-    expect(screen.getAllByText("无法读取集成状态")).toHaveLength(2);
+    expect(await screen.findAllByText("操作失败")).toHaveLength(3);
+    expect(screen.getAllByText("无法读取集成状态")).toHaveLength(3);
     expect(screen.getByText(/目标地址 http:\/\/127\.0\.0\.1:18900/)).toBeInTheDocument();
   });
 
@@ -94,6 +102,45 @@ describe("IntegrationsPage", () => {
       mode: "native",
     }));
     expect(await within(codex!).findByText("已接管 · native")).toBeInTheDocument();
+  });
+
+  it("configures Pi Agent with unified-model only", async () => {
+    invokeMock.mockImplementation(async (command, args) => {
+      const agent = (args as { agent?: string } | undefined)?.agent;
+      if (command === "get_agent_integration_status") return {
+        agent,
+        display_name: "Pi Agent",
+        target_path: "C:/Users/test/.pi/agent/models.json",
+        target_exists: false,
+        backup_available: false,
+        current_is_applied: false,
+        mode: null,
+      };
+      if (command === "configure_agent_integration") return {
+        agent: "pi-agent",
+        display_name: "Pi Agent",
+        target_path: "C:/Users/test/.pi/agent/models.json",
+        target_exists: true,
+        backup_available: true,
+        current_is_applied: true,
+        mode: "unified-model",
+      };
+      return undefined;
+    });
+    render(<IntegrationsPage configPath="C:/AMKR/router-config.json" baseUrl="http://127.0.0.1:18900" authEnabled />);
+    const pi = (await screen.findByRole("heading", { name: "Pi Agent" })).closest("article");
+    expect(pi).not.toBeNull();
+    expect(within(pi!).queryByRole("combobox", { name: "路由模式" })).not.toBeInTheDocument();
+    expect(within(pi!).getByText("变更字段 · 4 项")).toBeInTheDocument();
+
+    fireEvent.click(within(pi!).getByRole("button", { name: "应用" }));
+
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("configure_agent_integration", {
+      configPath: "C:/AMKR/router-config.json",
+      agent: "pi-agent",
+      mode: "unified-model",
+    }));
+    expect(await within(pi!).findByText("已接管 · unified-model")).toBeInTheDocument();
   });
 
   it("rolls back an applied integration after confirmation", async () => {

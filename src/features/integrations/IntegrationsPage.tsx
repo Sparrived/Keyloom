@@ -4,7 +4,11 @@ import { useConfirmDialog } from "../../components/ConfirmDialog";
 
 type IntegrationsPageProps = { configPath: string | null; baseUrl: string | null; authEnabled: boolean };
 
-const agents: AmkrIntegrationAgent[] = ["claude-code", "codex"];
+const agents: AmkrIntegrationAgent[] = ["claude-code", "codex", "pi-agent"];
+
+function displayName(agent: AmkrIntegrationAgent) {
+  return agent === "claude-code" ? "Claude Code" : agent === "codex" ? "Codex" : "Pi Agent";
+}
 
 function errorMessage(reason: unknown) {
   return reason instanceof Error ? reason.message : String(reason);
@@ -22,6 +26,7 @@ function previewFields(agent: AmkrIntegrationAgent, mode: AmkrIntegrationMode) {
   if (agent === "claude-code") return mode === "unified-model"
     ? ["env.ANTHROPIC_BASE_URL", "env.ANTHROPIC_AUTH_TOKEN", "env.ANTHROPIC_MODEL"]
     : ["env.ANTHROPIC_BASE_URL", "env.ANTHROPIC_AUTH_TOKEN"];
+  if (agent === "pi-agent") return ["providers.amkr", "providers.amkr.baseUrl", "providers.amkr.apiKey", "providers.amkr.models"];
   return mode === "unified-model"
     ? ["model_provider", "model", "model_providers.OpenAI", "auth.json"]
     : ["model_provider", "model_providers.OpenAI", "auth.json"];
@@ -30,7 +35,7 @@ function previewFields(agent: AmkrIntegrationAgent, mode: AmkrIntegrationMode) {
 export function IntegrationsPage({ configPath, baseUrl, authEnabled }: IntegrationsPageProps) {
   const [statuses, setStatuses] = useState<Partial<Record<AmkrIntegrationAgent, AmkrIntegrationStatus>>>({});
   const [errors, setErrors] = useState<Partial<Record<AmkrIntegrationAgent, string>>>({});
-  const [modes, setModes] = useState<Record<AmkrIntegrationAgent, AmkrIntegrationMode>>({ "claude-code": "unified-model", codex: "unified-model" });
+  const [modes, setModes] = useState<Record<AmkrIntegrationAgent, AmkrIntegrationMode>>({ "claude-code": "unified-model", codex: "unified-model", "pi-agent": "unified-model" });
   const [action, setAction] = useState<AmkrIntegrationAgent | null>(null);
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
 
@@ -79,11 +84,11 @@ export function IntegrationsPage({ configPath, baseUrl, authEnabled }: Integrati
       const fields = previewFields(agent, modes[agent]);
       return <article className="integration-item" key={agent}>
         <div className="integration-item-header">
-          <div><h3>{status?.display_name ?? (agent === "claude-code" ? "Claude Code" : "Codex")}</h3><p>{status ? `目标文件 ${status.target_path}` : "正在读取配置状态。"}</p></div>
+          <div><h3>{status?.display_name ?? displayName(agent)}</h3><p>{status ? `目标文件 ${status.target_path}` : "正在读取配置状态。"}</p></div>
           <span className={status?.current_is_applied ? "status-good" : status?.backup_available || status?.target_exists ? "status-warn" : "status-muted"}>{error ? "操作失败" : statusText(status)}</span>
         </div>
         <div className="integration-controls">
-          <label>路由模式<select disabled={action === agent} value={modes[agent]} onChange={(event) => setModes((current) => ({ ...current, [agent]: event.target.value as AmkrIntegrationMode }))}><option value="unified-model">统一模型</option><option value="native">原生模型</option></select></label>
+          <label>路由模式{agent === "pi-agent" ? <span>统一模型</span> : <select disabled={action === agent} value={modes[agent]} onChange={(event) => setModes((current) => ({ ...current, [agent]: event.target.value as AmkrIntegrationMode }))}><option value="unified-model">统一模型</option><option value="native">原生模型</option></select>}</label>
           <button type="button" disabled={action !== null || !baseUrl || !authEnabled} onClick={() => void apply(agent)}>{action === agent ? "正在处理" : "应用"}</button>
           <button className="secondary-button" type="button" disabled={action !== null || !status?.backup_available} onClick={() => void rollback(agent)}>回退</button>
         </div>

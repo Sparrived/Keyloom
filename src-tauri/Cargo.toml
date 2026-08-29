@@ -17,3 +17,4 @@ tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-process = "2"
 tauri-plugin-updater = "2"
 tauri-plugin-autostart = "2.5.1"
+tauri-plugin-single-instance = "2.4.3"

@@ -79,6 +79,7 @@ fn agent_display_name(agent: &str) -> Option<&'static str> {
     match agent {
         "claude-code" => Some("Claude Code"),
         "codex" => Some("Codex"),
+        "pi-agent" => Some("Pi Agent"),
         _ => None,
     }
 }
@@ -101,6 +102,10 @@ fn target_path(agent: &str) -> Result<PathBuf, String> {
             .map(PathBuf::from)
             .unwrap_or_else(|| home_dir().join(".codex"))
             .join("config.toml")),
+        "pi-agent" => Ok(std::env::var_os("PI_CODING_AGENT_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| home_dir().join(".pi").join("agent"))
+            .join("models.json")),
         _ => unreachable!(),
     }
 }
@@ -197,6 +202,9 @@ fn agent_bridge_arguments(
     if operation == AgentOperation::Configure {
         if !matches!(mode, Some("native" | "unified-model")) {
             return Err("集成模式必须是 native 或 unified-model".to_owned());
+        }
+        if agent == "pi-agent" && mode != Some("unified-model") {
+            return Err("Pi Agent 仅支持 unified-model 模式".to_owned());
         }
         if config_path.is_none() {
             return Err("应用集成时必须指定 AMKR 配置路径".to_owned());
@@ -430,6 +438,18 @@ mod tests {
         );
         assert!(arguments[2].contains("configure_agent"));
         assert!(!arguments.join(" ").contains("local-api-key"));
+    }
+
+    #[test]
+    fn restricts_pi_agent_to_unified_model_mode() {
+        let error = agent_bridge_arguments(
+            AgentOperation::Configure,
+            "pi-agent",
+            Some(Path::new("C:/AMKR/router-config.json")),
+            Some("native"),
+        )
+        .unwrap_err();
+        assert!(error.contains("Pi Agent"));
     }
 
     #[test]

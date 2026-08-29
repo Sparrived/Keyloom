@@ -368,7 +368,7 @@ Use typed API methods only. Keep provider, pool, key, and route forms separate s
 
 Support automatic routing, fixed Key, aliases, fallback targets, reasoning effort, native endpoint preference, and image model mapping exposed by the current AMKR config.
 
-- [ ] **Step 4: Implement Claude Code and Codex integrations**
+- [ ] **Step 4: Implement Claude Code, Codex, and Pi Agent integrations**
 
 Call the existing AMKR integration behavior through a dedicated API/IPC boundary. Show current status, preview changed fields, apply, and rollback. Preserve unrelated user settings.
 

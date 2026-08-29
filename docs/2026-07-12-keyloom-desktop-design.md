@@ -139,7 +139,7 @@ Keyloom 需要一个只读 AMKR 配置解析器用于发现、路径解析和迁
 | unified model 切换 | 概览卡片、模型路由页 |
 | 请求统计、Token、缓存、延迟 | 概览图表、活动页 |
 | 运行日志和调用明细 | 活动页 |
-| Claude Code / Codex 配置 | 集成页 |
+| Claude Code / Codex / Pi Agent 配置 | 集成页 |
 | 本地 API Key、监听地址、超时 | 设置页 |
 | 配置迁移、备份、恢复 | 设置页 |
 | 版本检查、更新、更新后重启 | 设置页、托盘菜单 |
@@ -258,7 +258,7 @@ POST /api/config/import
 - 首次安装、已有 AMKR 检测、服务未运行、服务异常、版本不兼容。
 - 启动、停止、重启、用户级自启动、托盘操作。
 - Provider、Pool、Key、模型路由、统一模型、探测和配置迁移。
-- Claude Code/Codex 集成、更新、回滚、备份恢复。
+- Claude Code/Codex/Pi Agent 集成、更新、回滚、备份恢复。
 - UAC 取消、网络中断、鉴权失败、配置写入失败。
 
 ### 9.3 系统与 UI
@@ -293,7 +293,7 @@ POST /api/config/import
 
 - AMKR provider/pool/route API 扩展。
 - 供应商、Key、模型路由、统一模型、探测和迁移页面。
-- Claude Code/Codex 集成。
+- Claude Code/Codex/Pi Agent 集成。
 
 ### Phase 4：安装、更新与发布
 

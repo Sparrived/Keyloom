@@ -170,11 +170,14 @@ export type AmkrModelKey = {
   api_key_fingerprint: string;
 };
 
+export const amkrReasoningEfforts = ["none", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
+export type AmkrReasoningEffort = typeof amkrReasoningEfforts[number];
+
 export type AmkrModel = {
   id: string;
   aliases: string[];
   routing_mode: string;
-  reasoning_effort: string | null;
+  reasoning_effort: AmkrReasoningEffort | null;
   visitor_available: boolean;
   keys: AmkrModelKey[];
 };
@@ -205,7 +208,7 @@ export type AmkrProbe = {
   results: AmkrProbeResult[];
   error: string | null;
 };
-export type AmkrIntegrationAgent = "claude-code" | "codex";
+export type AmkrIntegrationAgent = "claude-code" | "codex" | "pi-agent";
 export type AmkrIntegrationMode = "unified-model" | "native";
 export type AmkrIntegrationStatus = {
   agent: AmkrIntegrationAgent;
@@ -306,7 +309,7 @@ export function getAmkrModels(configPath: string | null = null) {
   return invoke<AmkrModelsResponse>("get_amkr_models", { configPath });
 }
 
-export function updateAmkrModelReasoningEffort(modelId: string, reasoningEffort: string | null, configPath: string | null = null) {
+export function updateAmkrModelReasoningEffort(modelId: string, reasoningEffort: AmkrReasoningEffort | null, configPath: string | null = null) {
   return invoke<AmkrModel>("update_amkr_model_reasoning_effort", { configPath, modelId, reasoningEffort });
 }
 
