@@ -186,6 +186,7 @@ describe("UnifiedModelPanel", () => {
     await openEditor();
     expect(await screen.findByText("路由策略：only_first")).toBeInTheDocument();
     expect(screen.getByText("推理强度：high")).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "max" })).toBeInTheDocument();
     expect(screen.getByText("访客可用")).toBeInTheDocument();
     expect(screen.getByText("别名：fast-a")).toBeInTheDocument();
     expect(screen.queryByText("fingerprint-a")).not.toBeInTheDocument();
@@ -195,7 +196,7 @@ describe("UnifiedModelPanel", () => {
     invokeMock.mockImplementation(async (command) => {
       if (command === "get_amkr_models") return { models: [{ ...models.models[0], reasoning_effort: null }] };
       if (command === "get_amkr_unified_model") return { unified_model: { default: { primary: { model: "model-a", key: null } } } };
-      if (command === "update_amkr_model_reasoning_effort") return { ...models.models[0], reasoning_effort: "high" };
+      if (command === "update_amkr_model_reasoning_effort") return { ...models.models[0], reasoning_effort: "max" };
       if (command === "update_amkr_unified_model") return { unified_model: { default: { primary: { model: "model-a", key: null } } } };
       return undefined;
     });
@@ -203,13 +204,13 @@ describe("UnifiedModelPanel", () => {
 
     await openEditor();
     await screen.findByLabelText("模型");
-    fireEvent.change(screen.getByLabelText("推理强度"), { target: { value: "high" } });
+    fireEvent.change(screen.getByLabelText("推理强度"), { target: { value: "max" } });
     fireEvent.click(screen.getByRole("button", { name: "保存统一模型" }));
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_amkr_model_reasoning_effort", {
       configPath: "C:/amkr.json",
       modelId: "model-a",
-      reasoningEffort: "high",
+      reasoningEffort: "max",
     }));
   });
 

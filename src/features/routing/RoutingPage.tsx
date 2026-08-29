@@ -42,12 +42,18 @@ export function RoutingPage({ configPath, onUnifiedModelChange }: RoutingPagePro
   const [savingTargetOrder, setSavingTargetOrder] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeRouteId, setActiveRouteId] = useState("");
   const [unifiedModelRefreshToken, setUnifiedModelRefreshToken] = useState(0);
   const { copyToast, showCopyToast } = useCopyToast();
 
   const refresh = async () => {
     setLoading(true);
-    try { setData(await getAmkrRoutes(configPath)); setError(null); }
+    try {
+      const next = await getAmkrRoutes(configPath);
+      setData(next);
+      setActiveRouteId((current) => next.routes.some((route) => route.id === current) ? current : next.routes[0]?.id ?? "");
+      setError(null);
+    }
     catch (reason) { setError(errorMessage(reason)); }
     finally { setLoading(false); }
   };
@@ -166,7 +172,36 @@ export function RoutingPage({ configPath, onUnifiedModelChange }: RoutingPagePro
     {loading ? <p className="empty-state">正在读取模型路由。</p> : null}
     {error ? <p className="service-action-error">无法读取或写入模型路由: {error}</p> : null}
     {data?.routes.length === 0 ? <div className="empty-state-panel"><div><strong>尚未生成模型路由。</strong><p>请先在供应商的模型池中配置模型，路由会自动出现在这里。</p></div></div> : null}
-    <div className="route-list">{data?.routes.map((route) => {
+    {data?.routes.length ? <div className="configuration-tabs route-tabs">
+      <div aria-label="模型列表" className="configuration-tablist" role="tablist">
+        {data.routes.map((route) => {
+          const selected = route.id === activeRouteId;
+          return <button
+            aria-controls={`route-list-${encodeURIComponent(route.id)}`}
+            aria-selected={selected}
+            className="configuration-tab"
+            id={`route-tab-${encodeURIComponent(route.id)}`}
+            key={route.id}
+            role="tab"
+            tabIndex={selected ? 0 : -1}
+            type="button"
+            aria-label={route.id}
+            onClick={() => { setActiveRouteId(route.id); setEditing(null); }}
+            onKeyDown={(event) => {
+              const index = data.routes.findIndex((item) => item.id === route.id);
+              const nextIndex = event.key === "ArrowRight" ? (index + 1) % data.routes.length : event.key === "ArrowLeft" ? (index - 1 + data.routes.length) % data.routes.length : -1;
+              if (nextIndex < 0) return;
+              event.preventDefault();
+              const nextRoute = data.routes[nextIndex];
+              setActiveRouteId(nextRoute.id);
+              setEditing(null);
+              window.setTimeout(() => document.getElementById(`route-tab-${encodeURIComponent(nextRoute.id)}`)?.focus(), 0);
+            }}
+          ><strong>模型 · {route.id}</strong><span>{routingModeLabel(route.routing_mode)} · {route.targets.length} 个目标</span></button>;
+        })}
+      </div>
+    <div aria-labelledby={`route-tab-${encodeURIComponent(activeRouteId)}`} className="configuration-tabpanel" id={`route-list-${encodeURIComponent(activeRouteId)}`} role="tabpanel" tabIndex={0}>
+    <div className="route-list">{data?.routes.filter((route) => route.id === activeRouteId).map((route) => {
       const previewing = draggingTarget?.routeId === route.id && dragOverTarget?.routeId === route.id;
       const visibleTargets = previewing ? moveTargetsByKey(route.targets, draggingTarget.key, dragOverTarget.key, dragOverTarget.position) : route.targets;
       return <article className="route-item" key={route.id}>
@@ -177,11 +212,8 @@ export function RoutingPage({ configPath, onUnifiedModelChange }: RoutingPagePro
       <ul
         aria-label={`${route.id} 的路由目标`}
         className={`route-target-dropzone${savingTargetOrder === route.id ? " is-saving" : ""}`}
-        onPointerUp={(event) => {
-          const activeTarget = draggingTargetRef.current;
-          const target = (event.target as HTMLElement).closest<HTMLElement>("[data-target-key]");
-          const overTarget = dragOverTargetRef.current;
-          if (activeTarget?.routeId === route.id && target?.dataset.routeId === route.id && target.dataset.targetKey && overTarget?.key === target.dataset.targetKey) void saveTargetOrder(route, overTarget, activeTarget);
+        onPointerUp={() => {
+          void saveTargetOrder(route, dragOverTargetRef.current);
         }}
         onPointerCancel={cancelDrag}
       >
@@ -222,6 +254,8 @@ export function RoutingPage({ configPath, onUnifiedModelChange }: RoutingPagePro
       </form> : null}
     </article>;
     })}</div>
+    </div>
+    </div> : null}
     </section>
     {copyToast}
   </section>;

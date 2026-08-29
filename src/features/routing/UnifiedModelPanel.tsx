@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import {
+  amkrReasoningEfforts,
   deleteAmkrUnifiedModel,
   getAmkrModels,
   getAmkrUnifiedModel,
   updateAmkrModelReasoningEffort,
   updateAmkrUnifiedModel,
   type AmkrModel,
+  type AmkrReasoningEffort,
   type AmkrUnifiedModel,
 } from "../../api/amkr";
 import { useConfirmDialog } from "../../components/ConfirmDialog";
@@ -17,7 +19,6 @@ type UnifiedModelPanelProps = {
 };
 
 type RoutingChoice = "auto" | "key";
-const reasoningEfforts = ["none", "minimal", "low", "medium", "high", "xhigh"] as const;
 
 const errorMessage = (reason: unknown) => reason instanceof Error ? reason.message : String(reason);
 
@@ -33,7 +34,7 @@ export function UnifiedModelPanel({ configPath, onChange, refreshToken = 0 }: Un
   const [selectedModel, setSelectedModel] = useState("");
   const [routingChoice, setRoutingChoice] = useState<RoutingChoice>("auto");
   const [selectedKey, setSelectedKey] = useState("");
-  const [reasoningEffort, setReasoningEffort] = useState("");
+  const [reasoningEffort, setReasoningEffort] = useState<AmkrReasoningEffort | "">("");
   const [fallbackModel, setFallbackModel] = useState("");
   const [fallbackKey, setFallbackKey] = useState("");
   const [imageModel, setImageModel] = useState("");
@@ -86,6 +87,8 @@ export function UnifiedModelPanel({ configPath, onChange, refreshToken = 0 }: Un
   const fallbackKeys = fallbackModelDetails?.keys.filter((key) => key.enabled) ?? [];
   const imageModelDetails = models.find((model) => model.id === imageModel);
   const imageKeys = imageModelDetails?.keys.filter((key) => key.enabled) ?? [];
+  const isReasoningEffort = (value: string): value is AmkrReasoningEffort =>
+    (amkrReasoningEfforts as readonly string[]).includes(value);
 
   const chooseModel = (model: string) => {
     if (fallbackModel === model && selectedModel && selectedModel !== model) {
@@ -251,9 +254,12 @@ export function UnifiedModelPanel({ configPath, onChange, refreshToken = 0 }: Un
           {routingChoice === "key" ? <label>Key<select aria-label="Key" disabled={saving} value={selectedKey} onChange={(event) => setSelectedKey(event.target.value)}>
             {enabledKeys.map((key) => <option key={key.name} value={key.name}>{key.name}</option>)}
           </select></label> : null}
-          <label>推理强度<select aria-label="推理强度" disabled={saving} value={reasoningEffort} onChange={(event) => setReasoningEffort(event.target.value)}>
+          <label>推理强度<select aria-label="推理强度" disabled={saving} value={reasoningEffort} onChange={(event) => {
+             const value = event.target.value;
+             setReasoningEffort(value === "" || isReasoningEffort(value) ? value : "");
+           }}>
             <option value="">默认</option>
-            {reasoningEfforts.map((effort) => <option key={effort} value={effort}>{effort}</option>)}
+            {amkrReasoningEfforts.map((effort) => <option key={effort} value={effort}>{effort}</option>)}
           </select></label>
           </div>
           {selectedModelDetails ? <div className="unified-model-summary" aria-label="模型能力">

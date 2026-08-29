@@ -45,9 +45,10 @@ type ProviderCardProps = {
   provider: AmkrProvider;
   revision: string;
   refresh: () => Promise<AmkrProvidersResponse | null>;
+  onProviderIdChange?: (providerId: string) => void;
 };
 
-function ProviderCard({ configPath, provider, revision, refresh }: ProviderCardProps) {
+function ProviderCard({ configPath, provider, revision, refresh, onProviderIdChange }: ProviderCardProps) {
   const [editingProvider, setEditingProvider] = useState(false);
   const [providerId, setProviderId] = useState(provider.id);
   const [providerUrl, setProviderUrl] = useState(provider.base_url);
@@ -313,7 +314,7 @@ function ProviderCard({ configPath, provider, revision, refresh }: ProviderCardP
     if (await confirm(`删除模型池 ${name}？`)) void mutate(() => deleteAmkrPool(revision, provider.id, name, configPath));
   };
 
-  return <article className="provider-item">
+  return <article aria-label={`${provider.id} 供应商配置`} className="provider-item">
     <header className="provider-summary">
       <div className="provider-identity"><h3>{provider.id}</h3><p>{provider.base_url}</p><span>{provider.keys.length} 个 Key · {provider.pools.length} 个模型池</span></div>
       <div className="item-actions">
@@ -322,7 +323,7 @@ function ProviderCard({ configPath, provider, revision, refresh }: ProviderCardP
       </div>
     </header>
 
-    {editingProvider ? <form className="inline-form editor-form provider-editor" onSubmit={(event) => { event.preventDefault(); void (async () => { if (await mutate(() => updateAmkrProvider(revision, provider.id, providerId, providerUrl, Object.fromEntries(Object.entries(providerRoutes).filter(([, value]) => value.trim()).map(([mode, value]) => [mode, value.trim()])), configPath))) setEditingProvider(false); })(); }}>
+    {editingProvider ? <form className="inline-form editor-form provider-editor" onSubmit={(event) => { event.preventDefault(); void (async () => { if (await mutate(() => updateAmkrProvider(revision, provider.id, providerId, providerUrl, Object.fromEntries(Object.entries(providerRoutes).filter(([, value]) => value.trim()).map(([mode, value]) => [mode, value.trim()])), configPath))) { onProviderIdChange?.(providerId.trim()); setEditingProvider(false); } })(); }}>
       <label>供应商名称<input required value={providerId} onChange={(event) => setProviderId(event.target.value)} /></label>
       <label>供应商地址<input required type="url" value={providerUrl} onChange={(event) => setProviderUrl(event.target.value)} /></label>
       <details className="provider-advanced-settings">
@@ -443,12 +444,14 @@ export function ProvidersPage({ configPath }: { configPath: string | null }) {
   const [baseUrl, setBaseUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeProviderId, setActiveProviderId] = useState("");
 
   const refresh = async () => {
     setLoading(true);
     try {
       const next = await getAmkrProviders(configPath);
       setData(next);
+      setActiveProviderId((current) => next.providers.some((provider) => provider.id === current) ? current : next.providers[0]?.id ?? "");
       setError(null);
       return next;
     }
@@ -473,6 +476,40 @@ export function ProvidersPage({ configPath }: { configPath: string | null }) {
     {loading ? <p className="empty-state">正在读取供应商配置。</p> : null}
     {error ? <p className="service-action-error">无法读取或写入供应商配置: {error}</p> : null}
     {data?.providers.length === 0 ? <p className="empty-state">尚未配置供应商。</p> : null}
-    <div className="provider-list">{data?.providers.map((provider) => <ProviderCard configPath={configPath} key={provider.id} provider={provider} refresh={refresh} revision={data.config_revision} />)}</div>
+    {data?.providers.length ? <div className="configuration-tabs">
+      <div aria-label="供应商列表" className="configuration-tablist" role="tablist">
+        {data.providers.map((provider) => {
+          const selected = provider.id === activeProviderId;
+          return <button
+            aria-controls={`provider-panel-${encodeURIComponent(provider.id)}`}
+            aria-selected={selected}
+            className="configuration-tab"
+            id={`provider-tab-${encodeURIComponent(provider.id)}`}
+            key={provider.id}
+            role="tab"
+            tabIndex={selected ? 0 : -1}
+            type="button"
+            aria-label={provider.id}
+            onClick={() => setActiveProviderId(provider.id)}
+            onKeyDown={(event) => {
+              const index = data.providers.findIndex((item) => item.id === provider.id);
+              const nextIndex = event.key === "ArrowRight" ? (index + 1) % data.providers.length : event.key === "ArrowLeft" ? (index - 1 + data.providers.length) % data.providers.length : -1;
+              if (nextIndex < 0) return;
+              event.preventDefault();
+              setActiveProviderId(data.providers[nextIndex].id);
+              window.setTimeout(() => document.getElementById(`provider-tab-${encodeURIComponent(data.providers[nextIndex].id)}`)?.focus(), 0);
+            }}
+          ><strong>供应商 · {provider.id}</strong><span>{provider.keys.length} Key · {provider.pools.length} 池</span></button>;
+        })}
+      </div>
+      {data.providers.map((provider) => provider.id === activeProviderId ? <div
+        aria-labelledby={`provider-tab-${encodeURIComponent(provider.id)}`}
+        className="configuration-tabpanel"
+        id={`provider-panel-${encodeURIComponent(provider.id)}`}
+        key={provider.id}
+        role="tabpanel"
+        tabIndex={0}
+      ><ProviderCard configPath={configPath} provider={provider} refresh={refresh} revision={data.config_revision} onProviderIdChange={setActiveProviderId} /></div> : null)}
+    </div> : null}
   </section>;
 }

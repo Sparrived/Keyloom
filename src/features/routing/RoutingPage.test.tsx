@@ -17,6 +17,30 @@ describe("RoutingPage", () => {
     });
   });
 
+  it("shows only the selected model route panel", async () => {
+    const routes = [
+      { id: "model-a", aliases: ["alias-a"], routing_mode: "round_robin", targets: [{ provider: "provider-a", pool: "pool-a", upstream_model: "model-a" }] },
+      { id: "model-b", aliases: ["alias-b"], routing_mode: "priority", targets: [{ provider: "provider-b", pool: "pool-b", upstream_model: "model-b" }] },
+    ];
+    invokeMock.mockImplementation(async (command) => command === "get_amkr_routes"
+      ? { config_revision: "revision-a", routes }
+      : command === "get_amkr_models" ? { models: [] } : { unified_model: null });
+
+    render(<RoutingPage configPath={null} />);
+    await screen.findByRole("tab", { name: "model-a" });
+
+    expect(screen.getAllByRole("tab")).toHaveLength(2);
+    expect(screen.getByRole("tab", { name: "model-a" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByLabelText("model-a 的路由目标")).toBeInTheDocument();
+    expect(screen.queryByLabelText("model-b 的路由目标")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "model-b" }));
+
+    expect(screen.getByRole("tab", { name: "model-b" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByLabelText("model-b 的路由目标")).toBeInTheDocument();
+    expect(screen.queryByLabelText("model-a 的路由目标")).not.toBeInTheDocument();
+  });
+
   it("does not expose model or upstream target configuration", async () => {
     render(<RoutingPage configPath="C:/amkr.json" />);
     await screen.findByText("model-a");
@@ -53,13 +77,15 @@ describe("RoutingPage", () => {
     }));
   });
 
-  it("saves displayed upstream target order immediately after dropping", async () => {
+  it("saves displayed upstream target order when the drop preview has moved the source row", async () => {
     render(<RoutingPage configPath="C:/amkr.json" />);
     await screen.findByText("model-a");
-    const rows = screen.getByLabelText("model-a 的路由目标").querySelectorAll("li");
+    const targetList = screen.getByLabelText("model-a 的路由目标");
+    const rows = targetList.querySelectorAll("li");
     fireEvent.pointerDown(rows[1], { button: 0 });
     fireEvent.pointerEnter(rows[0]);
-    fireEvent.pointerUp(rows[0]);
+    expect(targetList.querySelectorAll("li")[0]).toHaveTextContent("provider-b / pool-b / model-b");
+    fireEvent.pointerUp(targetList.querySelectorAll("li")[0]);
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_amkr_route", expect.objectContaining({
       targets: [

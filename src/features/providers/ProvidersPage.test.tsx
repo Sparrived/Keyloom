@@ -29,6 +29,30 @@ describe("ProvidersPage", () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
   });
 
+  it("shows only the selected provider panel", async () => {
+    const multiProviderResponse = {
+      ...response,
+      providers: [
+        response.providers[0],
+        { id: "b.example.test", base_url: "https://b.example.test", keys: [], pools: [], routes: {} },
+      ],
+    };
+    invokeMock.mockImplementation(async (command) => command === "get_amkr_providers" ? multiProviderResponse : response);
+
+    render(<ProvidersPage configPath={null} />);
+    await screen.findByRole("heading", { name: "a.example.test" });
+
+    expect(screen.getAllByRole("tab")).toHaveLength(2);
+    expect(screen.getByRole("tab", { name: "a.example.test" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByRole("heading", { name: "b.example.test" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "b.example.test" }));
+
+    expect(screen.getByRole("tab", { name: "b.example.test" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("heading", { name: "b.example.test" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "a.example.test" })).not.toBeInTheDocument();
+  });
+
   it("edits a provider without rebuilding its keys and pools", async () => {
     render(<ProvidersPage configPath="C:/amkr.json" />);
     await screen.findByText("a.example.test");
