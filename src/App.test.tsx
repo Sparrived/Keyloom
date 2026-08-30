@@ -765,7 +765,12 @@ describe("Keyloom application shell", () => {
     await screen.findByRole("radio", { name: "自动路由" });
     fireEvent.click(screen.getByRole("radio", { name: "固定 Key" }));
     fireEvent.click(screen.getByRole("button", { name: "保存统一模型" }));
-    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_amkr_unified_model", { configPath: null, model: "model-a", key: "key-a", fallback: null, image: null }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_amkr_unified_model", {
+      configPath: null,
+      configRevision: null,
+      default: { primary: { model: "model-a", key: "key-a" }, fallback: null },
+      image: null,
+    }));
     fireEvent.click(screen.getByRole("button", { name: "概览" }));
 
     expect(screen.getByText("固定 Key · key-a · 1 个目标")).toBeInTheDocument();
@@ -805,9 +810,8 @@ describe("Keyloom application shell", () => {
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_amkr_unified_model", {
       configPath: null,
-      model: "model-a",
-      key: null,
-      fallback: null,
+      configRevision: null,
+      default: { primary: { model: "model-a", key: null } },
       image: null,
     }));
     expect(screen.getByRole("region", { name: "统一模型" })).toHaveClass("is-enabled");
@@ -853,9 +857,11 @@ describe("Keyloom application shell", () => {
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_amkr_unified_model", {
       configPath: null,
-      model: "model-b",
-      key: null,
-      fallback: null,
+      configRevision: null,
+      default: {
+        primary: { model: "model-b", key: null },
+        fallback: null,
+      },
       image: null,
     }));
     expect(screen.getByRole("combobox", { name: "快速选择统一模型" })).toHaveValue("model-b");

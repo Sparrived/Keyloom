@@ -11,6 +11,7 @@ import {
   getAmkrLocalApiKey,
   getAmkrMetricHistory,
   getAmkrMetrics,
+  getAmkrUnifiedModel,
   getAmkrToolStatus,
   initializeDefaultAmkrConfig,
   isAmkrVersionCompatible,
@@ -431,7 +432,12 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
     setUnifiedModelAction(true);
     setUnifiedModelError(null);
     try {
-      const response = await updateAmkrUnifiedModel({ default: { primary: { model, key: null } } }, selectedConfigPath);
+      const current = await getAmkrUnifiedModel(selectedConfigPath);
+      const response = await updateAmkrUnifiedModel(
+        current?.config_revision ?? null,
+        { default: { primary: { model, key: null } } },
+        selectedConfigPath,
+      );
       applyUnifiedModel(response.unified_model);
     } catch (error: unknown) {
       setUnifiedModelError(error instanceof Error ? error.message : String(error));
@@ -445,7 +451,8 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
     setUnifiedModelAction(true);
     setUnifiedModelError(null);
     try {
-      await deleteAmkrUnifiedModel(selectedConfigPath);
+      const current = await getAmkrUnifiedModel(selectedConfigPath);
+      await deleteAmkrUnifiedModel(current?.config_revision ?? null, selectedConfigPath);
       applyUnifiedModel(null);
     } catch (error: unknown) {
       setUnifiedModelError(error instanceof Error ? error.message : String(error));
@@ -460,14 +467,19 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
     setUnifiedModelError(null);
     try {
       const current = health.unified_model;
-      const response = await updateAmkrUnifiedModel({
-        ...current,
-        default: {
-          ...current.default,
-          primary: { model, key: null },
-          fallback: current.default.fallback?.model === model ? null : current.default.fallback,
+      const currentResponse = await getAmkrUnifiedModel(selectedConfigPath);
+      const response = await updateAmkrUnifiedModel(
+        currentResponse?.config_revision ?? null,
+        {
+          ...current,
+          default: {
+            ...current.default,
+            primary: { model, key: null },
+            fallback: current.default.fallback?.model === model ? null : current.default.fallback,
+          },
         },
-      }, selectedConfigPath);
+        selectedConfigPath,
+      );
       applyUnifiedModel(response.unified_model);
     } catch (error: unknown) {
       setUnifiedModelError(error instanceof Error ? error.message : String(error));

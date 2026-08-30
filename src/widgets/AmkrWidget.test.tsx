@@ -98,9 +98,11 @@ describe("AmkrWidget", () => {
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_amkr_unified_model", {
       configPath: null,
-      model: "model-b",
-      key: null,
-      fallback: { model: "backup", key: null },
+      configRevision: null,
+      default: {
+        primary: { model: "model-b", key: null },
+        fallback: { model: "backup", key: null },
+      },
       image: null,
     }));
   });

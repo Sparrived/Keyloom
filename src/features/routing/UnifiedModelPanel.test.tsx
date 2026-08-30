@@ -48,9 +48,8 @@ describe("UnifiedModelPanel", () => {
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_amkr_unified_model", {
       configPath: "C:/amkr.json",
-      model: "model-b",
-      key: null,
-      fallback: null,
+      configRevision: null,
+      default: { primary: { model: "model-b", key: null }, fallback: null },
       image: null,
     }));
     expect(onChange).toHaveBeenCalledWith({ default: { primary: { model: "model-b", key: null } } });
@@ -102,9 +101,11 @@ describe("UnifiedModelPanel", () => {
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_amkr_unified_model", {
       configPath: null,
-      model: "model-b",
-      key: "key-b",
-      fallback: { model: "model-a", key: "key-a" },
+      configRevision: null,
+      default: {
+        primary: { model: "model-b", key: "key-b" },
+        fallback: { model: "model-a", key: "key-a" },
+      },
       image: null,
     }));
   });
@@ -139,9 +140,11 @@ describe("UnifiedModelPanel", () => {
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_amkr_unified_model", {
       configPath: null,
-      model: "model-a",
-      key: null,
-      fallback: { model: "model-b", key: null },
+      configRevision: null,
+      default: {
+        primary: { model: "model-a", key: null },
+        fallback: { model: "model-b", key: null },
+      },
       image: { primary: { model: "model-b", key: null } },
     }));
   });

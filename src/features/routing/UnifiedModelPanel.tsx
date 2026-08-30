@@ -30,6 +30,7 @@ function statusLabel(unifiedModel: AmkrUnifiedModel | null) {
 
 export function UnifiedModelPanel({ configPath, onChange, title = "统一模型" }: UnifiedModelPanelProps) {
   const [models, setModels] = useState<AmkrModel[]>([]);
+  const [configRevision, setConfigRevision] = useState<string | null>(null);
   const [unifiedModel, setUnifiedModel] = useState<AmkrUnifiedModel | null>(null);
   const [selectedModel, setSelectedModel] = useState("");
   const [routingChoice, setRoutingChoice] = useState<RoutingChoice>("auto");
@@ -58,6 +59,7 @@ export function UnifiedModelPanel({ configPath, onChange, title = "统一模型"
         ]);
         if (cancelled) return;
         const nextModels = modelsResponse?.models ?? [];
+        setConfigRevision(unifiedResponse?.config_revision ?? modelsResponse?.config_revision ?? null);
         const nextUnifiedModel = unifiedResponse?.unified_model ?? null;
         const target = nextUnifiedModel?.default.primary;
         const targetModel = nextModels.find((model) => model.id === (target?.model ?? nextModels[0]?.id));
@@ -168,11 +170,22 @@ export function UnifiedModelPanel({ configPath, onChange, title = "统一模型"
       const currentReasoningEffort = selectedModelDetails?.reasoning_effort ?? null;
       let updatedModel: AmkrModel | null = null;
       if (selectedModelDetails && nextReasoningEffort !== currentReasoningEffort) {
-        updatedModel = await updateAmkrModelReasoningEffort(selectedModel, nextReasoningEffort, configPath);
+        updatedModel = await updateAmkrModelReasoningEffort(
+          configRevision,
+          selectedModel,
+          nextReasoningEffort,
+          configPath,
+        );
         setModels((current) => current.map((model) => model.id === updatedModel?.id ? updatedModel : model));
+        setConfigRevision(updatedModel?.config_revision ?? configRevision);
       }
-      const response = await updateAmkrUnifiedModel(nextDraft, configPath);
+      const response = await updateAmkrUnifiedModel(
+        updatedModel?.config_revision ?? configRevision,
+        nextDraft,
+        configPath,
+      );
       const nextUnifiedModel = response?.unified_model ?? null;
+       setConfigRevision(response?.config_revision ?? updatedModel?.config_revision ?? configRevision);
       setUnifiedModel(nextUnifiedModel);
       const target = nextUnifiedModel?.default.primary;
       if (target) {
@@ -201,7 +214,7 @@ export function UnifiedModelPanel({ configPath, onChange, title = "统一模型"
     setError(null);
     setNotice(null);
     try {
-      await deleteAmkrUnifiedModel(configPath);
+      await deleteAmkrUnifiedModel(configRevision, configPath);
       setUnifiedModel(null);
       setEditing(false);
       setNotice("统一模型已停用。");

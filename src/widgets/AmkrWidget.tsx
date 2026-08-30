@@ -127,6 +127,7 @@ export function AmkrWidget() {
   const widgetDragStart = useRef<{ x: number; y: number } | null>(null);
   const [metrics, setMetrics] = useState<AmkrMetrics | null>(null);
   const [models, setModels] = useState<AmkrModel[]>([]);
+  const [configRevision, setConfigRevision] = useState<string | null>(null);
   const [unifiedModel, setUnifiedModel] = useState<AmkrUnifiedModel | null>(null);
   const [modelsOpen, setModelsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -179,6 +180,7 @@ export function AmkrWidget() {
     void Promise.all([getAmkrModels(configPath()), getAmkrUnifiedModel(configPath())])
       .then(([modelResponse, unifiedResponse]) => {
         setModels(modelResponse.models);
+        setConfigRevision(unifiedResponse.config_revision ?? modelResponse.config_revision ?? null);
         setUnifiedModel(unifiedResponse.unified_model);
       })
       .catch(() => undefined);
@@ -204,7 +206,13 @@ export function AmkrWidget() {
       const next: AmkrUnifiedModel = unifiedModel
         ? { ...unifiedModel, default: { ...unifiedModel.default, primary: { model: modelId, key: null } } }
         : { default: { primary: { model: modelId, key: null } } };
-      const response = await updateAmkrUnifiedModel(next, configPath());
+      const latest = await getAmkrUnifiedModel(configPath());
+      const response = await updateAmkrUnifiedModel(
+        latest.config_revision ?? configRevision,
+        next,
+        configPath(),
+      );
+      setConfigRevision(response.config_revision ?? latest.config_revision ?? configRevision);
       setUnifiedModel(response.unified_model);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
