@@ -1,5 +1,6 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { AmkrProvidersResponse } from "../../api/amkr";
 import { ProvidersPage } from "./ProvidersPage";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
@@ -51,6 +52,47 @@ describe("ProvidersPage", () => {
     expect(screen.getByRole("tab", { name: "b.example.test" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("heading", { name: "b.example.test" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "a.example.test" })).not.toBeInTheDocument();
+  });
+
+  it("opens provider creation from the first independent tab-bar button", async () => {
+    let current: AmkrProvidersResponse = response;
+    invokeMock.mockImplementation(async (command) => {
+      if (command === "get_amkr_providers") return current;
+      if (command === "create_amkr_provider") {
+        current = {
+          ...response,
+          config_revision: "revision-b",
+          providers: [
+            ...response.providers,
+            { id: "b.example.test", base_url: "https://b.example.test", keys: [], pools: [], routes: {} },
+          ],
+        };
+        return undefined;
+      }
+      return response;
+    });
+
+    render(<ProvidersPage configPath="C:/amkr.json" />);
+    const addButton = await screen.findByRole("button", { name: "添加供应商" });
+    const tablist = screen.getByRole("tablist", { name: "供应商列表" });
+
+    expect(tablist.previousElementSibling).toBe(addButton);
+    expect(screen.queryByRole("dialog", { name: "添加供应商" })).not.toBeInTheDocument();
+
+    fireEvent.click(addButton);
+    const dialog = screen.getByRole("dialog", { name: "添加供应商" });
+    fireEvent.change(within(dialog).getByLabelText("名称"), { target: { value: "b.example.test" } });
+    fireEvent.change(within(dialog).getByLabelText("地址"), { target: { value: "https://b.example.test" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "添加供应商" }));
+
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("create_amkr_provider", {
+      configPath: "C:/amkr.json",
+      configRevision: "revision-a",
+      id: "b.example.test",
+      baseUrl: "https://b.example.test",
+    }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "添加供应商" })).not.toBeInTheDocument());
+    expect(screen.getByRole("tab", { name: "b.example.test" })).toHaveAttribute("aria-selected", "true");
   });
 
   it("edits a provider without rebuilding its keys and pools", async () => {
@@ -168,6 +210,8 @@ describe("ProvidersPage", () => {
     await screen.findByText("a.example.test");
 
     fireEvent.click(screen.getByRole("button", { name: "添加 Key" }));
+    const dialog = screen.getByRole("dialog", { name: "添加 Key" });
+    expect(dialog.parentElement?.parentElement).toBe(document.body);
     fireEvent.change(screen.getByLabelText("Key 名称"), { target: { value: "key-b" } });
     fireEvent.change(screen.getByLabelText("API Key"), { target: { value: "secret-b" } });
     fireEvent.click(screen.getByRole("button", { name: "添加 Key" }));

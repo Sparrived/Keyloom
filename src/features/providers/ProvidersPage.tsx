@@ -21,6 +21,7 @@ import { ProbePanel } from "./ProbePanel";
 import type { AmkrProbeResult } from "../../api/amkr";
 import { useCopyToast } from "../../components/CopyToast";
 import { useConfirmDialog } from "../../components/ConfirmDialog";
+import { GlobalPortal } from "../../components/GlobalPortal";
 
 const csv = (value: string) => value.split(",").map((item) => item.trim()).filter(Boolean);
 const errorMessage = (reason: unknown) => reason instanceof Error ? reason.message : String(reason);
@@ -415,7 +416,7 @@ function ProviderCard({ configPath, provider, revision, refresh, onProviderIdCha
     </div>
     <ProbePanel configPath={configPath} providerId={provider.id} keys={provider.keys.map((key) => key.name)} pools={provider.pools.map((pool) => pool.name)} onPoolProbeResults={handlePoolProbeResults} onPoolProbeStatus={setPoolProbeStatus} poolProbeRequest={poolProbeRequest} />
     {error ? <p className="service-action-error">操作失败: {error}</p> : null}
-    {addingKey ? <div className="close-dialog-backdrop key-create-backdrop" onKeyDown={(event) => { if (event.key === "Escape") closeKeyDialog(); }}>
+    {addingKey ? <GlobalPortal><div className="close-dialog-backdrop key-create-backdrop" onKeyDown={(event) => { if (event.key === "Escape") closeKeyDialog(); }}>
       <section aria-labelledby="key-create-dialog-heading" aria-modal="true" className="close-dialog key-create-dialog" role="dialog">
         <div className="key-create-dialog-heading"><div><span className="eyebrow">供应商 / {provider.id}</span><h2 id="key-create-dialog-heading">添加 Key</h2></div><span className={`key-create-orbit key-create-orbit-${keyCreateStep}`} aria-hidden="true" /></div>
         {keyCreateStep === "idle" || keyCreateStep === "error" ? <form className="key-create-form" onSubmit={(event) => { event.preventDefault(); void createKeyAndAssignPool(); }}>
@@ -432,7 +433,7 @@ function ProviderCard({ configPath, provider, revision, refresh, onProviderIdCha
           </ol>
         </div>}
       </section>
-    </div> : null}
+    </div></GlobalPortal> : null}
     {confirmDialog}
     {copyToast}
   </article>;
@@ -443,7 +444,10 @@ export function ProvidersPage({ configPath }: { configPath: string | null }) {
   const [id, setId] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [providerCreateError, setProviderCreateError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [creatingProvider, setCreatingProvider] = useState(false);
+  const [providerCreateOpen, setProviderCreateOpen] = useState(false);
   const [activeProviderId, setActiveProviderId] = useState("");
 
   const refresh = async () => {
@@ -463,22 +467,47 @@ export function ProvidersPage({ configPath }: { configPath: string | null }) {
   };
   useEffect(() => { void refresh(); }, [configPath]);
 
+  const closeProviderCreateDialog = () => {
+    if (creatingProvider) return;
+    setProviderCreateOpen(false);
+    setProviderCreateError(null);
+    setId("");
+    setBaseUrl("");
+  };
+
+  const submitProvider = async () => {
+    if (!data || creatingProvider) return;
+    const providerId = id.trim();
+    const providerUrl = baseUrl.trim();
+    if (!providerId || !providerUrl) return;
+    setCreatingProvider(true);
+    setProviderCreateError(null);
+    setError(null);
+    try {
+      await createAmkrProvider(data.config_revision, providerId, providerUrl, configPath);
+      setId("");
+      setBaseUrl("");
+      await refresh();
+      setActiveProviderId(providerId);
+      setProviderCreateOpen(false);
+    } catch (reason) {
+      const message = errorMessage(reason);
+      if (isConflict(message)) await refresh();
+      setProviderCreateError(message);
+    } finally {
+      setCreatingProvider(false);
+    }
+  };
+
   return <section className="providers-page" aria-labelledby="providers-heading">
     <header className="page-header"><div><h2 id="providers-heading">供应商</h2><p>管理本机 AMKR 的上游连接、Key 与模型池。</p></div>{data ? <span className="config-revision">版本 {data.config_revision.slice(0, 12)}</span> : null}</header>
-    <section className="provider-create-panel" aria-labelledby="provider-create-heading">
-      <div><h3 id="provider-create-heading">添加供应商</h3><p>连接一个兼容 OpenAI 或 Anthropic 协议的上游服务。</p></div>
-      <form className="provider-create" onSubmit={(event) => { event.preventDefault(); if (!data) return; void (async () => { try { await createAmkrProvider(data.config_revision, id, baseUrl, configPath); setId(""); setBaseUrl(""); await refresh(); } catch (reason) { const message = errorMessage(reason); if (isConflict(message)) await refresh(); setError(message); } })(); }}>
-        <label>名称<input required value={id} onChange={(event) => setId(event.target.value)} placeholder="例如 openai" /></label>
-        <label>地址<input required type="url" value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} placeholder="https://api.example.com" /></label>
-        <button type="submit" disabled={!data || loading}>添加</button>
-      </form>
-    </section>
     {loading ? <p className="empty-state">正在读取供应商配置。</p> : null}
     {error ? <p className="service-action-error">无法读取或写入供应商配置: {error}</p> : null}
-    {data?.providers.length === 0 ? <p className="empty-state">尚未配置供应商。</p> : null}
-    {data?.providers.length ? <div className="configuration-tabs">
-      <div aria-label="供应商列表" className="configuration-tablist" role="tablist">
-        {data.providers.map((provider) => {
+    {data ? <div className="configuration-tabs">
+      <div className="configuration-tabbar">
+        <button aria-controls="provider-create-dialog" aria-expanded={providerCreateOpen} aria-haspopup="dialog" className="provider-add-button" disabled={loading} type="button" onClick={() => { setProviderCreateError(null); setProviderCreateOpen(true); }}>添加供应商</button>
+        {data.providers.length ? <div aria-label="供应商列表" className="configuration-tablist" role="tablist">
+          {data.providers.map((provider) => {
           const selected = provider.id === activeProviderId;
           return <button
             aria-controls={`provider-panel-${encodeURIComponent(provider.id)}`}
@@ -499,9 +528,11 @@ export function ProvidersPage({ configPath }: { configPath: string | null }) {
               setActiveProviderId(data.providers[nextIndex].id);
               window.setTimeout(() => document.getElementById(`provider-tab-${encodeURIComponent(data.providers[nextIndex].id)}`)?.focus(), 0);
             }}
-          ><strong>供应商 · {provider.id}</strong><span>{provider.keys.length} Key · {provider.pools.length} 池</span></button>;
-        })}
+            ><strong>供应商 · {provider.id}</strong><span>{provider.keys.length} Key · {provider.pools.length} 池</span></button>;
+          })}
+        </div> : null}
       </div>
+      {data.providers.length === 0 ? <p className="empty-state provider-empty-state">尚未配置供应商。</p> : null}
       {data.providers.map((provider) => provider.id === activeProviderId ? <div
         aria-labelledby={`provider-tab-${encodeURIComponent(provider.id)}`}
         className="configuration-tabpanel"
@@ -511,5 +542,17 @@ export function ProvidersPage({ configPath }: { configPath: string | null }) {
         tabIndex={0}
       ><ProviderCard configPath={configPath} provider={provider} refresh={refresh} revision={data.config_revision} onProviderIdChange={setActiveProviderId} /></div> : null)}
     </div> : null}
+    {providerCreateOpen ? <GlobalPortal><div className="close-dialog-backdrop provider-create-backdrop" onKeyDown={(event) => { if (event.key === "Escape") closeProviderCreateDialog(); }}>
+      <section aria-labelledby="provider-create-dialog-heading" aria-modal="true" className="close-dialog provider-create-dialog" id="provider-create-dialog" role="dialog">
+        <div className="provider-create-dialog-heading"><div><span className="eyebrow">供应商</span><h2 id="provider-create-dialog-heading">添加供应商</h2></div><button className="provider-create-dialog-close" disabled={creatingProvider} type="button" onClick={closeProviderCreateDialog}>关闭</button></div>
+        <p>连接一个兼容 OpenAI 或 Anthropic 协议的上游服务。</p>
+        <form className="provider-create" onSubmit={(event) => { event.preventDefault(); void submitProvider(); }}>
+          <label>名称<input autoFocus disabled={creatingProvider} required value={id} onChange={(event) => setId(event.target.value)} placeholder="例如 openai" /></label>
+          <label>地址<input disabled={creatingProvider} required type="url" value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} placeholder="https://api.example.com" /></label>
+          {providerCreateError ? <p className="service-action-error" role="alert">添加失败: {providerCreateError}</p> : null}
+          <div className="close-dialog-actions"><button className="secondary-button" disabled={creatingProvider} type="button" onClick={closeProviderCreateDialog}>取消</button><button className="tray-action" disabled={!data || creatingProvider} type="submit">{creatingProvider ? "添加中" : "添加供应商"}</button></div>
+        </form>
+      </section>
+    </div></GlobalPortal> : null}
   </section>;
 }
