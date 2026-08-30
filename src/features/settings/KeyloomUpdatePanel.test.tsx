@@ -67,6 +67,7 @@ describe("KeyloomUpdatePanel", () => {
     const dialog = screen.getByRole("dialog", { name: "安装 Keyloom 更新？" });
 
     expect(dialog).toBeInTheDocument();
+    expect(dialog.parentElement?.parentElement).toBe(document.body);
     expect(confirm).not.toHaveBeenCalled();
     expect(update.downloadAndInstall).not.toHaveBeenCalled();
     fireEvent.click(within(dialog).getByRole("button", { name: "下载并安装" }));

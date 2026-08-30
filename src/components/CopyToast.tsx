@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { GlobalPortal } from "./GlobalPortal";
 
 let nextNoticeId = 0;
 
@@ -13,6 +14,6 @@ export function useCopyToast() {
 
   return {
     showCopyToast: (message: string) => setNotice({ id: ++nextNoticeId, message }),
-    copyToast: notice ? <div aria-atomic="true" aria-live="polite" className="copy-toast" key={notice.id} role="status">{notice.message}</div> : null,
+    copyToast: notice ? <GlobalPortal><div aria-atomic="true" aria-live="polite" className="copy-toast" key={notice.id} role="status">{notice.message}</div></GlobalPortal> : null,
   };
 }

@@ -15,7 +15,9 @@ describe("copy toast", () => {
     render(<ToastHarness />);
 
     fireEvent.click(screen.getByRole("button", { name: "复制" }));
-    expect(screen.getByRole("status")).toHaveTextContent("已复制");
+    const toast = screen.getByRole("status");
+    expect(toast).toHaveTextContent("已复制");
+    expect(toast.parentElement).toBe(document.body);
 
     act(() => vi.advanceTimersByTime(1_000));
     fireEvent.click(screen.getByRole("button", { name: "复制" }));

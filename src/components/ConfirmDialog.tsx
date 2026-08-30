@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState, type ReactNode } from "react";
+import { GlobalPortal } from "./GlobalPortal";
 
 type ConfirmOptions = { message: string; title?: string; confirmLabel?: string; danger?: boolean };
 type PendingConfirm = ConfirmOptions & { resolve: (value: boolean) => void };
@@ -20,7 +21,7 @@ export function useConfirmDialog() {
     pendingRef.current = null;
     setPending(null);
   }, []);
-  const dialog: ReactNode = pending ? <div className="close-dialog-backdrop" onKeyDown={(event) => { if (event.key === "Escape") close(false); }}>
+  const dialog: ReactNode = pending ? <GlobalPortal><div className="close-dialog-backdrop" onKeyDown={(event) => { if (event.key === "Escape") close(false); }}>
     <section aria-labelledby="confirm-dialog-heading" aria-modal="true" className="close-dialog" role="dialog">
       <h2 id="confirm-dialog-heading">{pending.title ?? "请确认"}</h2>
       <p>{pending.message}</p>
@@ -29,6 +30,6 @@ export function useConfirmDialog() {
         <button className={pending.danger ? "danger-button" : "tray-action"} type="button" onClick={() => close(true)}>{pending.confirmLabel ?? "确认"}</button>
       </div>
     </section>
-  </div> : null;
+  </div></GlobalPortal> : null;
   return { confirm, dialog };
 }

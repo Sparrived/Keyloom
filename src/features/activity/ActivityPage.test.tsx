@@ -86,7 +86,9 @@ it("shows only a copy action for selected log text", async () => {
   window.getSelection()?.selectAllChildren(output);
   fireEvent.contextMenu(output, { clientX: 20, clientY: 20 });
 
-  expect(screen.getByRole("menu")).toBeInTheDocument();
+  const menu = screen.getByRole("menu");
+  expect(menu).toBeInTheDocument();
+  expect(menu.parentElement).toBe(document.body);
   expect(screen.getByRole("menuitem", { name: "复制" })).toBeInTheDocument();
   fireEvent.click(screen.getByRole("menuitem", { name: "复制" }));
   await vi.waitFor(() => expect(clipboard.writeText).toHaveBeenCalledWith("copy this log"));

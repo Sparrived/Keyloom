@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { readAmkrLogTail, type AmkrMetrics, type AmkrUsageStats } from "../../api/amkr";
 import { useCopyToast } from "../../components/CopyToast";
+import { GlobalPortal } from "../../components/GlobalPortal";
 
 type ActivityPageProps = { configPath: string | null; metrics?: AmkrMetrics | null };
 
@@ -135,6 +136,6 @@ export function ActivityPage({ configPath, metrics = null }: ActivityPageProps) 
       <div className="card-heading"><h3 id={id}>{title}</h3><span>{rows.length} 项</span></div>
       {rows.length ? <div className="usage-table-shell"><table className="usage-breakdown-table"><thead><tr><th>{label}</th><th>请求</th><th>成功率</th><th>Token</th><th>缓存率</th><th>平均耗时</th></tr></thead><tbody>{rows.map(([name, stats]) => <tr key={name}><th scope="row">{name}</th><td>{formatCount(stats.requests)}</td><td>{successRate(stats)}</td><td>{formatCompact(stats.total_tokens)}</td><td>{percent(stats.cached_token_rate)}</td><td>{formatCount(stats.avg_duration_ms)}ms</td></tr>)}</tbody></table></div> : <p className="empty-state">{empty}</p>}
     </section>) : null}
-    <><section className="log-panel" aria-labelledby="log-heading"><div className="card-heading"><h3 id="log-heading">服务日志</h3><span>最近 64 KiB</span></div>{logError ? <p className="empty-state">日志暂不可用: {logError}</p> : logTail ? <pre aria-label="服务日志内容" ref={logOutputRef} onContextMenu={handleLogContextMenu} onScroll={() => { handleLogScroll(); setLogContextMenu(null); }}>{logLines.map((line, index) => <span className={`log-line log-line-${logLineTone(line)}`} key={index}>{line}{index < logLines.length - 1 ? "\n" : ""}</span>)}</pre> : <p className="empty-state">正在读取服务日志。</p>}</section>{logContextMenu ? <div aria-label="日志菜单" className="log-context-menu" role="menu" style={{ left: logContextMenu.x, top: logContextMenu.y }}><button role="menuitem" type="button" onClick={() => void copyLogSelection()}>复制</button></div> : null}{copyToast}</>
+    <><section className="log-panel" aria-labelledby="log-heading"><div className="card-heading"><h3 id="log-heading">服务日志</h3><span>最近 64 KiB</span></div>{logError ? <p className="empty-state">日志暂不可用: {logError}</p> : logTail ? <pre aria-label="服务日志内容" ref={logOutputRef} onContextMenu={handleLogContextMenu} onScroll={() => { handleLogScroll(); setLogContextMenu(null); }}>{logLines.map((line, index) => <span className={`log-line log-line-${logLineTone(line)}`} key={index}>{line}{index < logLines.length - 1 ? "\n" : ""}</span>)}</pre> : <p className="empty-state">正在读取服务日志。</p>}</section>{logContextMenu ? <GlobalPortal><div aria-label="日志菜单" className="log-context-menu" role="menu" style={{ left: logContextMenu.x, top: logContextMenu.y }}><button role="menuitem" type="button" onClick={() => void copyLogSelection()}>复制</button></div></GlobalPortal> : null}{copyToast}</>
   </section>;
 }

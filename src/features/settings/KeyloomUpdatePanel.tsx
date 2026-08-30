@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check, type DownloadEvent, type Update } from "@tauri-apps/plugin-updater";
 import packageMetadata from "../../../package.json";
+import { GlobalPortal } from "../../components/GlobalPortal";
 
 type UpdatePhase = "idle" | "checking" | "downloading" | "installing" | "restarting";
 
@@ -93,7 +94,7 @@ export function KeyloomUpdatePanel({ detectedVersion = null }: { detectedVersion
     {update?.body ? <p className="update-notes">{update.body}</p> : null}
     {update ? <button type="button" disabled={busy} onClick={() => setDialogOpen(true)}>{phase === "restarting" ? "正在重启 Keyloom" : busy ? "正在更新" : "下载并安装"}</button> : null}
     {error ? <p className="service-action-error" role="alert">Keyloom 更新失败: {error}</p> : null}
-    {dialogOpen && update ? <div className="close-dialog-backdrop" onKeyDown={(event) => { if (event.key === "Escape" && !dialogBusy) setDialogOpen(false); }}>
+    {dialogOpen && update ? <GlobalPortal><div className="close-dialog-backdrop" onKeyDown={(event) => { if (event.key === "Escape" && !dialogBusy) setDialogOpen(false); }}>
       <section aria-labelledby="keyloom-update-dialog-heading" aria-modal="true" className="close-dialog update-dialog" role="dialog">
         <h2 id="keyloom-update-dialog-heading">{dialogTitle}</h2>
         <p>Keyloom {packageMetadata.version} → {update.version}。安装完成后应用将自动重启。</p>
@@ -109,6 +110,6 @@ export function KeyloomUpdatePanel({ detectedVersion = null }: { detectedVersion
           <button className="tray-action" disabled={dialogBusy} type="button" onClick={() => void installUpdate()}>{error ? "重试" : "下载并安装"}</button>
         </div>
       </section>
-    </div> : null}
+    </div></GlobalPortal> : null}
   </section>;
 }
