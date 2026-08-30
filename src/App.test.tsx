@@ -62,7 +62,7 @@ describe("Keyloom application shell", () => {
   it("renders all primary navigation destinations", () => {
     render(<App />);
 
-    for (const label of ["概览", "供应商", "模型路由", "活动", "集成", "设置"]) {
+    for (const label of ["概览", "供应商", "模型路由", "统一模型", "活动", "集成", "设置"]) {
       expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
     }
     expect(screen.getByRole("button", { name: /服务状态/ })).toBeInTheDocument();
@@ -172,7 +172,9 @@ describe("Keyloom application shell", () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole("button", { name: "关闭窗口" }));
-    expect(screen.getByRole("dialog", { name: "关闭 Keyloom？" })).toBeInTheDocument();
+    const dialog = screen.getByRole("dialog", { name: "关闭 Keyloom？" });
+    expect(dialog).toBeInTheDocument();
+    expect(dialog.parentElement?.parentElement).toBe(document.body);
     expect(closeMock).not.toHaveBeenCalled();
     expect(hideMock).not.toHaveBeenCalled();
 
@@ -757,7 +759,8 @@ describe("Keyloom application shell", () => {
 
     render(<App />);
     fireEvent.click(await screen.findByRole("region", { name: "统一模型" }));
-    expect(screen.getByRole("heading", { name: "模型路由" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "统一模型" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "模型路由" })).not.toBeInTheDocument();
     fireEvent.click(await screen.findByRole("button", { name: "编辑统一模型" }));
     await screen.findByRole("radio", { name: "自动路由" });
     fireEvent.click(screen.getByRole("radio", { name: "固定 Key" }));
@@ -1135,9 +1138,11 @@ describe("Keyloom application shell", () => {
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: "供应商" }));
     await screen.findByText("尚未配置供应商。");
-    fireEvent.change(screen.getByLabelText("名称"), { target: { value: "b.example.test" } });
-    fireEvent.change(screen.getByLabelText("地址"), { target: { value: "https://b.example.test" } });
-    fireEvent.click(screen.getByRole("button", { name: "添加" }));
+    fireEvent.click(screen.getByRole("button", { name: "添加供应商" }));
+    const providerDialog = screen.getByRole("dialog", { name: "添加供应商" });
+    fireEvent.change(within(providerDialog).getByLabelText("名称"), { target: { value: "b.example.test" } });
+    fireEvent.change(within(providerDialog).getByLabelText("地址"), { target: { value: "https://b.example.test" } });
+    fireEvent.click(within(providerDialog).getByRole("button", { name: "添加供应商" }));
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("create_amkr_provider", { configPath: null, configRevision: "revision-a", id: "b.example.test", baseUrl: "https://b.example.test" }));
     expect(await screen.findByText("b.example.test")).toBeInTheDocument();

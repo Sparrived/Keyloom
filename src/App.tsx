@@ -33,15 +33,17 @@ import { IntegrationsPage } from "./features/integrations/IntegrationsPage";
 import { SettingsPage, type CloseBehavior } from "./features/settings/SettingsPage";
 import { ProvidersPage } from "./features/providers/ProvidersPage";
 import { RoutingPage } from "./features/routing/RoutingPage";
+import { UnifiedModelPage } from "./features/routing/UnifiedModelPage";
 import { useCopyToast } from "./components/CopyToast";
 import { useConfirmDialog } from "./components/ConfirmDialog";
+import { GlobalPortal } from "./components/GlobalPortal";
 
-const primaryNavigation = ["概览", "供应商", "模型路由", "活动", "集成", "设置"] as const;
+const primaryNavigation = ["概览", "供应商", "模型路由", "统一模型", "活动", "集成", "设置"] as const;
 const navigation = [...primaryNavigation, "服务状态"] as const;
 type NavigationItem = (typeof navigation)[number];
 const navigationGroups: { label: string; items: readonly NavigationItem[] }[] = [
   { label: "工作台", items: ["概览", "活动"] },
-  { label: "配置", items: ["供应商", "模型路由", "集成"] },
+  { label: "配置", items: ["供应商", "模型路由", "统一模型", "集成"] },
   { label: "系统", items: ["设置"] },
 ];
 const configPathStorageKey = "keyloom.configPath";
@@ -423,7 +425,7 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
   async function enableUnifiedModel() {
     const model = health?.models?.[0];
     if (!model) {
-      setActivePage("模型路由");
+      setActivePage("统一模型");
       return;
     }
     setUnifiedModelAction(true);
@@ -651,7 +653,7 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
               <section
                 className={`overview-card unified-model-card ${unifiedTarget ? "is-enabled" : "is-disabled"}`}
                 aria-labelledby="unified-model-heading"
-                onClick={(event) => { if (!(event.target as Element).closest("button, select")) setActivePage("模型路由"); }}
+                onClick={(event) => { if (!(event.target as Element).closest("button, select")) setActivePage("统一模型"); }}
               >
                 <div className="card-heading"><h3 id="unified-model-heading">统一模型</h3><button className={unifiedTarget ? "status-bad" : "status-good"} disabled={unifiedModelAction} type="button" onClick={(event) => { if (unifiedTarget) { dialogReturnFocus.current = event.currentTarget; setUnifiedModelPromptOpen(true); } else void enableUnifiedModel(); }}>{unifiedTarget ? "关闭" : "启用"}</button></div>
                 {unifiedTarget ? <select aria-label="快速选择统一模型" className="unified-model-quick-select" disabled={unifiedModelAction} value={unifiedModel} onChange={(event) => void selectUnifiedModel(event.target.value)}>
@@ -783,18 +785,18 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
             {serviceCommandOutput ? <pre className="service-command-output">{serviceCommandOutput}</pre> : null}
             {serviceActionError ? <p className="service-action-error">服务操作失败: {serviceActionError}</p> : null}
           </section>
-        ) : incompatibleVersion && ["供应商", "模型路由", "集成"].includes(activePage) ? (
+        ) : incompatibleVersion && ["供应商", "模型路由", "统一模型", "集成"].includes(activePage) ? (
           <section className="compatibility-page" aria-labelledby="compatibility-heading">
             <h2 id="compatibility-heading">后端版本不兼容</h2>
             <p role="alert">当前 AMKR {health?.version}，Keyloom 至少需要 {minimumCompatibleAmkrVersion}。升级前仅开放只读诊断、活动和设置。</p>
             <button className="primary-action" type="button" onClick={() => setActivePage("设置")}>打开更新设置</button>
           </section>
-        ) : activePage === "供应商" ? <ProvidersPage configPath={selectedConfigPath} /> : activePage === "模型路由" ? <RoutingPage configPath={selectedConfigPath} onUnifiedModelChange={applyUnifiedModel} /> : activePage === "活动" ? <ActivityPage configPath={selectedConfigPath} metrics={metrics} />
+        ) : activePage === "供应商" ? <ProvidersPage configPath={selectedConfigPath} /> : activePage === "模型路由" ? <RoutingPage configPath={selectedConfigPath} /> : activePage === "统一模型" ? <UnifiedModelPage configPath={selectedConfigPath} onChange={applyUnifiedModel} /> : activePage === "活动" ? <ActivityPage configPath={selectedConfigPath} metrics={metrics} />
           : activePage === "集成" ? <IntegrationsPage configPath={selectedConfigPath} baseUrl={metadata?.base_url ?? null} authEnabled={metadata?.auth_enabled ?? false} />
           : <SettingsPage amkrWidgetEnabled={amkrWidgetEnabled} closeBehavior={closeBehavior} configPath={selectedConfigPath} detectedAmkrUpdate={amkrUpdateCheck} detectedKeyloomVersion={keyloomUpdateVersion} metadata={metadata} health={health} onAmkrWidgetEnabledChange={applyAmkrWidgetEnabled} onCloseBehaviorChange={applyCloseBehavior} reduceMotion={reduceMotion} onReduceMotionChange={applyReduceMotion} onConfigPathChange={applyConfigPath} updateTarget={settingsUpdateTarget} />}
       </main>
       </div>
-      {closePromptOpen ? <div className="close-dialog-backdrop" onKeyDown={(event) => { if (event.key === "Escape") setClosePromptOpen(false); }}>
+      {closePromptOpen ? <GlobalPortal><div className="close-dialog-backdrop" onKeyDown={(event) => { if (event.key === "Escape") setClosePromptOpen(false); }}>
         <section aria-labelledby="close-dialog-heading" aria-modal="true" className="close-dialog" role="dialog">
           <h2 id="close-dialog-heading">关闭 Keyloom？</h2>
           <p>退出应用，或继续在系统托盘中运行。</p>
@@ -805,8 +807,8 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
             <button className="danger-button" type="button" onClick={() => performWindowClose("quit")}>退出 Keyloom</button>
           </div>
         </section>
-      </div> : null}
-      {unifiedModelPromptOpen ? <div className="close-dialog-backdrop" onKeyDown={(event) => { if (event.key === "Escape") setUnifiedModelPromptOpen(false); }}>
+      </div></GlobalPortal> : null}
+      {unifiedModelPromptOpen ? <GlobalPortal><div className="close-dialog-backdrop" onKeyDown={(event) => { if (event.key === "Escape") setUnifiedModelPromptOpen(false); }}>
         <section aria-labelledby="unified-model-dialog-heading" aria-modal="true" className="close-dialog" role="dialog">
           <h2 id="unified-model-dialog-heading">关闭统一模型？</h2>
           <p>关闭后，统一入口将不再接管请求。</p>
@@ -815,7 +817,7 @@ export default function App({ now = () => new Date().toISOString() }: AppProps) 
             <button className="danger-button" type="button" onClick={() => void disableUnifiedModel()}>确认关闭</button>
           </div>
         </section>
-      </div> : null}
+      </div></GlobalPortal> : null}
       {confirmDialog}
       {copyToast}
     </div>
