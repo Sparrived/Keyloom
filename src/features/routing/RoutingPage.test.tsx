@@ -41,6 +41,15 @@ describe("RoutingPage", () => {
     expect(screen.queryByLabelText("model-a 的路由目标")).not.toBeInTheDocument();
   });
 
+  it("keeps unified model configuration out of the routing page", async () => {
+    render(<RoutingPage configPath="C:/amkr.json" />);
+
+    await screen.findByRole("heading", { name: "模型路由" });
+    expect(screen.queryByRole("heading", { name: "统一模型" })).not.toBeInTheDocument();
+    expect(invokeMock).not.toHaveBeenCalledWith("get_amkr_models", expect.anything());
+    expect(invokeMock).not.toHaveBeenCalledWith("get_amkr_unified_model", expect.anything());
+  });
+
   it("does not expose model or upstream target configuration", async () => {
     render(<RoutingPage configPath="C:/amkr.json" />);
     await screen.findByText("model-a");

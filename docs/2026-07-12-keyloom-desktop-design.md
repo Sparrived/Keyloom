@@ -136,7 +136,7 @@ Keyloom 需要一个只读 AMKR 配置解析器用于发现、路径解析和迁
 | `--serve`、`--stop`、`--service` | 服务页 |
 | Provider、Pool、Key 管理 | 供应商页 |
 | 模型路由、别名、路由模式 | 模型路由页 |
-| unified model 切换 | 概览卡片、模型路由页 |
+| unified model 配置与切换 | 概览卡片、统一模型页 |
 | 请求统计、Token、缓存、延迟 | 概览图表、活动页 |
 | 运行日志和调用明细 | 活动页 |
 | Claude Code / Codex / Pi Agent 配置 | 集成页 |
@@ -199,6 +199,7 @@ POST /api/config/import
 概览
 供应商
 模型路由
+统一模型
 活动
 集成
 设置

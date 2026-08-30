@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { UnifiedModelPanel } from "./UnifiedModelPanel";
 
@@ -70,26 +70,6 @@ describe("UnifiedModelPanel", () => {
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("delete_amkr_unified_model", { configPath: null }));
     expect(onChange).toHaveBeenCalledWith(null);
-  });
-
-  it("reloads model candidates when the routing page refreshes its model token", async () => {
-    let reads = 0;
-    invokeMock.mockImplementation(async (command) => {
-      if (command === "get_amkr_models") {
-        reads += 1;
-        return { models: reads === 1 ? models.models.slice(0, 1) : models.models };
-      }
-      if (command === "get_amkr_unified_model") return { unified_model: null };
-      return undefined;
-    });
-    const { rerender } = render(<UnifiedModelPanel configPath={null} refreshToken={0} />);
-    await openEditor();
-    const modelSelect = await screen.findByLabelText("模型");
-    expect(within(modelSelect).getByRole("option", { name: "model-a" })).toBeInTheDocument();
-    expect(within(modelSelect).queryByRole("option", { name: "model-b" })).not.toBeInTheDocument();
-
-    rerender(<UnifiedModelPanel configPath={null} refreshToken={1} />);
-    await waitFor(() => expect(within(screen.getByLabelText("模型")).getByRole("option", { name: "model-b" })).toBeInTheDocument());
   });
 
   it("swaps the old primary into fallback when selecting the current fallback", async () => {

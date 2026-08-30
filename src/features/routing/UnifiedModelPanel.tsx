@@ -15,7 +15,7 @@ import { useConfirmDialog } from "../../components/ConfirmDialog";
 type UnifiedModelPanelProps = {
   configPath: string | null;
   onChange?: (unifiedModel: AmkrUnifiedModel | null) => void;
-  refreshToken?: number;
+  title?: string;
 };
 
 type RoutingChoice = "auto" | "key";
@@ -28,7 +28,7 @@ function statusLabel(unifiedModel: AmkrUnifiedModel | null) {
   return target.key ? `固定 Key · ${target.key}` : "自动路由";
 }
 
-export function UnifiedModelPanel({ configPath, onChange, refreshToken = 0 }: UnifiedModelPanelProps) {
+export function UnifiedModelPanel({ configPath, onChange, title = "统一模型" }: UnifiedModelPanelProps) {
   const [models, setModels] = useState<AmkrModel[]>([]);
   const [unifiedModel, setUnifiedModel] = useState<AmkrUnifiedModel | null>(null);
   const [selectedModel, setSelectedModel] = useState("");
@@ -79,7 +79,7 @@ export function UnifiedModelPanel({ configPath, onChange, refreshToken = 0 }: Un
     };
     void load();
     return () => { cancelled = true; };
-  }, [configPath, refreshToken]);
+  }, [configPath]);
 
   const selectedModelDetails = models.find((model) => model.id === selectedModel);
   const enabledKeys = selectedModelDetails?.keys.filter((key) => key.enabled) ?? [];
@@ -217,7 +217,7 @@ export function UnifiedModelPanel({ configPath, onChange, refreshToken = 0 }: Un
     <section className="unified-model-panel" aria-labelledby="unified-model-panel-heading">
       <header className="card-heading">
         <div>
-          <h3 id="unified-model-panel-heading">统一模型</h3>
+          <h3 id="unified-model-panel-heading">{title}</h3>
           <p>选择默认文本模型及其路由方式。</p>
         </div>
         <div className="unified-model-heading-actions">

@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { getAmkrRoutes, updateAmkrRoute, type AmkrRoute, type AmkrRouteTarget, type AmkrRoutesResponse, type AmkrUnifiedModel } from "../../api/amkr";
-import { UnifiedModelPanel } from "./UnifiedModelPanel";
+import { getAmkrRoutes, updateAmkrRoute, type AmkrRoute, type AmkrRouteTarget, type AmkrRoutesResponse } from "../../api/amkr";
 import { useCopyToast } from "../../components/CopyToast";
 
 const csv = (value: string) => value.split(",").map((item) => item.trim()).filter(Boolean);
@@ -26,10 +25,9 @@ const draftFromRoute = (route: AmkrRoute): RouteDraft => ({
 
 type RoutingPageProps = {
   configPath: string | null;
-  onUnifiedModelChange?: (unifiedModel: AmkrUnifiedModel | null) => void;
 };
 
-export function RoutingPage({ configPath, onUnifiedModelChange }: RoutingPageProps) {
+export function RoutingPage({ configPath }: RoutingPageProps) {
   const [data, setData] = useState<AmkrRoutesResponse | null>(null);
   const [editing, setEditing] = useState<RouteDraft | null>(null);
   const [draggingTarget, setDraggingTarget] = useState<DragTarget | null>(null);
@@ -43,7 +41,6 @@ export function RoutingPage({ configPath, onUnifiedModelChange }: RoutingPagePro
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeRouteId, setActiveRouteId] = useState("");
-  const [unifiedModelRefreshToken, setUnifiedModelRefreshToken] = useState(0);
   const { copyToast, showCopyToast } = useCopyToast();
 
   const refresh = async () => {
@@ -65,7 +62,6 @@ export function RoutingPage({ configPath, onUnifiedModelChange }: RoutingPagePro
       await updateAmkrRoute(data.config_revision, editing.originalId, editing.targets, csv(editing.aliases), editing.mode || null, configPath);
       setEditing(null);
       await refresh();
-      setUnifiedModelRefreshToken((value) => value + 1);
       showCopyToast("路由已保存。");
     } catch (reason) {
       const message = errorMessage(reason);
@@ -151,7 +147,6 @@ export function RoutingPage({ configPath, onUnifiedModelChange }: RoutingPagePro
       await updateAmkrRoute(data.config_revision, route.id, targets, route.aliases, route.routing_mode ?? null, configPath);
       if (editing?.originalId === route.id) setEditing(null);
       await refresh();
-      setUnifiedModelRefreshToken((value) => value + 1);
       showCopyToast("路由目标顺序已保存。");
     } catch (reason) {
       const message = errorMessage(reason);
@@ -164,7 +159,6 @@ export function RoutingPage({ configPath, onUnifiedModelChange }: RoutingPagePro
 
   return <section className="routes-page" aria-labelledby="routes-heading">
     <header className="page-header"><div><h2 id="routes-heading">模型路由</h2><p>管理路由别名和路由模式；模型与上游目标由模型池管理。</p></div>{data ? <span className="config-revision">版本 {data.config_revision.slice(0, 12)}</span> : null}</header>
-    <UnifiedModelPanel configPath={configPath} refreshToken={unifiedModelRefreshToken} onChange={onUnifiedModelChange} />
     <section className="route-rules" aria-labelledby="route-rules-heading">
       <header className="route-rules-heading">
         <div><h3 id="route-rules-heading">路由规则</h3><p>路由由供应商的模型池自动生成；此处管理别名、策略和顺序。</p></div>
