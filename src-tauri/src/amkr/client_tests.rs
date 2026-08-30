@@ -3,13 +3,14 @@ use std::net::TcpListener;
 use std::thread;
 
 use super::client::{
-    cancel_probe, check_update, create_provider, create_provider_key, create_route, delete_pool,
-    delete_provider_key, delete_route, delete_unified_model, export_config, get_health, get_models,
-    get_probe, get_providers, get_routes, get_settings, get_unified_model, import_config,
-    probe_keys, probe_pools, regenerate_local_api_key, update_model_reasoning_effort, update_pool,
-    update_provider, update_provider_key, update_route, update_settings, update_unified_model,
-    AmkrHealth, AmkrRouteTarget, AmkrSettingsUpdate, AmkrUnifiedModel, AmkrUnifiedPlan,
-    AmkrUnifiedTarget, AmkrUsageStats,
+    cancel_probe, check_update, create_provider, create_provider_key, create_route_with_targets,
+    delete_pool, delete_provider_key, delete_route, delete_unified_model, export_config,
+    get_health, get_models, get_probe, get_providers, get_routes, get_settings, get_unified_model,
+    import_config, probe_keys, probe_pools, regenerate_local_api_key,
+    update_model_reasoning_effort, update_pool, update_provider, update_provider_key, update_route,
+    update_settings, update_unified_model, update_unified_model_with_revision, AmkrHealth,
+    AmkrRouteTarget, AmkrSettingsUpdate, AmkrUnifiedModel, AmkrUnifiedPlan, AmkrUnifiedTarget,
+    AmkrUsageStats,
 };
 use super::AmkrConnection;
 
@@ -348,7 +349,7 @@ fn reads_and_updates_the_unified_model_with_an_explicit_automatic_key() {
             (
                 "GET /api/models HTTP/1.1",
                 "200 OK",
-                r#"{"models":[{"id":"model-a","aliases":["alias-a"],"routing_mode":"round_robin","reasoning_effort":null,"visitor_available":false,"keys":[{"name":"key-a","base_url":"https://a.example.test","enabled":true,"allow_visitor":false,"api_key_fingerprint":"65bbff9a6cb9"}]}]}"#,
+                r#"{"config_revision":"revision-a","models":[{"id":"model-a","aliases":["alias-a"],"routing_mode":"round_robin","reasoning_effort":null,"visitor_available":false,"keys":[{"name":"key-a","base_url":"https://a.example.test","enabled":true,"allow_visitor":false,"api_key_fingerprint":"65bbff9a6cb9"}]}]}"#,
             ),
             (
                 "GET /api/unified-model HTTP/1.1",
@@ -358,7 +359,7 @@ fn reads_and_updates_the_unified_model_with_an_explicit_automatic_key() {
             (
                 "PUT /api/unified-model HTTP/1.1",
                 "200 OK",
-                r#"{"unified_model":{"default":{"primary":{"model":"model-a","key":null}}}}"#,
+                r#"{"config_revision":"revision-b","unified_model":{"default":{"primary":{"model":"model-a","key":null}}}}"#,
             ),
             ("DELETE /api/unified-model HTTP/1.1", "204 No Content", ""),
         ] {
@@ -369,10 +370,11 @@ fn reads_and_updates_the_unified_model_with_an_explicit_automatic_key() {
             assert!(request.starts_with(expected));
             assert!(request.contains("Authorization: Bearer local-api-key"));
             if expected.starts_with("PUT") {
+                assert!(request.contains("\"config_revision\":\"revision-a\""));
+                assert!(request.contains("\"default\":{"));
                 assert!(request.contains("\"model\":\"model-a\""));
                 assert!(request.contains("\"key\":null"));
-                assert!(request.contains("\"image_model\":null"));
-                assert!(request.contains("\"image_key\":null"));
+                assert!(request.contains("\"image\":null"));
             }
             write!(
                 stream,
@@ -403,8 +405,9 @@ fn reads_and_updates_the_unified_model_with_an_explicit_automatic_key() {
             .as_deref(),
         Some("key-a")
     );
-    let updated = update_unified_model(
+    let updated = update_unified_model_with_revision(
         &connection,
+        Some("revision-a"),
         &AmkrUnifiedModel {
             default: AmkrUnifiedPlan {
                 primary: AmkrUnifiedTarget {
@@ -606,10 +609,7 @@ fn sends_provider_configuration_updates_with_the_current_revision() {
             ),
             (
                 "PUT /api/routes/model-a HTTP/1.1",
-                vec![
-                    "\"aliases\":[\"alias-b\"]",
-                    "\"routing_mode\":\"priority\"",
-                ],
+                vec!["\"aliases\":[\"alias-b\"]", "\"routing_mode\":\"priority\""],
             ),
         ] {
             let (mut stream, _) = listener.accept().unwrap();
@@ -734,16 +734,18 @@ fn creates_a_route_without_model_or_upstream_configuration() {
         let request = String::from_utf8_lossy(&buffer[..read]);
         assert!(request.starts_with("POST /api/routes HTTP/1.1"));
         assert!(request.contains("\"config_revision\":\"revision-a\""));
-        assert!(!request.contains("\"id\""));
-        assert!(!request.contains("\"targets\""));
+        assert!(request.contains("\"id\":\"model-a\""));
+        assert!(request.contains("\"targets\":["));
         write!(
             stream,
-            "HTTP/1.1 201 Created\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{{}}"
+            "HTTP/1.1 201 Created\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            112,
+            r#"{"config_revision":"revision-b","route":{"id":"model-a","targets":[],"aliases":[],"routing_mode":"round_robin"}}"#
         )
         .unwrap();
     });
 
-    create_route(
+    create_route_with_targets(
         &AmkrConnection {
             base_url: format!("http://{address}"),
             local_api_key: Some("local-api-key".to_owned()),
@@ -751,6 +753,12 @@ fn creates_a_route_without_model_or_upstream_configuration() {
             log_file_path: None,
         },
         "revision-a",
+        "model-a",
+        vec![AmkrRouteTarget {
+            provider: "provider-a".to_owned(),
+            pool: "default".to_owned(),
+            upstream_model: "model-a".to_owned(),
+        }],
         vec![],
         Some("round_robin".to_owned()),
     )

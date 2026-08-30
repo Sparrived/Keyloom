@@ -231,6 +231,8 @@ pub struct AmkrModelKey {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct AmkrModel {
+    #[serde(default)]
+    pub config_revision: Option<String>,
     pub id: String,
     #[serde(default)]
     pub aliases: Vec<String>,
@@ -244,6 +246,8 @@ pub struct AmkrModel {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct AmkrModelsResponse {
+    #[serde(default)]
+    pub config_revision: Option<String>,
     #[serde(default)]
     pub models: Vec<AmkrModel>,
 }
@@ -322,6 +326,8 @@ impl<'de> Deserialize<'de> for AmkrUnifiedModel {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct AmkrUnifiedModelResponse {
     #[serde(default)]
+    pub config_revision: Option<String>,
+    #[serde(default)]
     pub unified_model: Option<AmkrUnifiedModel>,
 }
 
@@ -329,6 +335,12 @@ pub struct AmkrUnifiedModelResponse {
 pub struct AmkrRoutesResponse {
     pub config_revision: String,
     pub routes: Vec<AmkrRoute>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct AmkrRouteResponse {
+    pub config_revision: String,
+    pub route: AmkrRoute,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -341,6 +353,12 @@ pub struct AmkrConfigExport {
 pub struct AmkrConfigImportResult {
     pub config_revision: String,
     pub imported: bool,
+    #[serde(default)]
+    pub added_models: u64,
+    #[serde(default)]
+    pub added_keys: u64,
+    #[serde(default)]
+    pub skipped_keys: u64,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -460,8 +478,9 @@ pub fn get_models(connection: &AmkrConnection) -> Result<AmkrModelsResponse, Str
     get_json(connection, "/api/models", "模型")
 }
 
-pub fn update_model_reasoning_effort(
+pub fn update_model_reasoning_effort_with_revision(
     connection: &AmkrConnection,
+    config_revision: Option<&str>,
     model_id: &str,
     reasoning_effort: Option<&str>,
 ) -> Result<AmkrModel, String> {
@@ -470,13 +489,66 @@ pub fn update_model_reasoning_effort(
         "PUT",
         &format!("/api/models/{}", encode_path_segment(model_id)),
         "更新模型推理强度",
-        Some(serde_json::json!({ "reasoning_effort": reasoning_effort })),
+        Some(serde_json::json!({
+            "config_revision": config_revision,
+            "reasoning_effort": reasoning_effort,
+        })),
         &[200],
     )
 }
 
+pub fn update_model_reasoning_effort(
+    connection: &AmkrConnection,
+    model_id: &str,
+    reasoning_effort: Option<&str>,
+) -> Result<AmkrModel, String> {
+    update_model_reasoning_effort_with_revision(connection, None, model_id, reasoning_effort)
+}
+
 pub fn get_unified_model(connection: &AmkrConnection) -> Result<AmkrUnifiedModelResponse, String> {
     get_json(connection, "/api/unified-model", "统一模型")
+}
+
+pub fn update_unified_model_with_revision(
+    connection: &AmkrConnection,
+    config_revision: Option<&str>,
+    unified_model: &AmkrUnifiedModel,
+) -> Result<AmkrUnifiedModelResponse, String> {
+    // Always send the canonical nested structure. The old flat shape is only
+    // accepted for compatibility by AMKR and cannot express fallback targets.
+    let payload = serde_json::json!({
+        "config_revision": config_revision,
+        "default": &unified_model.default,
+        "image": &unified_model.image,
+    });
+    request_json(
+        connection,
+        "PUT",
+        "/api/unified-model",
+        "更新统一模型",
+        Some(payload),
+        &[200],
+    )
+}
+
+pub fn delete_unified_model_with_revision(
+    connection: &AmkrConnection,
+    config_revision: Option<&str>,
+) -> Result<(), String> {
+    let payload = config_revision.map(|revision| {
+        serde_json::json!({
+            "config_revision": revision,
+        })
+    });
+    let _: serde_json::Value = request_json(
+        connection,
+        "DELETE",
+        "/api/unified-model",
+        "停用统一模型",
+        payload,
+        &[204],
+    )?;
+    Ok(())
 }
 
 pub fn update_unified_model(
@@ -491,8 +563,8 @@ pub fn update_unified_model(
             .is_some_and(|plan| plan.fallback.is_some())
     {
         serde_json::json!({
-            "default": unified_model.default,
-            "image": unified_model.image,
+            "default": &unified_model.default,
+            "image": &unified_model.image,
         })
     } else {
         let mut payload = serde_json::json!({
@@ -524,15 +596,7 @@ pub fn update_unified_model(
 }
 
 pub fn delete_unified_model(connection: &AmkrConnection) -> Result<(), String> {
-    let _: serde_json::Value = request_json(
-        connection,
-        "DELETE",
-        "/api/unified-model",
-        "停用统一模型",
-        None,
-        &[204],
-    )?;
-    Ok(())
+    delete_unified_model_with_revision(connection, None)
 }
 
 pub fn create_provider(
@@ -730,22 +794,29 @@ pub fn delete_pool(
     )
 }
 
-pub fn create_route(
+pub fn create_route_with_targets(
     connection: &AmkrConnection,
     config_revision: &str,
+    id: &str,
+    targets: Vec<AmkrRouteTarget>,
     aliases: Vec<String>,
     routing_mode: Option<String>,
-) -> Result<(), String> {
-    request_empty(
+) -> Result<AmkrRouteResponse, String> {
+    if targets.is_empty() {
+        return Err("模型路由至少需要一个 target".to_owned());
+    }
+    request_json(
         connection,
         "POST",
         "/api/routes",
         "创建模型路由",
-        serde_json::json!({
+        Some(serde_json::json!({
             "config_revision": config_revision,
+            "id": id,
+            "targets": targets,
             "aliases": aliases,
             "routing_mode": routing_mode
-        }),
+        })),
         &[201],
     )
 }
@@ -914,6 +985,18 @@ fn request_empty(
     Ok(())
 }
 
+fn format_api_detail(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::String(text) => text.clone(),
+        serde_json::Value::Array(items) => items
+            .iter()
+            .filter_map(|item| item.get("msg").and_then(serde_json::Value::as_str))
+            .collect::<Vec<_>>()
+            .join("; "),
+        other => other.to_string(),
+    }
+}
+
 fn request_json<T: DeserializeOwned>(
     connection: &AmkrConnection,
     method: &str,
@@ -1001,7 +1084,7 @@ fn request_json_with_timeout<T: DeserializeOwned>(
     if !status_code.is_some_and(|status| success_statuses.contains(&status)) {
         let detail = serde_json::from_str::<serde_json::Value>(body)
             .ok()
-            .and_then(|value| value.get("detail")?.as_str().map(str::to_owned));
+            .and_then(|value| value.get("detail").map(format_api_detail));
         let status = status_code
             .map(|status| status.to_string())
             .unwrap_or_else(|| "未知".to_owned());

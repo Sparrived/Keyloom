@@ -150,6 +150,7 @@ export type AmkrRoute = {
   aliases: string[];
   routing_mode: string | null;
 };
+export type AmkrRouteResponse = { config_revision: string; route: AmkrRoute };
 
 export type AmkrRouteTarget = {
   provider: string;
@@ -180,17 +181,26 @@ export type AmkrModel = {
   reasoning_effort: AmkrReasoningEffort | null;
   visitor_available: boolean;
   keys: AmkrModelKey[];
+  /** Returned by model mutation endpoints. */
+  config_revision?: string | null;
 };
 
-export type AmkrModelsResponse = { models: AmkrModel[] };
+export type AmkrModelsResponse = { config_revision?: string | null; models: AmkrModel[] };
+export type AmkrModelResponse = AmkrModel & { config_revision?: string | null };
 
 export type AmkrUnifiedTarget = { model: string; key: string | null };
 export type AmkrUnifiedPlan = { primary: AmkrUnifiedTarget; fallback?: AmkrUnifiedTarget | null };
 export type AmkrUnifiedModel = { default: AmkrUnifiedPlan; image?: AmkrUnifiedPlan | null };
-export type AmkrUnifiedModelResponse = { unified_model: AmkrUnifiedModel | null };
+export type AmkrUnifiedModelResponse = { config_revision?: string | null; unified_model: AmkrUnifiedModel | null };
 
 export type AmkrConfigExport = { config_revision: string; config: unknown };
-export type AmkrConfigImportResult = { config_revision: string; imported: boolean };
+export type AmkrConfigImportResult = {
+  config_revision: string;
+  imported: boolean;
+  added_models?: number;
+  added_keys?: number;
+  skipped_keys?: number;
+};
 export type AmkrProbeStart = { probe_id: string; status: string };
 export type AmkrProbeResult = {
   status: string;
@@ -309,26 +319,41 @@ export function getAmkrModels(configPath: string | null = null) {
   return invoke<AmkrModelsResponse>("get_amkr_models", { configPath });
 }
 
-export function updateAmkrModelReasoningEffort(modelId: string, reasoningEffort: AmkrReasoningEffort | null, configPath: string | null = null) {
-  return invoke<AmkrModel>("update_amkr_model_reasoning_effort", { configPath, modelId, reasoningEffort });
+export function updateAmkrModelReasoningEffort(
+  configRevision: string | null,
+  modelId: string,
+  reasoningEffort: AmkrReasoningEffort | null,
+  configPath: string | null = null,
+) {
+  const payload: Record<string, unknown> = { configPath, modelId, reasoningEffort };
+  if (configRevision) payload.configRevision = configRevision;
+  return invoke<AmkrModelResponse>("update_amkr_model_reasoning_effort", payload);
 }
 
 export function getAmkrUnifiedModel(configPath: string | null = null) {
   return invoke<AmkrUnifiedModelResponse>("get_amkr_unified_model", { configPath });
 }
 
-export function updateAmkrUnifiedModel(unifiedModel: AmkrUnifiedModel, configPath: string | null = null) {
+export function updateAmkrUnifiedModel(
+  configRevision: string | null,
+  unifiedModel: AmkrUnifiedModel,
+  configPath: string | null = null,
+) {
   return invoke<AmkrUnifiedModelResponse>("update_amkr_unified_model", {
     configPath,
-    model: unifiedModel.default.primary.model,
-    key: unifiedModel.default.primary.key,
-    fallback: unifiedModel.default.fallback ?? null,
+    configRevision,
+    default: unifiedModel.default,
     image: unifiedModel.image ?? null,
   });
 }
 
-export function deleteAmkrUnifiedModel(configPath: string | null = null) {
-  return invoke<void>("delete_amkr_unified_model", { configPath });
+export function deleteAmkrUnifiedModel(
+  configRevision: string | null,
+  configPath: string | null = null,
+) {
+  const payload: Record<string, unknown> = { configPath };
+  if (configRevision) payload.configRevision = configRevision;
+  return invoke<void>("delete_amkr_unified_model", payload);
 }
 
 export function createAmkrProvider(configRevision: string, id: string, baseUrl: string, configPath: string | null = null) {
@@ -367,8 +392,22 @@ export function deleteAmkrPool(configRevision: string, providerId: string, poolN
   return invoke("delete_amkr_pool", { configPath, configRevision, providerId, poolName });
 }
 
-export function createAmkrRoute(configRevision: string, aliases: string[], routingMode: string | null, configPath: string | null = null) {
-  return invoke("create_amkr_route", { configPath, configRevision, aliases, routingMode });
+export function createAmkrRoute(
+  configRevision: string,
+  id: string,
+  targets: AmkrRouteTarget[],
+  aliases: string[],
+  routingMode: string | null,
+  configPath: string | null = null,
+) {
+  return invoke<AmkrRouteResponse>("create_amkr_route", {
+    configPath,
+    configRevision,
+    id,
+    targets,
+    aliases,
+    routingMode,
+  });
 }
 
 export function deleteAmkrRoute(configRevision: string, id: string, configPath: string | null = null) {

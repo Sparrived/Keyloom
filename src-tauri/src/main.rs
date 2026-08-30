@@ -183,11 +183,13 @@ fn get_amkr_models(
 #[tauri::command]
 fn update_amkr_model_reasoning_effort(
     config_path: Option<String>,
+    config_revision: Option<String>,
     model_id: String,
     reasoning_effort: Option<String>,
 ) -> Result<keyloom_core::amkr::client::AmkrModel, String> {
     keyloom_core::update_amkr_model_reasoning_effort(
         config_path.as_deref().map(Path::new),
+        config_revision.as_deref(),
         &model_id,
         reasoning_effort.as_deref(),
     )
@@ -203,24 +205,27 @@ fn get_amkr_unified_model(
 #[tauri::command]
 fn update_amkr_unified_model(
     config_path: Option<String>,
-    model: String,
-    key: Option<String>,
-    fallback: Option<keyloom_core::amkr::client::AmkrUnifiedTarget>,
+    config_revision: Option<String>,
+    default: keyloom_core::amkr::client::AmkrUnifiedPlan,
     image: Option<keyloom_core::amkr::client::AmkrUnifiedPlan>,
 ) -> Result<keyloom_core::amkr::client::AmkrUnifiedModelResponse, String> {
-    let unified_model = keyloom_core::amkr::client::AmkrUnifiedModel {
-        default: keyloom_core::amkr::client::AmkrUnifiedPlan {
-            primary: keyloom_core::amkr::client::AmkrUnifiedTarget { model, key },
-            fallback,
-        },
-        image,
-    };
-    keyloom_core::update_amkr_unified_model(config_path.as_deref().map(Path::new), &unified_model)
+    let unified_model = keyloom_core::amkr::client::AmkrUnifiedModel { default, image };
+    keyloom_core::update_amkr_unified_model(
+        config_path.as_deref().map(Path::new),
+        config_revision.as_deref(),
+        &unified_model,
+    )
 }
 
 #[tauri::command]
-fn delete_amkr_unified_model(config_path: Option<String>) -> Result<(), String> {
-    keyloom_core::delete_amkr_unified_model(config_path.as_deref().map(Path::new))
+fn delete_amkr_unified_model(
+    config_path: Option<String>,
+    config_revision: Option<String>,
+) -> Result<(), String> {
+    keyloom_core::delete_amkr_unified_model(
+        config_path.as_deref().map(Path::new),
+        config_revision.as_deref(),
+    )
 }
 
 #[tauri::command]
@@ -382,12 +387,16 @@ fn delete_amkr_pool(
 fn create_amkr_route(
     config_path: Option<String>,
     config_revision: String,
+    id: String,
+    targets: Vec<keyloom_core::amkr::client::AmkrRouteTarget>,
     aliases: Vec<String>,
     routing_mode: Option<String>,
-) -> Result<(), String> {
+) -> Result<keyloom_core::amkr::client::AmkrRouteResponse, String> {
     keyloom_core::create_amkr_route(
         config_path.as_deref().map(Path::new),
         &config_revision,
+        &id,
+        targets,
         aliases,
         routing_mode,
     )

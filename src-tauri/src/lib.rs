@@ -204,11 +204,17 @@ pub fn get_amkr_models(
 
 pub fn update_amkr_model_reasoning_effort(
     selected_path: Option<&Path>,
+    config_revision: Option<&str>,
     model_id: &str,
     reasoning_effort: Option<&str>,
 ) -> Result<amkr::client::AmkrModel, String> {
     let instance = discover_local_instance(selected_path)?;
-    amkr::client::update_model_reasoning_effort(&instance.connection, model_id, reasoning_effort)
+    amkr::client::update_model_reasoning_effort_with_revision(
+        &instance.connection,
+        config_revision,
+        model_id,
+        reasoning_effort,
+    )
 }
 
 pub fn get_amkr_unified_model(
@@ -220,15 +226,23 @@ pub fn get_amkr_unified_model(
 
 pub fn update_amkr_unified_model(
     selected_path: Option<&Path>,
+    config_revision: Option<&str>,
     unified_model: &amkr::client::AmkrUnifiedModel,
 ) -> Result<amkr::client::AmkrUnifiedModelResponse, String> {
     let instance = discover_local_instance(selected_path)?;
-    amkr::client::update_unified_model(&instance.connection, unified_model)
+    amkr::client::update_unified_model_with_revision(
+        &instance.connection,
+        config_revision,
+        unified_model,
+    )
 }
 
-pub fn delete_amkr_unified_model(selected_path: Option<&Path>) -> Result<(), String> {
+pub fn delete_amkr_unified_model(
+    selected_path: Option<&Path>,
+    config_revision: Option<&str>,
+) -> Result<(), String> {
     let instance = discover_local_instance(selected_path)?;
-    amkr::client::delete_unified_model(&instance.connection)
+    amkr::client::delete_unified_model_with_revision(&instance.connection, config_revision)
 }
 
 pub fn create_amkr_provider(
@@ -379,13 +393,17 @@ pub fn delete_amkr_pool(
 pub fn create_amkr_route(
     selected_path: Option<&Path>,
     config_revision: &str,
+    id: &str,
+    targets: Vec<amkr::client::AmkrRouteTarget>,
     aliases: Vec<String>,
     routing_mode: Option<String>,
-) -> Result<(), String> {
+) -> Result<amkr::client::AmkrRouteResponse, String> {
     let instance = discover_local_instance(selected_path)?;
-    amkr::client::create_route(
+    amkr::client::create_route_with_targets(
         &instance.connection,
         config_revision,
+        id,
+        targets,
         aliases,
         routing_mode,
     )
