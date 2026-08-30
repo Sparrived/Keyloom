@@ -48,7 +48,12 @@ test("switches the unified model to a fixed key", async ({ page }) => {
   await expect(page.getByText("固定 Key · main · 1 个目标")).toBeVisible();
   expect(await commandCalls(page, "update_amkr_unified_model")).toEqual([{
     command: "update_amkr_unified_model",
-    args: { configPath: null, model: "model-a", key: "main", fallback: null, image: null },
+    args: {
+      configPath: null,
+      configRevision: "revision-a",
+      default: { primary: { model: "model-a", key: "main" }, fallback: null },
+      image: null,
+    },
   }]);
 });
 

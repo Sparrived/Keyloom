@@ -113,9 +113,9 @@ export async function installTauriMock(page: Page, scenario: "existing" | "fresh
             case "get_amkr_routes":
               return { config_revision: "revision-a", routes: [{ id: "model-a", aliases: ["default"], routing_mode: "ordered", targets: [{ provider: "provider-a", pool: "primary", upstream_model: "model-a" }] }] };
             case "get_amkr_models":
-              return { models: [{ id: "model-a", aliases: ["default"], routing_mode: "ordered", reasoning_effort: "high", visitor_available: false, keys: [{ name: "main", base_url: null, enabled: true, allow_visitor: false, api_key_fingerprint: "123456789abc" }] }] };
+              return { config_revision: providerRevision, models: [{ id: "model-a", aliases: ["default"], routing_mode: "ordered", reasoning_effort: "high", visitor_available: false, keys: [{ name: "main", base_url: null, enabled: true, allow_visitor: false, api_key_fingerprint: "123456789abc" }] }] };
             case "get_amkr_unified_model":
-              return { unified_model: healthy.unified_model };
+              return { config_revision: providerRevision, unified_model: healthy.unified_model };
             case "read_amkr_log_tail":
               return "2026-07-13 INFO request completed status=200";
             case "get_amkr_tool_status":
@@ -157,7 +157,17 @@ export async function installTauriMock(page: Page, scenario: "existing" | "fresh
             case "export_amkr_config":
               return { config_revision: "revision-a", config: { providers: {}, models: {} } };
             case "update_amkr_unified_model":
-              return { unified_model: { default: { primary: { model: args.model, key: args.key ?? null } } } };
+              return {
+                config_revision: "revision-b",
+                unified_model: {
+                  default: {
+                    primary: {
+                      model: (args.default as { primary: { model: string } }).primary.model,
+                      key: ((args.default as { primary: { key?: string | null } }).primary.key) ?? null,
+                    },
+                  },
+                },
+              };
             default:
               return {};
           }
