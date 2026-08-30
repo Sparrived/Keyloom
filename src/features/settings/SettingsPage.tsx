@@ -20,6 +20,7 @@ import {
 } from "../../api/amkr";
 import { useCopyToast } from "../../components/CopyToast";
 import { useConfirmDialog } from "../../components/ConfirmDialog";
+import { GlobalPortal } from "../../components/GlobalPortal";
 import { KeyloomUpdatePanel } from "./KeyloomUpdatePanel";
 
 type SettingsPageProps = {
@@ -140,7 +141,7 @@ export function SettingsPage({ amkrWidgetEnabled = false, closeBehavior = "ask",
   };
   const exportConfig = async () => {
     setTransferAction("export"); setNotice(null); setError(null);
-    try { const result = await exportAmkrConfig(configPath); setTransfer(JSON.stringify(result.config, null, 2)); setNotice("已导出可迁移配置。"); }
+    try { const result = await exportAmkrConfig(configPath); setTransfer(JSON.stringify(result.config)); setNotice("已导出可迁移配置。"); }
     catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
     finally { setTransferAction(null); }
   };
@@ -280,7 +281,7 @@ export function SettingsPage({ amkrWidgetEnabled = false, closeBehavior = "ask",
         </dl> : <p className="empty-state">尚未检查 AMKR 更新。</p>}
         {updateCheck?.update_available ? <button type="button" disabled={updateInstalling || !toolStatus?.installed || !["uv", "pipx"].includes(toolStatus.manager ?? "")} onClick={() => { setUpdateError(null); setUpdateDialogOpen(true); }}>{updateInstalling ? "更新中..." : "安装更新"}</button> : null}
         {updateError ? <p className="service-action-error" role="alert">版本检查失败: {updateError}</p> : null}
-        {updateDialogOpen && updateCheck ? <div className="close-dialog-backdrop" onKeyDown={(event) => { if (event.key === "Escape" && !updateInstalling) setUpdateDialogOpen(false); }}>
+        {updateDialogOpen && updateCheck ? <GlobalPortal><div className="close-dialog-backdrop" onKeyDown={(event) => { if (event.key === "Escape" && !updateInstalling) setUpdateDialogOpen(false); }}>
           <section aria-labelledby="amkr-update-dialog-heading" aria-modal="true" className="close-dialog update-dialog" role="dialog">
             <h2 id="amkr-update-dialog-heading">{updateInstalling ? "正在更新 AMKR" : updateError ? "AMKR 更新失败" : "安装 AMKR 更新？"}</h2>
             <p>AMKR {updateCheck.current_version} → {updateCheck.latest_version}。更新过程中 AMKR 服务会短暂重启。</p>
@@ -291,7 +292,7 @@ export function SettingsPage({ amkrWidgetEnabled = false, closeBehavior = "ask",
               <button className="tray-action" disabled={updateInstalling} type="button" onClick={() => void installUpdate()}>{updateError ? "重试" : "开始更新"}</button>
             </div>
           </section>
-        </div> : null}
+        </div></GlobalPortal> : null}
       </div> : null}
     </section>
     {!metadata ? <p className="empty-state">正在查找本机 AMKR 配置。</p> : <>

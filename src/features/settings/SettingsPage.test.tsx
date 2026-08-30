@@ -73,7 +73,23 @@ describe("SettingsPage", () => {
     expect(checkbox).not.toBeChecked();
   });
 
-  it("imports pasted configuration without requiring a prior export", async () => {
+  it("exports migrated configuration as single-line JSON", async () => {
+    invokeMock.mockImplementation(async (command) => command === "export_amkr_config" ? {
+      config_revision: "revision-export",
+      config: { providers: { openai: { base_url: "https://example.test" } }, models: {} },
+    } : undefined);
+    render(<SettingsPage configPath={null} metadata={metadata} onConfigPathChange={() => undefined} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "导出" }));
+
+    const transfer = await screen.findByDisplayValue('{"providers":{"openai":{"base_url":"https://example.test"}},"models":{}}');
+    expect(transfer).toHaveValue('{"providers":{"openai":{"base_url":"https://example.test"}},"models":{}}');
+    expect((transfer as HTMLTextAreaElement).value).not.toMatch(/[\r\n]/);
+    expect(invokeMock).toHaveBeenCalledWith("export_amkr_config", { configPath: null });
+    expect(await screen.findByText("已导出可迁移配置。")).toBeInTheDocument();
+  });
+
+  it("imports pasted single-line JSON without requiring a prior export", async () => {
     invokeMock.mockImplementation(async (command) => {
       if (command === "get_amkr_providers") return { config_revision: "revision-latest", providers: [] };
       if (command === "import_amkr_config") return { config_revision: "revision-next", imported: true };
@@ -204,7 +220,9 @@ describe("SettingsPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "检查 AMKR 更新" }));
     fireEvent.click(await screen.findByRole("button", { name: "安装更新" }));
-    expect(screen.getByRole("dialog", { name: "安装 AMKR 更新？" })).toBeInTheDocument();
+    const dialog = screen.getByRole("dialog", { name: "安装 AMKR 更新？" });
+    expect(dialog).toBeInTheDocument();
+    expect(dialog.parentElement?.parentElement).toBe(document.body);
     fireEvent.click(screen.getByRole("button", { name: "开始更新" }));
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_amkr_tool", { configPath: "C:/amkr.json" }));
