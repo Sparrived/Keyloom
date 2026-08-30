@@ -298,6 +298,8 @@ function ProviderCard({ configPath, provider, revision, refresh, onProviderIdCha
 
   const togglePoolKeyValue = (current: string, key: string) => {
     const selected = csv(current);
+    // 与 TUI 一致：空选择表示取消本次编辑，而不是清空模型池。
+    if (selected.includes(key) && selected.length === 1) return current;
     return selected.includes(key)
       ? selected.filter((item) => item !== key).join(", ")
       : Array.from(new Set([...selected, key])).join(", ");
@@ -312,7 +314,7 @@ function ProviderCard({ configPath, provider, revision, refresh, onProviderIdCha
   };
 
   const removePool = async (name: string) => {
-    if (await confirm(`删除模型池 ${name}？`)) void mutate(() => deleteAmkrPool(revision, provider.id, name, configPath));
+    if (await confirm(`删除模型池 ${name}？这会影响其模型路由，并将 Key 归还默认池。`)) void mutate(() => deleteAmkrPool(revision, provider.id, name, configPath));
   };
 
   return <article aria-label={`${provider.id} 供应商配置`} className="provider-item">

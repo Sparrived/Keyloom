@@ -146,7 +146,7 @@ export function SettingsPage({ amkrWidgetEnabled = false, closeBehavior = "ask",
     finally { setTransferAction(null); }
   };
   const importConfig = async () => {
-    if (!transfer.trim() || !await confirm("导入将替换供应商与路由配置。是否继续？")) return;
+    if (!transfer.trim() || !await confirm("导入将追加/合并供应商与路由配置，并保留本机设置。是否继续？")) return;
     setTransferAction("import"); setNotice(null); setError(null);
     try {
       const parsed: unknown = JSON.parse(transfer);
