@@ -1231,6 +1231,40 @@ button {
   color: #c9342f;
 }
 
+.key-capabilities-badge {
+  display: inline-flex;
+  width: fit-content;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.key-capabilities-badge.status-good {
+  color: #178044;
+  background: #edfff4;
+}
+
+.key-capabilities-badge.status-muted {
+  color: #6e6e73;
+  background: #f2f2f7;
+}
+
+.key-capabilities-badge.status-warn {
+  color: #7a5200;
+  background: #fff3cd;
+}
+
+.key-capability-models {
+  font-size: 0.78rem;
+}
+
+.key-capability-errors {
+  color: #c9342f;
+  font-size: 0.75rem;
+}
+
 @keyframes key-probe-success {
   0% { text-shadow: 0 0 0 transparent; }
   22% { text-shadow: 0 0 0.75rem rgba(55, 182, 109, 0.72); }

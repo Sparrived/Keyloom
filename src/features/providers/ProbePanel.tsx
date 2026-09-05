@@ -3,9 +3,7 @@ import {
   cancelAmkrProbe,
   getAmkrProbe,
   probeAmkrKeys,
-  probeAmkrPools,
   type AmkrProbe,
-  type AmkrProbeResult,
 } from "../../api/amkr";
 
 const pollIntervalMs = 750;
@@ -22,10 +20,6 @@ type ProbePanelProps = {
   configPath: string | null;
   providerId: string;
   keys: string[];
-  pools: string[];
-  poolProbeRequest?: { id: number; pool: string; key: string | null } | null;
-  onPoolProbeResults?: (results: AmkrProbeResult[]) => void;
-  onPoolProbeStatus?: (status: string | null) => void;
 };
 
 const errorMessage = (reason: unknown) => reason instanceof Error ? reason.message : String(reason);
@@ -50,7 +44,7 @@ function statusTone(status: string) {
   return "muted";
 }
 
-export function ProbePanel({ configPath, providerId, keys, pools, poolProbeRequest = null, onPoolProbeResults, onPoolProbeStatus }: ProbePanelProps) {
+export function ProbePanel({ configPath, providerId, keys }: ProbePanelProps) {
   const headingId = useId();
   const [timeoutSeconds, setTimeoutSeconds] = useState("15");
   const [probe, setProbe] = useState<AmkrProbe | null>(null);
@@ -61,7 +55,6 @@ export function ProbePanel({ configPath, providerId, keys, pools, poolProbeReque
   const generationRef = useRef(0);
   const pollVersionRef = useRef(0);
   const activeProbeRef = useRef<string | null>(null);
-  const activeProbeKindRef = useRef<"keys" | "pools" | null>(null);
 
   const clearTimer = () => {
     if (timerRef.current !== null) {
@@ -76,8 +69,6 @@ export function ProbePanel({ configPath, providerId, keys, pools, poolProbeReque
     ++pollVersionRef.current;
     const previousProbe = activeProbeRef.current;
     activeProbeRef.current = null;
-    activeProbeKindRef.current = null;
-    onPoolProbeStatus?.(null);
     setProbe(null);
     setBusy(false);
     setCancelBusy(false);
@@ -89,8 +80,6 @@ export function ProbePanel({ configPath, providerId, keys, pools, poolProbeReque
       clearTimer();
       const probeId = activeProbeRef.current;
       activeProbeRef.current = null;
-      activeProbeKindRef.current = null;
-      onPoolProbeStatus?.(null);
       if (probeId) void cancelAmkrProbe(probeId, configPath).catch(() => undefined);
     };
   }, [configPath]);
@@ -100,11 +89,8 @@ export function ProbePanel({ configPath, providerId, keys, pools, poolProbeReque
       const result = await getAmkrProbe(probeId, configPath);
       if (generationRef.current !== generation || pollVersionRef.current !== pollVersion || activeProbeRef.current !== probeId) return;
       setProbe(result);
-      if (activeProbeKindRef.current === "pools") onPoolProbeStatus?.(result.status);
       if (terminalStatuses.has(result.status)) {
-        if (result.status === "complete" && activeProbeKindRef.current === "pools") onPoolProbeResults?.(result.results);
         activeProbeRef.current = null;
-        activeProbeKindRef.current = null;
         setBusy(false);
         setCancelBusy(false);
         clearTimer();
@@ -114,19 +100,12 @@ export function ProbePanel({ configPath, providerId, keys, pools, poolProbeReque
     } catch (reason) {
       if (generationRef.current !== generation || pollVersionRef.current !== pollVersion || activeProbeRef.current !== probeId) return;
       setCancelBusy(false);
-      if (activeProbeKindRef.current === "pools") onPoolProbeStatus?.("failed");
       setError(errorMessage(reason));
       clearTimer();
     }
   }
 
-  useEffect(() => {
-    if (poolProbeRequest?.key && pools.includes(poolProbeRequest.pool) && keys.includes(poolProbeRequest.key)) {
-      void start("keys", [poolProbeRequest.key], "pools");
-    }
-  }, [poolProbeRequest]);
-
-  async function start(kind: "keys" | "pools", selected: string[], resultKind: "keys" | "pools" = kind) {
+  async function start(selected: string[]) {
     if (busy) return;
     const timeout = Number(timeoutSeconds);
     if (!Number.isFinite(timeout) || timeout <= 0 || timeout > 120) {
@@ -137,23 +116,17 @@ export function ProbePanel({ configPath, providerId, keys, pools, poolProbeReque
     const generation = ++generationRef.current;
     const pollVersion = ++pollVersionRef.current;
     activeProbeRef.current = null;
-    activeProbeKindRef.current = null;
     setBusy(true);
     setCancelBusy(false);
     setError(null);
     setProbe(null);
-    if (resultKind === "pools") onPoolProbeStatus?.("pending");
     try {
-      const started = kind === "keys"
-        ? await probeAmkrKeys(providerId, selected, timeout, configPath)
-        : await probeAmkrPools(providerId, selected, timeout, configPath);
+      const started = await probeAmkrKeys(providerId, selected, timeout, configPath);
       if (generationRef.current !== generation) {
         void cancelAmkrProbe(started.probe_id, configPath).catch(() => undefined);
         return;
       }
       activeProbeRef.current = started.probe_id;
-      activeProbeKindRef.current = resultKind;
-      if (resultKind === "pools") onPoolProbeStatus?.(started.status);
       setProbe({
         probe_id: started.probe_id,
         status: started.status,
@@ -165,7 +138,6 @@ export function ProbePanel({ configPath, providerId, keys, pools, poolProbeReque
     } catch (reason) {
       if (generationRef.current !== generation) return;
       setBusy(false);
-      if (resultKind === "pools") onPoolProbeStatus?.("failed");
       setError(errorMessage(reason));
     }
   }
@@ -184,7 +156,6 @@ export function ProbePanel({ configPath, providerId, keys, pools, poolProbeReque
       setProbe(result);
       if (terminalStatuses.has(result.status)) {
         activeProbeRef.current = null;
-        activeProbeKindRef.current = null;
         setBusy(false);
         setCancelBusy(false);
         clearTimer();
@@ -213,7 +184,7 @@ export function ProbePanel({ configPath, providerId, keys, pools, poolProbeReque
         <input aria-label="探测超时（秒）" disabled={busy} min="0.1" max="120" step="0.1" type="number" value={timeoutSeconds} onChange={(event) => setTimeoutSeconds(event.target.value)} />
       </label>
       <div className="probe-actions">
-        <button disabled={busy || keys.length === 0} type="button" onClick={() => void start("keys", [])}>探测全部 Key</button>
+        <button disabled={busy || keys.length === 0} type="button" onClick={() => void start([])}>探测全部 Key</button>
         {active ? <button className="secondary-button" disabled={cancelBusy} type="button" onClick={() => void cancel()}>{cancelBusy ? "正在取消" : "取消探测"}</button> : null}
       </div>
     </div>

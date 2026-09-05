@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-export const minimumCompatibleAmkrVersion = "3.2.1";
+export const minimumCompatibleAmkrVersion = "4.0.0";
 
 export function isAmkrVersionCompatible(version: string) {
   const parse = (value: string) => value.split(".").slice(0, 3).map((part) => Number.parseInt(part, 10));
@@ -118,30 +118,36 @@ export type AmkrUpdateCheck = {
   error: string | null;
 };
 
+export type AmkrKeyCapabilities = {
+  models: string[];
+  route_status: Record<string, string>;
+  errors: Record<string, string>;
+  checked_at: string | null;
+};
+
 export type AmkrProviderKey = {
   name: string;
   enabled: boolean;
   allow_visitor: boolean;
   api_key_fingerprint: string;
-};
-
-export type AmkrProviderPool = {
-  name: string;
-  keys: string[];
-  models: string[];
+  capabilities: AmkrKeyCapabilities | null;
 };
 
 export type AmkrProvider = {
   id: string;
   base_url: string;
   keys: AmkrProviderKey[];
-  pools: AmkrProviderPool[];
   routes: Record<string, string>;
 };
 
 export type AmkrProvidersResponse = {
   config_revision: string;
   providers: AmkrProvider[];
+};
+
+export type AmkrProviderResponse = {
+  config_revision: string;
+  provider: AmkrProvider;
 };
 
 export type AmkrRoute = {
@@ -154,7 +160,7 @@ export type AmkrRouteResponse = { config_revision: string; route: AmkrRoute };
 
 export type AmkrRouteTarget = {
   provider: string;
-  pool: string;
+  key: string;
   upstream_model: string;
 };
 
@@ -380,18 +386,6 @@ export function deleteAmkrProviderKey(configRevision: string, providerId: string
   return invoke("delete_amkr_provider_key", { configPath, configRevision, providerId, keyName });
 }
 
-export function createAmkrPool(configRevision: string, providerId: string, name: string, keys: string[], models: string[], configPath: string | null = null) {
-  return invoke("create_amkr_pool", { configPath, configRevision, providerId, name, keys, models });
-}
-
-export function updateAmkrPool(configRevision: string, providerId: string, poolName: string, name: string, keys: string[], models: string[], configPath: string | null = null) {
-  return invoke("update_amkr_pool", { configPath, configRevision, providerId, poolName, name, keys, models });
-}
-
-export function deleteAmkrPool(configRevision: string, providerId: string, poolName: string, configPath: string | null = null) {
-  return invoke("delete_amkr_pool", { configPath, configRevision, providerId, poolName });
-}
-
 export function createAmkrRoute(
   configRevision: string,
   id: string,
@@ -425,8 +419,8 @@ export function probeAmkrKeys(providerId: string, keys: string[], timeoutSeconds
   return invoke<AmkrProbeStart>("probe_amkr_keys", { configPath, providerId, keys, timeoutSeconds });
 }
 
-export function probeAmkrPools(providerId: string, pools: string[], timeoutSeconds = 15, configPath: string | null = null) {
-  return invoke<AmkrProbeStart>("probe_amkr_pools", { configPath, providerId, pools, timeoutSeconds });
+export function probeAmkrKey(configRevision: string, providerId: string, keyName: string, configPath: string | null = null) {
+  return invoke<AmkrProviderResponse>("probe_amkr_key", { configPath, configRevision, providerId, keyName });
 }
 
 export function getAmkrProbe(probeId: string, configPath: string | null = null) {

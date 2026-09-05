@@ -4,10 +4,10 @@ use std::thread;
 
 use super::client::{
     cancel_probe, check_update, create_provider, create_provider_key, create_route_with_targets,
-    delete_pool, delete_provider_key, delete_route, delete_unified_model, export_config,
+    delete_provider_key, delete_route, delete_unified_model, export_config,
     get_health, get_models, get_probe, get_providers, get_routes, get_settings, get_unified_model,
-    import_config, probe_keys, probe_pools, regenerate_local_api_key,
-    update_model_reasoning_effort, update_pool, update_provider, update_provider_key, update_route,
+    import_config, probe_keys, regenerate_local_api_key,
+    update_model_reasoning_effort, update_provider, update_provider_key, update_route,
     update_settings, update_unified_model, update_unified_model_with_revision, AmkrHealth,
     AmkrRouteTarget, AmkrSettingsUpdate, AmkrUnifiedModel, AmkrUnifiedPlan, AmkrUnifiedTarget,
     AmkrUsageStats,
@@ -278,7 +278,7 @@ fn reads_redacted_provider_configuration_with_local_authentication() {
         assert!(request.starts_with("GET /api/providers HTTP/1.1"));
         assert!(request.contains("Authorization: Bearer local-api-key"));
 
-        let body = r#"{"config_revision":"revision-a","providers":[{"id":"a.example.test","base_url":"https://a.example.test","keys":[{"name":"key-a","enabled":true,"allow_visitor":false,"api_key_fingerprint":"65bbff9a6cb9"}],"pools":[{"name":"model-a","keys":["key-a"],"models":["model-a"]}],"routes":{}}]}"#;
+        let body = r#"{"config_revision":"revision-a","providers":[{"id":"a.example.test","base_url":"https://a.example.test","keys":[{"name":"key-a","enabled":true,"allow_visitor":false,"api_key_fingerprint":"65bbff9a6cb9","capabilities":{"models":["model-a"],"route_status":{"openai":"ok"},"errors":{},"checked_at":"2026-09-01T00:00:00+00:00"}}],"routes":{}}]}"#;
         write!(
             stream,
             "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -303,6 +303,15 @@ fn reads_redacted_provider_configuration_with_local_authentication() {
         response.providers[0].keys[0].api_key_fingerprint,
         "65bbff9a6cb9"
     );
+    let capabilities = response.providers[0].keys[0]
+        .capabilities
+        .as_ref()
+        .expect("key capabilities should parse");
+    assert_eq!(capabilities.models, ["model-a"]);
+    assert_eq!(
+        capabilities.route_status.get("openai").map(String::as_str),
+        Some("ok")
+    );
     server.join().unwrap();
 }
 
@@ -317,7 +326,7 @@ fn reads_model_routes_with_their_provider_targets() {
         let request = String::from_utf8_lossy(&buffer[..read]);
         assert!(request.starts_with("GET /api/routes HTTP/1.1"));
 
-        let body = r#"{"config_revision":"revision-a","routes":[{"id":"model-a","targets":[{"provider":"a.example.test","pool":"model-a","upstream_model":"upstream-a"}],"aliases":["alias-a"],"routing_mode":"priority"}]}"#;
+        let body = r#"{"config_revision":"revision-a","routes":[{"id":"model-a","targets":[{"provider":"a.example.test","key":"key-a","upstream_model":"upstream-a"}],"aliases":["alias-a"],"routing_mode":"priority"}]}"#;
         write!(
             stream,
             "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -337,6 +346,9 @@ fn reads_model_routes_with_their_provider_targets() {
 
     assert_eq!(response.routes[0].id, "model-a");
     assert_eq!(response.routes[0].aliases, ["alias-a"]);
+    assert_eq!(response.routes[0].targets[0].provider, "a.example.test");
+    assert_eq!(response.routes[0].targets[0].key, "key-a");
+    assert_eq!(response.routes[0].targets[0].upstream_model, "upstream-a");
     server.join().unwrap();
 }
 
@@ -509,7 +521,7 @@ fn creates_provider_with_a_revision_and_local_authentication() {
         assert!(request.contains("\"id\":\"b.example.test\""));
         assert!(request.contains("\"base_url\":\"https://b.example.test\""));
 
-        let body = r#"{"config_revision":"revision-b","provider":{"id":"b.example.test","base_url":"https://b.example.test","keys":[],"pools":[]}}"#;
+        let body = r#"{"config_revision":"revision-b","provider":{"id":"b.example.test","base_url":"https://b.example.test","keys":[],"routes":{}}}"#;
         write!(
             stream,
             "HTTP/1.1 201 Created\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -600,14 +612,6 @@ fn sends_provider_configuration_updates_with_the_current_revision() {
                 ],
             ),
             (
-                "PUT /api/providers/b.example.test/pools/pool-a HTTP/1.1",
-                vec![
-                    "\"name\":\"pool-b\"",
-                    "\"keys\":[\"key-b\"]",
-                    "\"models\":[\"model-b\"]",
-                ],
-            ),
-            (
                 "PUT /api/routes/model-a HTTP/1.1",
                 vec!["\"aliases\":[\"alias-b\"]", "\"routing_mode\":\"priority\""],
             ),
@@ -657,23 +661,13 @@ fn sends_provider_configuration_updates_with_the_current_revision() {
         true,
     )
     .unwrap();
-    update_pool(
-        &connection,
-        "revision-a",
-        "b.example.test",
-        "pool-a",
-        "pool-b",
-        vec!["key-b".to_owned()],
-        vec!["model-b".to_owned()],
-    )
-    .unwrap();
     update_route(
         &connection,
         "revision-a",
         "model-a",
         vec![AmkrRouteTarget {
             provider: "b.example.test".to_owned(),
-            pool: "pool-b".to_owned(),
+            key: "key-b".to_owned(),
             upstream_model: "upstream-b".to_owned(),
         }],
         vec!["alias-b".to_owned()],
@@ -756,7 +750,7 @@ fn creates_a_route_without_model_or_upstream_configuration() {
         "model-a",
         vec![AmkrRouteTarget {
             provider: "provider-a".to_owned(),
-            pool: "default".to_owned(),
+            key: "key-a".to_owned(),
             upstream_model: "model-a".to_owned(),
         }],
         vec![],
@@ -768,14 +762,11 @@ fn creates_a_route_without_model_or_upstream_configuration() {
 }
 
 #[test]
-fn sends_key_and_pool_deletions_with_the_current_revision() {
+fn sends_key_deletions_with_the_current_revision() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap();
     let server = thread::spawn(move || {
-        for expected_path in [
-            "DELETE /api/providers/a.example.test/keys/key-a HTTP/1.1",
-            "DELETE /api/providers/a.example.test/pools/pool-a HTTP/1.1",
-        ] {
+        for expected_path in ["DELETE /api/providers/a.example.test/keys/key-a HTTP/1.1"] {
             let (mut stream, _) = listener.accept().unwrap();
             let mut buffer = [0_u8; 2048];
             let read = stream.read(&mut buffer).unwrap();
@@ -797,7 +788,6 @@ fn sends_key_and_pool_deletions_with_the_current_revision() {
     };
 
     delete_provider_key(&connection, "revision-a", "a.example.test", "key-a").unwrap();
-    delete_pool(&connection, "revision-a", "a.example.test", "pool-a").unwrap();
 
     server.join().unwrap();
 }
@@ -950,7 +940,7 @@ fn transfers_config_with_local_authentication_and_revision() {
 }
 
 #[test]
-fn starts_polls_and_cancels_key_and_pool_probes_without_leaking_secrets() {
+fn starts_polls_and_cancels_key_probes_without_leaking_secrets() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap();
     let server = thread::spawn(move || {
@@ -959,11 +949,6 @@ fn starts_polls_and_cancels_key_and_pool_probes_without_leaking_secrets() {
                 "POST /api/probes/keys HTTP/1.1",
                 "202 Accepted",
                 r#"{"probe_id":"probe-keys","status":"pending"}"#,
-            ),
-            (
-                "POST /api/probes/pools HTTP/1.1",
-                "202 Accepted",
-                r#"{"probe_id":"probe-pools","status":"pending"}"#,
             ),
             (
                 "GET /api/probes/probe-keys HTTP/1.1",
@@ -987,9 +972,6 @@ fn starts_polls_and_cancels_key_and_pool_probes_without_leaking_secrets() {
                 assert!(request.contains("\"keys\":[\"main\"]"));
                 assert!(request.contains("\"timeout_seconds\":7.5"));
             }
-            if expected.starts_with("POST /api/probes/pools") {
-                assert!(request.contains("\"pools\":[\"default\"]"));
-            }
             assert!(!request.contains("upstream-secret"));
             write!(
                 stream,
@@ -1009,9 +991,6 @@ fn starts_polls_and_cancels_key_and_pool_probes_without_leaking_secrets() {
 
     let started = probe_keys(&connection, "openai", vec!["main".to_owned()], 7.5).unwrap();
     assert_eq!(started.probe_id, "probe-keys");
-    let pool_started =
-        probe_pools(&connection, "openai", vec!["default".to_owned()], 15.0).unwrap();
-    assert_eq!(pool_started.status, "pending");
     let completed = get_probe(&connection, "probe-keys").unwrap();
     assert_eq!(
         completed.results[0].endpoint,

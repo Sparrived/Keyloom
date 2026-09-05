@@ -5,7 +5,7 @@ import { useCopyToast } from "../../components/CopyToast";
 const csv = (value: string) => value.split(",").map((item) => item.trim()).filter(Boolean);
 const errorMessage = (reason: unknown) => reason instanceof Error ? reason.message : String(reason);
 const isConflict = (message: string) => message.includes("HTTP 409");
-const targetKey = (target: AmkrRouteTarget) => `${target.provider}\u0000${target.pool}\u0000${target.upstream_model}`;
+const targetKey = (target: AmkrRouteTarget) => `${target.provider}\u0000${target.key}\u0000${target.upstream_model}`;
 const routingModeLabel = (mode: string | null | undefined) => ({ round_robin: "轮询", priority: "优先级", only_first: "首 Key" }[mode ?? ""] ?? "默认策略");
 type DragTarget = { routeId: string; key: string };
 type DragOverTarget = DragTarget & { position: "before" | "after" };
@@ -158,14 +158,14 @@ export function RoutingPage({ configPath }: RoutingPageProps) {
   };
 
   return <section className="routes-page" aria-labelledby="routes-heading">
-    <header className="page-header"><div><h2 id="routes-heading">模型路由</h2><p>管理路由别名和路由模式；模型与上游目标由模型池管理。</p></div>{data ? <span className="config-revision">版本 {data.config_revision.slice(0, 12)}</span> : null}</header>
+    <header className="page-header"><div><h2 id="routes-heading">模型路由</h2><p>管理路由别名和路由模式；模型的目标 Key 在下方按顺序排列。</p></div>{data ? <span className="config-revision">版本 {data.config_revision.slice(0, 12)}</span> : null}</header>
     <section className="route-rules" aria-labelledby="route-rules-heading">
       <header className="route-rules-heading">
-        <div><h3 id="route-rules-heading">路由规则</h3><p>路由由供应商的模型池自动生成；此处管理别名、策略和顺序。</p></div>
+        <div><h3 id="route-rules-heading">路由规则</h3><p>路由来自模型配置；此处管理别名、策略和回退顺序。</p></div>
       </header>
     {loading ? <p className="empty-state">正在读取模型路由。</p> : null}
     {error ? <p className="service-action-error">无法读取或写入模型路由: {error}</p> : null}
-    {data?.routes.length === 0 ? <div className="empty-state-panel"><div><strong>尚未生成模型路由。</strong><p>请先在供应商的模型池中配置模型，路由会自动出现在这里。</p></div></div> : null}
+    {data?.routes.length === 0 ? <div className="empty-state-panel"><div><strong>尚未配置模型路由。</strong><p>请先添加模型并绑定其目标 Key，路由会自动出现在这里。</p></div></div> : null}
     {data?.routes.length ? <div className="configuration-tabs route-tabs">
       <div aria-label="模型列表" className="configuration-tablist" role="tablist">
         {data.routes.map((route) => {
@@ -234,7 +234,7 @@ export function RoutingPage({ configPath }: RoutingPageProps) {
           onPointerDown={(event) => { if ((event.button !== undefined && event.button !== 0) || savingTargetOrder) return; event.preventDefault(); const activeTarget = { routeId: route.id, key }; draggingTargetRef.current = activeTarget; dragOverTargetRef.current = null; setDragReturn(null); setDragAnimationFrom(null); setDraggingTarget(activeTarget); setDragOverTarget(null); }}
           onPointerEnter={(event) => { const activeTarget = draggingTargetRef.current; if (activeTarget?.routeId === route.id && activeTarget.key !== key) { const rect = event.currentTarget.getBoundingClientRect(); const position = rect.height > 0 && event.clientY > rect.top + rect.height / 2 ? "after" : "before"; updateDragOver(route, { routeId: route.id, key, position }); } }}
           onPointerMove={(event) => { const activeTarget = draggingTargetRef.current; if (activeTarget?.routeId === route.id && activeTarget.key !== key) { const rect = event.currentTarget.getBoundingClientRect(); const position = rect.height > 0 && event.clientY > rect.top + rect.height / 2 ? "after" : "before"; if (dragOverTargetRef.current?.key !== key || dragOverTargetRef.current.position !== position) updateDragOver(route, { routeId: route.id, key, position }); } }}
-        >{target.provider} / {target.pool} / {target.upstream_model}</li>;
+        >{target.provider} / {target.key} / {target.upstream_model}</li>;
           });
         })()}
       </ul>

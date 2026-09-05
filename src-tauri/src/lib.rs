@@ -335,61 +335,6 @@ pub fn delete_amkr_provider_key(
     amkr::client::delete_provider_key(&instance.connection, config_revision, provider_id, key_name)
 }
 
-pub fn create_amkr_pool(
-    selected_path: Option<&Path>,
-    config_revision: &str,
-    provider_id: &str,
-    name: &str,
-    keys: Vec<String>,
-    models: Vec<String>,
-) -> Result<(), String> {
-    let instance = discover_local_instance(selected_path)?;
-    amkr::client::create_pool(
-        &instance.connection,
-        config_revision,
-        provider_id,
-        name,
-        keys,
-        models,
-    )
-}
-
-pub fn update_amkr_pool(
-    selected_path: Option<&Path>,
-    config_revision: &str,
-    provider_id: &str,
-    pool_name: &str,
-    name: &str,
-    keys: Vec<String>,
-    models: Vec<String>,
-) -> Result<(), String> {
-    let instance = discover_local_instance(selected_path)?;
-    amkr::client::update_pool(
-        &instance.connection,
-        config_revision,
-        provider_id,
-        pool_name,
-        name,
-        keys,
-        models,
-    )
-}
-
-pub fn delete_amkr_pool(
-    selected_path: Option<&Path>,
-    config_revision: &str,
-    provider_id: &str,
-    pool_name: &str,
-) -> Result<(), String> {
-    let instance = discover_local_instance(selected_path)?;
-    amkr::client::delete_pool(
-        &instance.connection,
-        config_revision,
-        provider_id,
-        pool_name,
-    )
-}
-
 pub fn create_amkr_route(
     selected_path: Option<&Path>,
     config_revision: &str,
@@ -488,14 +433,20 @@ pub fn probe_amkr_keys(
     amkr::client::probe_keys(&instance.connection, provider_id, keys, timeout_seconds)
 }
 
-pub fn probe_amkr_pools(
+pub fn probe_amkr_key(
     selected_path: Option<&Path>,
+    config_revision: &str,
     provider_id: &str,
-    pools: Vec<String>,
-    timeout_seconds: f64,
-) -> Result<amkr::client::AmkrProbeStart, String> {
+    key_name: &str,
+) -> Result<amkr::client::AmkrProviderResponse, String> {
     let instance = discover_local_instance(selected_path)?;
-    amkr::client::probe_pools(&instance.connection, provider_id, pools, timeout_seconds)
+    amkr::client::probe_key_capability(
+        &instance.connection,
+        config_revision,
+        provider_id,
+        key_name,
+        None,
+    )
 }
 
 pub fn get_amkr_probe(
