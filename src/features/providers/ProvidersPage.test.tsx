@@ -13,8 +13,7 @@ const response = {
   providers: [{
     id: "a.example.test",
     base_url: "https://a.example.test",
-    keys: [{ name: "key-a", enabled: true, allow_visitor: false, api_key_fingerprint: "65bbff9a6cb9" }],
-    pools: [{ name: "pool-a", keys: ["key-a"], models: ["model-a"] }],
+    keys: [{ name: "key-a", enabled: true, allow_visitor: false, api_key_fingerprint: "65bbff9a6cb9", capabilities: { models: ["model-a"], route_status: { openai: "ok" }, errors: {}, checked_at: "2026-09-01T00:00:00+00:00" } }],
     routes: { openai: "proxy/v1/chat/completions" },
   }],
 };
@@ -23,8 +22,7 @@ describe("ProvidersPage", () => {
   beforeEach(() => {
     invokeMock.mockReset();
     invokeMock.mockImplementation(async (command) => {
-      if (command === "probe_amkr_keys") return { probe_id: "probe-pools", status: "pending" };
-      if (command === "get_amkr_probe") return { probe_id: "probe-pools", status: "complete", provider: "a.example.test", results: [], error: null };
+      if (command === "probe_amkr_key") return { config_revision: "revision-b", provider: response.providers[0] };
       return response;
     });
     vi.spyOn(window, "confirm").mockReturnValue(true);
@@ -35,7 +33,7 @@ describe("ProvidersPage", () => {
       ...response,
       providers: [
         response.providers[0],
-        { id: "b.example.test", base_url: "https://b.example.test", keys: [], pools: [], routes: {} },
+        { id: "b.example.test", base_url: "https://b.example.test", keys: [], routes: {} },
       ],
     };
     invokeMock.mockImplementation(async (command) => command === "get_amkr_providers" ? multiProviderResponse : response);
@@ -64,7 +62,7 @@ describe("ProvidersPage", () => {
           config_revision: "revision-b",
           providers: [
             ...response.providers,
-            { id: "b.example.test", base_url: "https://b.example.test", keys: [], pools: [], routes: {} },
+            { id: "b.example.test", base_url: "https://b.example.test", keys: [], routes: {} },
           ],
         };
         return undefined;
@@ -95,7 +93,7 @@ describe("ProvidersPage", () => {
     expect(screen.getByRole("tab", { name: "b.example.test" })).toHaveAttribute("aria-selected", "true");
   });
 
-  it("edits a provider without rebuilding its keys and pools", async () => {
+  it("edits a provider without rebuilding its keys", async () => {
     render(<ProvidersPage configPath="C:/amkr.json" />);
     await screen.findByText("a.example.test");
 
@@ -175,33 +173,29 @@ describe("ProvidersPage", () => {
     }));
   });
 
-  it("adds a key to the existing pool when discovered models match", async () => {
-    let current = response;
+  it("adds a key, probes it synchronously and shows its capabilities", async () => {
+    let current: AmkrProvidersResponse = response;
+    const keyB = { name: "key-b", enabled: true, allow_visitor: false, api_key_fingerprint: "keybfingerprint", capabilities: null };
     invokeMock.mockImplementation(async (command, args) => {
       if (command === "get_amkr_providers") return current;
       if (command === "create_amkr_provider_key") {
         current = {
           ...current,
           config_revision: "revision-b",
-          providers: [{ ...current.providers[0], keys: [...current.providers[0].keys, { name: "key-b", enabled: true, allow_visitor: false, api_key_fingerprint: "keybfingerprint" }] }],
+          providers: [{ ...current.providers[0], keys: [...current.providers[0].keys, keyB] }],
         };
         return undefined;
       }
-      if (command === "probe_amkr_keys") return { probe_id: "probe-key-b", status: "pending" };
-      if (command === "get_amkr_probe") return {
-        probe_id: "probe-key-b",
-        status: "complete",
-        provider: "a.example.test",
-        results: [{ status: "ok", provider: "a.example.test", key: "key-b", endpoint: "https://a.example.test/v1/models", models: ["model-a"], latency_ms: 20, error: null }],
-        error: null,
-      };
-      if (command === "update_amkr_pool") {
+      if (command === "probe_amkr_key") {
         current = {
           ...current,
           config_revision: "revision-c",
-          providers: [{ ...current.providers[0], pools: [{ ...current.providers[0].pools[0], keys: ["key-a", "key-b"] }] }],
+          providers: [{
+            ...current.providers[0],
+            keys: current.providers[0].keys.map((key) => key.name === "key-b" ? { ...key, capabilities: { models: ["model-b"], route_status: { openai: "ok" }, errors: {}, checked_at: "2026-09-01T00:00:00+00:00" } } : key),
+          }],
         };
-        return undefined;
+        return { config_revision: "revision-c", provider: current.providers[0] };
       }
       throw new Error(`unexpected command ${command} ${JSON.stringify(args)}`);
     });
@@ -216,257 +210,47 @@ describe("ProvidersPage", () => {
     fireEvent.change(screen.getByLabelText("API Key"), { target: { value: "secret-b" } });
     fireEvent.click(screen.getByRole("button", { name: "添加 Key" }));
 
-    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_amkr_pool", {
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("probe_amkr_key", {
       configPath: null,
       configRevision: "revision-b",
       providerId: "a.example.test",
-      poolName: "pool-a",
-      name: "pool-a",
-      keys: ["key-a", "key-b"],
-      models: ["model-a"],
+      keyName: "key-b",
     }));
-    expect(invokeMock).not.toHaveBeenCalledWith("create_amkr_pool", expect.anything());
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "添加 Key" })).not.toBeInTheDocument());
+    const keyRow = await screen.findByText("key-b").then((element) => element.closest("li"));
+    expect(keyRow).not.toBeNull();
+    expect(within(keyRow as HTMLElement).getByText("1 个模型")).toBeInTheDocument();
+    expect(within(keyRow as HTMLElement).getByText("model-b")).toBeInTheDocument();
   });
 
-  it("creates a new pool only when discovered models do not match an existing pool", async () => {
-    let current = response;
-    invokeMock.mockImplementation(async (command) => {
+  it("adds a key and reports a probe failure without losing the key", async () => {
+    let current: AmkrProvidersResponse = response;
+    invokeMock.mockImplementation(async (command, args) => {
       if (command === "get_amkr_providers") return current;
       if (command === "create_amkr_provider_key") {
         current = {
           ...current,
           config_revision: "revision-b",
-          providers: [{ ...current.providers[0], keys: [...current.providers[0].keys, { name: "key-b", enabled: true, allow_visitor: false, api_key_fingerprint: "keybfingerprint" }] }],
+          providers: [{ ...current.providers[0], keys: [...current.providers[0].keys, { name: "key-b", enabled: true, allow_visitor: false, api_key_fingerprint: "keybfingerprint", capabilities: null }] }],
         };
         return undefined;
       }
-      if (command === "probe_amkr_keys") return { probe_id: "probe-key-b", status: "pending" };
-      if (command === "get_amkr_probe") return {
-        probe_id: "probe-key-b",
-        status: "complete",
-        provider: "a.example.test",
-        results: [{ status: "ok", provider: "a.example.test", key: "key-b", endpoint: "https://a.example.test/v1/models", models: ["model-b", "model-c"], latency_ms: 20, error: null }],
-        error: null,
-      };
-      if (command === "create_amkr_pool") return undefined;
-      return undefined;
+      if (command === "probe_amkr_key") throw new Error("AMKR 探测 Key 能力请求失败（HTTP 500）: 上游不可用");
+      throw new Error(`unexpected command ${command} ${JSON.stringify(args)}`);
     });
 
     render(<ProvidersPage configPath={null} />);
     await screen.findByText("a.example.test");
 
     fireEvent.click(screen.getByRole("button", { name: "添加 Key" }));
-    fireEvent.change(screen.getByLabelText("Key 名称"), { target: { value: "key-b" } });
-    fireEvent.change(screen.getByLabelText("API Key"), { target: { value: "secret-b" } });
-    fireEvent.click(screen.getByRole("button", { name: "添加 Key" }));
+    const dialog = screen.getByRole("dialog", { name: "添加 Key" });
+    fireEvent.change(within(dialog).getByLabelText("Key 名称"), { target: { value: "key-b" } });
+    fireEvent.change(within(dialog).getByLabelText("API Key"), { target: { value: "secret-b" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "添加 Key" }));
 
-    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("create_amkr_pool", {
-      configPath: null,
-      configRevision: "revision-b",
-      providerId: "a.example.test",
-      name: "default",
-      keys: ["key-b"],
-      models: ["model-b", "model-c"],
-    }));
-  });
-
-  it("updates and deletes a model pool", async () => {
-    render(<ProvidersPage configPath={null} />);
-    await screen.findByText("pool-a");
-
-    fireEvent.click(screen.getByRole("button", { name: "编辑模型池 pool-a" }));
-    fireEvent.change(screen.getByLabelText("模型池名称"), { target: { value: "pool-b" } });
-    fireEvent.click(screen.getByRole("button", { name: "添加自定义模型" }));
-    fireEvent.change(screen.getByLabelText("自定义模型名称"), { target: { value: "model-b" } });
-    fireEvent.click(screen.getByRole("button", { name: "确认添加自定义模型" }));
-    fireEvent.click(screen.getByRole("button", { name: "保存模型池" }));
-
-    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_amkr_pool", {
-      configPath: null,
-      configRevision: "revision-a",
-      providerId: "a.example.test",
-      poolName: "pool-a",
-      name: "pool-b",
-      keys: ["key-a"],
-      models: ["model-a", "model-b"],
-    }));
-
-    fireEvent.click(screen.getByRole("button", { name: "删除模型池 pool-a" }));
-    fireEvent.click(await screen.findByRole("button", { name: "确认" }));
-    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("delete_amkr_pool", {
-      configPath: null,
-      configRevision: "revision-a",
-      providerId: "a.example.test",
-      poolName: "pool-a",
-    }));
-  });
-
-  it("shows a card loader while probing an edited pool", async () => {
-    invokeMock.mockImplementation(async (command) => {
-      if (command === "get_amkr_providers") return response;
-      if (command === "probe_amkr_keys") return { probe_id: "probe-pools", status: "pending" };
-      if (command === "get_amkr_probe") return {
-        probe_id: "probe-pools",
-        status: "running",
-        provider: "a.example.test",
-        results: [],
-        error: null,
-      };
-      return undefined;
-    });
-    render(<ProvidersPage configPath={null} />);
-    await screen.findByText("pool-a");
-
-    fireEvent.click(screen.getByRole("button", { name: "编辑模型池 pool-a" }));
-
-    expect(screen.getByText("启用模型")).toBeInTheDocument();
-    expect(await screen.findByLabelText("正在探测模型")).toHaveClass("pool-model-probe-indicator");
-  });
-
-  it("places the probe card after existing models", async () => {
-    invokeMock.mockImplementation(async (command) => {
-      if (command === "get_amkr_providers") return response;
-      if (command === "probe_amkr_keys") return { probe_id: "probe-pools", status: "pending" };
-      if (command === "get_amkr_probe") return { probe_id: "probe-pools", status: "running", provider: "a.example.test", results: [], error: null };
-      return undefined;
-    });
-    render(<ProvidersPage configPath={null} />);
-    await screen.findByText("pool-a");
-
-    fireEvent.click(screen.getByRole("button", { name: "编辑模型池 pool-a" }));
-
-    const grid = await screen.findByLabelText("模型池模型");
-    expect(Array.from(grid.querySelectorAll(".pool-model-card")).map((card) => card.getAttribute("aria-label"))).toEqual(["关闭模型 model-a", "正在探测模型", "添加自定义模型"]);
-  });
-
-  it("submits model pool keys in the adjusted order", async () => {
-    const twoKeyResponse = {
-      ...response,
-      providers: [{
-        ...response.providers[0],
-        keys: [
-          response.providers[0].keys[0],
-          { name: "key-b", enabled: true, allow_visitor: false, api_key_fingerprint: "keybfingerprint" },
-        ],
-        pools: [{ name: "pool-a", keys: ["key-a", "key-b"], models: ["model-a"] }],
-      }],
-    };
-    invokeMock.mockImplementation(async (command) => {
-      if (command === "get_amkr_providers") return twoKeyResponse;
-      if (command === "probe_amkr_keys") return { probe_id: "probe-key-a", status: "pending" };
-      if (command === "get_amkr_probe") return {
-        probe_id: "probe-key-a",
-        status: "complete",
-        provider: "a.example.test",
-        results: [],
-        error: null,
-      };
-      return undefined;
-    });
-
-    render(<ProvidersPage configPath={null} />);
-    await screen.findByText("pool-a");
-    fireEvent.click(screen.getByRole("button", { name: "编辑模型池 pool-a" }));
-    fireEvent.click(screen.getByRole("button", { name: "移除模型池 Key key-a" }));
-    fireEvent.click(await screen.findByRole("button", { name: "添加模型池 Key key-a" }));
-    fireEvent.click(screen.getByRole("button", { name: "保存模型池" }));
-
-    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_amkr_pool", expect.objectContaining({
-      keys: ["key-b", "key-a"],
-    })));
-  });
-
-  it("keeps discovered models unselected when the pool has no models", async () => {
-    const emptyPoolResponse = {
-      ...response,
-      providers: [{ ...response.providers[0], pools: [{ ...response.providers[0].pools[0], models: [] }] }],
-    };
-    invokeMock.mockImplementation(async (command) => {
-      if (command === "get_amkr_providers") return emptyPoolResponse;
-      if (command === "probe_amkr_keys") return { probe_id: "probe-pools", status: "pending" };
-      if (command === "get_amkr_probe") return {
-        probe_id: "probe-pools",
-        status: "complete",
-        provider: "a.example.test",
-        results: [{ status: "ok", provider: "a.example.test", key: "key-a", endpoint: "https://a.example.test/v1/models", models: ["model-a", "model-b"], latency_ms: 20, error: null }],
-        error: null,
-      };
-      return undefined;
-    });
-    render(<ProvidersPage configPath={null} />);
-    await screen.findByText("pool-a");
-
-    fireEvent.click(screen.getByRole("button", { name: "编辑模型池 pool-a" }));
-
-    expect(await screen.findByRole("button", { name: "打开模型 model-a" })).toHaveAttribute("aria-pressed", "false");
-    expect(screen.getByRole("button", { name: "打开模型 model-b" })).toHaveAttribute("aria-pressed", "false");
-  });
-
-  it("probes the edited pool and combines discovered and custom models", async () => {
-    invokeMock.mockImplementation(async (command) => {
-      if (command === "get_amkr_providers") return response;
-      if (command === "probe_amkr_keys") return { probe_id: "probe-pools", status: "pending" };
-      if (command === "get_amkr_probe") return {
-        probe_id: "probe-pools",
-        status: "complete",
-        provider: "a.example.test",
-        results: [{ status: "ok", provider: "a.example.test", key: "key-a", endpoint: "https://a.example.test/v1/models", models: ["model-a", "model-b"], latency_ms: 20, error: null }],
-        error: null,
-      };
-      return undefined;
-    });
-    render(<ProvidersPage configPath={null} />);
-    await screen.findByText("pool-a");
-
-    fireEvent.click(screen.getByRole("button", { name: "编辑模型池 pool-a" }));
-    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("probe_amkr_keys", {
-      configPath: null,
-      providerId: "a.example.test",
-      keys: ["key-a"],
-      timeoutSeconds: 15,
-    }));
-    expect(invokeMock).not.toHaveBeenCalledWith("probe_amkr_pools", expect.anything());
-    expect(screen.queryByLabelText("选择探测模型")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("自定义模型")).not.toBeInTheDocument();
-    fireEvent.click(await screen.findByRole("button", { name: "打开模型 model-b" }));
-    expect(screen.getByRole("button", { name: "关闭模型 model-a" })).toHaveClass("is-selected");
-    expect(screen.getByRole("button", { name: "关闭模型 model-b" })).toHaveClass("is-selected");
-
-    fireEvent.click(screen.getByRole("button", { name: "添加自定义模型" }));
-    fireEvent.change(screen.getByLabelText("自定义模型名称"), { target: { value: "custom-delete" } });
-    fireEvent.click(screen.getByRole("button", { name: "确认添加自定义模型" }));
-    fireEvent.click(screen.getByRole("button", { name: "删除自定义模型 custom-delete" }));
-    expect(screen.queryByText("custom-delete")).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "添加自定义模型" }));
-    fireEvent.change(screen.getByLabelText("自定义模型名称"), { target: { value: "custom-model" } });
-    fireEvent.click(screen.getByRole("button", { name: "确认添加自定义模型" }));
-    fireEvent.click(screen.getByRole("button", { name: "保存模型池" }));
-
-    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_amkr_pool", expect.objectContaining({
-      models: ["model-a", "model-b", "custom-model"],
-    })));
-  });
-
-  it("marks enabled models missing from the latest probe", async () => {
-    invokeMock.mockImplementation(async (command) => {
-      if (command === "get_amkr_providers") return response;
-      if (command === "probe_amkr_keys") return { probe_id: "probe-pools", status: "pending" };
-      if (command === "get_amkr_probe") return {
-        probe_id: "probe-pools",
-        status: "complete",
-        provider: "a.example.test",
-        results: [{ status: "ok", provider: "a.example.test", key: "key-a", endpoint: "https://a.example.test/v1/models", models: ["model-b"], latency_ms: 20, error: null }],
-        error: null,
-      };
-      return undefined;
-    });
-    render(<ProvidersPage configPath={null} />);
-    await screen.findByText("pool-a");
-
-    fireEvent.click(screen.getByRole("button", { name: "编辑模型池 pool-a" }));
-
-    await waitFor(() => expect(screen.getByRole("button", { name: "关闭模型 model-a" })).toHaveClass("is-probe-missing"));
+    expect(await within(dialog).findByText(/自动探测失败/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+    expect(screen.getByText("key-b")).toBeInTheDocument();
   });
 
   it("collapses each editor from its edit button", async () => {
@@ -483,12 +267,6 @@ describe("ProvidersPage", () => {
     expect(screen.getByLabelText("Key 名称").closest("li")).toHaveClass("provider-row");
     fireEvent.click(screen.getByRole("button", { name: "收起 Key key-a" }));
     expect(screen.queryByLabelText("Key 名称")).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "编辑模型池 pool-a" }));
-    expect(screen.getByLabelText("模型池名称")).toBeInTheDocument();
-    expect(screen.getByLabelText("模型池名称").closest("li")).toHaveClass("provider-row");
-    fireEvent.click(screen.getByRole("button", { name: "收起模型池 pool-a" }));
-    expect(screen.queryByLabelText("模型池名称")).not.toBeInTheDocument();
   });
 
   it("does not delete a provider when confirmation is cancelled", async () => {
@@ -515,16 +293,14 @@ describe("ProvidersPage", () => {
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_amkr_provider_key", expect.objectContaining({ enabled: true, allowVisitor: true })));
   });
 
-  it("probes an individual key and expires its success state", async () => {
+  it("probes an individual key and refreshes its capabilities", async () => {
+    let probed = false;
     invokeMock.mockImplementation(async (command) => {
-      if (command === "probe_amkr_keys") return { probe_id: "probe-single-key", status: "pending" };
-      if (command === "get_amkr_probe") return {
-        probe_id: "probe-single-key",
-        status: "complete",
-        provider: "a.example.test",
-        results: [{ key: "key-a", endpoint: "https://a.example.test/v1", models: ["model-a"], latency_ms: 42, error: null }],
-        error: null,
-      };
+      if (command === "probe_amkr_key") {
+        probed = true;
+        return { config_revision: "revision-b", provider: response.providers[0] };
+      }
+      if (command === "get_amkr_providers") return { ...response, config_revision: probed ? "revision-b" : "revision-a" };
       return response;
     });
     render(<ProvidersPage configPath={null} />);
@@ -532,7 +308,7 @@ describe("ProvidersPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "探测 Key key-a" }));
     expect(await screen.findByText("探测成功")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "探测 Key key-a" })).toHaveTextContent("已通过");
+    expect(screen.getByRole("button", { name: "探测 Key key-a" })).toHaveTextContent("已探测");
 
     await waitFor(() => expect(screen.queryByText("探测成功")).not.toBeInTheDocument(), { timeout: 3000 });
     expect(screen.getByRole("button", { name: "探测 Key key-a" })).toHaveTextContent("探测");

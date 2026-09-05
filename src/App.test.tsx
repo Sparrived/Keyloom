@@ -1110,9 +1110,10 @@ describe("Keyloom application shell", () => {
                 enabled: true,
                 allow_visitor: false,
                 api_key_fingerprint: "65bbff9a6cb9",
+                capabilities: { models: ["model-a"], route_status: { openai: "ok" }, errors: {}, checked_at: "2026-09-01T00:00:00+00:00" },
               },
             ],
-            pools: [{ name: "model-a", keys: ["key-a"], models: ["model-a"] }],
+            routes: {},
           },
         ],
       };
@@ -1125,7 +1126,8 @@ describe("Keyloom application shell", () => {
 
     expect(await screen.findByText("a.example.test")).toBeInTheDocument();
     expect(screen.getByText("65bbff9a6cb9")).toBeInTheDocument();
-    expect(screen.getAllByText("model-a")).toHaveLength(2);
+    expect(screen.getByText("1 个模型")).toBeInTheDocument();
+    expect(screen.getByText("model-a")).toBeInTheDocument();
     expect(invokeMock).toHaveBeenCalledWith("get_amkr_providers", { configPath: null });
   });
 
@@ -1137,7 +1139,7 @@ describe("Keyloom application shell", () => {
       if (command === "get_amkr_health") return { status: "ok", local_auth_enabled: true };
       if (command === "get_amkr_metrics") return { total: { requests: 0, total_tokens: 0, cached_token_rate: 0, avg_duration_ms: 0 } };
       if (command === "create_amkr_provider") { created = true; return { config_revision: "revision-b", provider: { id: "b.example.test" } }; }
-      if (command === "get_amkr_providers") return { config_revision: created ? "revision-b" : "revision-a", providers: created ? [{ id: "b.example.test", base_url: "https://b.example.test", keys: [], pools: [] }] : [] };
+      if (command === "get_amkr_providers") return { config_revision: created ? "revision-b" : "revision-a", providers: created ? [{ id: "b.example.test", base_url: "https://b.example.test", keys: [], routes: {} }] : [] };
       return undefined;
     });
 
@@ -1167,7 +1169,7 @@ describe("Keyloom application shell", () => {
             aliases: ["alias-a"],
             routing_mode: "priority",
             targets: [
-              { provider: "a.example.test", pool: "model-a", upstream_model: "upstream-a" },
+              { provider: "a.example.test", key: "key-a", upstream_model: "upstream-a" },
             ],
           },
         ],
@@ -1183,7 +1185,7 @@ describe("Keyloom application shell", () => {
 
     expect(await screen.findByText("model-a")).toBeInTheDocument();
     expect(screen.getByText("alias-a")).toBeInTheDocument();
-    expect(screen.getByText("a.example.test / model-a / upstream-a")).toBeInTheDocument();
+    expect(screen.getByText("a.example.test / key-a / upstream-a")).toBeInTheDocument();
     expect(invokeMock).toHaveBeenCalledWith("get_amkr_routes", { configPath: null });
   });
 });

@@ -34,7 +34,7 @@ describe("ProbePanel", () => {
       return undefined;
     });
 
-    render(<ProbePanel configPath={null} providerId="a.example.test" keys={["key-a", "key-b"]} pools={["pool-a"]} />);
+    render(<ProbePanel configPath={null} providerId="a.example.test" keys={["key-a", "key-b"]} />);
     expect(screen.queryByRole("button", { name: "探测 Key key-a" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "探测全部模型池" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "探测全部 Key" }));
@@ -49,30 +49,6 @@ describe("ProbePanel", () => {
     expect(screen.getByText("model-a")).toBeInTheDocument();
     expect(screen.getByText("123 ms")).toBeInTheDocument();
     expect(screen.queryByText("upstream-secret")).not.toBeInTheDocument();
-  });
-
-  it("automatically probes the pool requested by an editor", async () => {
-    invokeMock.mockImplementation(async (command) => {
-      if (command === "probe_amkr_keys") return { probe_id: "probe-pool", status: "pending" };
-      if (command === "get_amkr_probe") return {
-        probe_id: "probe-pool",
-        status: "complete",
-        provider: "a.example.test",
-        results: [],
-        error: null,
-      };
-      return undefined;
-    });
-
-    render(<ProbePanel configPath="C:/amkr.json" providerId="a.example.test" keys={["key-a"]} pools={["pool-a", "pool-b"]} poolProbeRequest={{ id: 1, pool: "pool-b", key: "key-a" }} />);
-
-    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("probe_amkr_keys", {
-      configPath: "C:/amkr.json",
-      providerId: "a.example.test",
-      keys: ["key-a"],
-      timeoutSeconds: 15,
-    }));
-    expect(invokeMock).not.toHaveBeenCalledWith("probe_amkr_pools", expect.anything());
   });
 
   it("cancels an active probe and disables duplicate starts", async () => {
@@ -95,7 +71,7 @@ describe("ProbePanel", () => {
       return undefined;
     });
 
-    render(<ProbePanel configPath={null} providerId="a.example.test" keys={["key-a"]} pools={[]} />);
+    render(<ProbePanel configPath={null} providerId="a.example.test" keys={["key-a"]} />);
     fireEvent.click(screen.getByRole("button", { name: "探测全部 Key" }));
     expect(await screen.findByRole("button", { name: "取消探测" })).not.toBeDisabled();
     expect(screen.getByRole("button", { name: "探测全部 Key" })).toBeDisabled();
@@ -123,7 +99,7 @@ describe("ProbePanel", () => {
       return undefined;
     });
 
-    const { unmount } = render(<ProbePanel configPath={null} providerId="a.example.test" keys={["key-a"]} pools={[]} />);
+    const { unmount } = render(<ProbePanel configPath={null} providerId="a.example.test" keys={["key-a"]} />);
     fireEvent.click(screen.getByRole("button", { name: "探测全部 Key" }));
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("get_amkr_probe", {
       configPath: null,
@@ -158,7 +134,7 @@ describe("ProbePanel", () => {
       return undefined;
     });
 
-    const { unmount } = render(<ProbePanel configPath={null} providerId="a.example.test" keys={["key-a"]} pools={[]} />);
+    const { unmount } = render(<ProbePanel configPath={null} providerId="a.example.test" keys={["key-a"]} />);
     fireEvent.click(screen.getByRole("button", { name: "探测全部 Key" }));
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("probe_amkr_keys", expect.anything()));
     unmount();

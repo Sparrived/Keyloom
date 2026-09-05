@@ -10,6 +10,7 @@ use super::AmkrConnection;
 
 const LOCAL_REQUEST_TIMEOUT: Duration = Duration::from_secs(2);
 const UPDATE_CHECK_TIMEOUT: Duration = Duration::from_secs(25);
+const PROBE_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Default, Serialize)]
 pub struct AmkrNativeEndpointSummary {
@@ -169,13 +170,20 @@ pub struct AmkrProviderKey {
     pub enabled: bool,
     pub allow_visitor: bool,
     pub api_key_fingerprint: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capabilities: Option<AmkrKeyCapabilities>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct AmkrProviderPool {
-    pub name: String,
-    pub keys: Vec<String>,
+#[derive(Debug, Default, Deserialize, Serialize)]
+pub struct AmkrKeyCapabilities {
+    #[serde(default)]
     pub models: Vec<String>,
+    #[serde(default)]
+    pub route_status: BTreeMap<String, String>,
+    #[serde(default)]
+    pub errors: BTreeMap<String, String>,
+    #[serde(default)]
+    pub checked_at: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -184,8 +192,6 @@ pub struct AmkrProvider {
     pub base_url: String,
     #[serde(default)]
     pub keys: Vec<AmkrProviderKey>,
-    #[serde(default)]
-    pub pools: Vec<AmkrProviderPool>,
     #[serde(default)]
     pub routes: BTreeMap<String, String>,
 }
@@ -205,7 +211,7 @@ pub struct AmkrProviderResponse {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct AmkrRouteTarget {
     pub provider: String,
-    pub pool: String,
+    pub key: String,
     pub upstream_model: String,
 }
 
@@ -728,72 +734,6 @@ pub fn delete_provider_key(
     )
 }
 
-pub fn create_pool(
-    connection: &AmkrConnection,
-    config_revision: &str,
-    provider_id: &str,
-    name: &str,
-    keys: Vec<String>,
-    models: Vec<String>,
-) -> Result<(), String> {
-    request_empty(
-        connection,
-        "POST",
-        &format!("/api/providers/{}/pools", encode_path_segment(provider_id)),
-        "创建模型池",
-        serde_json::json!({ "config_revision": config_revision, "name": name, "keys": keys, "models": models }),
-        &[201],
-    )
-}
-
-pub fn update_pool(
-    connection: &AmkrConnection,
-    config_revision: &str,
-    provider_id: &str,
-    pool_name: &str,
-    name: &str,
-    keys: Vec<String>,
-    models: Vec<String>,
-) -> Result<(), String> {
-    request_empty(
-        connection,
-        "PUT",
-        &format!(
-            "/api/providers/{}/pools/{}",
-            encode_path_segment(provider_id),
-            encode_path_segment(pool_name)
-        ),
-        "更新模型池",
-        serde_json::json!({
-            "config_revision": config_revision,
-            "name": name,
-            "keys": keys,
-            "models": models,
-        }),
-        &[200],
-    )
-}
-
-pub fn delete_pool(
-    connection: &AmkrConnection,
-    config_revision: &str,
-    provider_id: &str,
-    pool_name: &str,
-) -> Result<(), String> {
-    request_empty(
-        connection,
-        "DELETE",
-        &format!(
-            "/api/providers/{}/pools/{}",
-            encode_path_segment(provider_id),
-            encode_path_segment(pool_name)
-        ),
-        "删除模型池",
-        serde_json::json!({ "config_revision": config_revision }),
-        &[204],
-    )
-}
-
 pub fn create_route_with_targets(
     connection: &AmkrConnection,
     config_revision: &str,
@@ -866,23 +806,31 @@ pub fn probe_keys(
     )
 }
 
-pub fn probe_pools(
+pub fn probe_key_capability(
     connection: &AmkrConnection,
+    config_revision: &str,
     provider_id: &str,
-    pools: Vec<String>,
-    timeout_seconds: f64,
-) -> Result<AmkrProbeStart, String> {
-    request_json(
+    key_name: &str,
+    modes: Option<Vec<String>>,
+) -> Result<AmkrProviderResponse, String> {
+    let mut payload = serde_json::json!({ "config_revision": config_revision });
+    if let Some(modes) = modes {
+        payload["modes"] = serde_json::Value::Array(
+            modes.into_iter().map(serde_json::Value::String).collect(),
+        );
+    }
+    request_json_with_timeout(
         connection,
         "POST",
-        "/api/probes/pools",
-        "探测模型池",
-        Some(serde_json::json!({
-            "provider_id": provider_id,
-            "pools": pools,
-            "timeout_seconds": timeout_seconds,
-        })),
-        &[202],
+        &format!(
+            "/api/providers/{}/keys/{}/probe",
+            encode_path_segment(provider_id),
+            encode_path_segment(key_name)
+        ),
+        "探测 Key 能力",
+        Some(payload),
+        &[200],
+        PROBE_TIMEOUT,
     )
 }
 

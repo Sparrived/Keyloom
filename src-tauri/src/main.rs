@@ -329,61 +329,6 @@ fn delete_amkr_provider_key(
 }
 
 #[tauri::command]
-fn create_amkr_pool(
-    config_path: Option<String>,
-    config_revision: String,
-    provider_id: String,
-    name: String,
-    keys: Vec<String>,
-    models: Vec<String>,
-) -> Result<(), String> {
-    keyloom_core::create_amkr_pool(
-        config_path.as_deref().map(Path::new),
-        &config_revision,
-        &provider_id,
-        &name,
-        keys,
-        models,
-    )
-}
-
-#[tauri::command]
-fn update_amkr_pool(
-    config_path: Option<String>,
-    config_revision: String,
-    provider_id: String,
-    pool_name: String,
-    name: String,
-    keys: Vec<String>,
-    models: Vec<String>,
-) -> Result<(), String> {
-    keyloom_core::update_amkr_pool(
-        config_path.as_deref().map(Path::new),
-        &config_revision,
-        &provider_id,
-        &pool_name,
-        &name,
-        keys,
-        models,
-    )
-}
-
-#[tauri::command]
-fn delete_amkr_pool(
-    config_path: Option<String>,
-    config_revision: String,
-    provider_id: String,
-    pool_name: String,
-) -> Result<(), String> {
-    keyloom_core::delete_amkr_pool(
-        config_path.as_deref().map(Path::new),
-        &config_revision,
-        &provider_id,
-        &pool_name,
-    )
-}
-
-#[tauri::command]
 fn create_amkr_route(
     config_path: Option<String>,
     config_revision: String,
@@ -513,17 +458,17 @@ fn probe_amkr_keys(
 }
 
 #[tauri::command]
-fn probe_amkr_pools(
+fn probe_amkr_key(
     config_path: Option<String>,
+    config_revision: String,
     provider_id: String,
-    pools: Vec<String>,
-    timeout_seconds: f64,
-) -> Result<keyloom_core::amkr::client::AmkrProbeStart, String> {
-    keyloom_core::probe_amkr_pools(
+    key_name: String,
+) -> Result<keyloom_core::amkr::client::AmkrProviderResponse, String> {
+    keyloom_core::probe_amkr_key(
         config_path.as_deref().map(Path::new),
+        &config_revision,
         &provider_id,
-        pools,
-        timeout_seconds,
+        &key_name,
     )
 }
 
@@ -774,9 +719,6 @@ fn main() {
             create_amkr_provider_key,
             update_amkr_provider_key,
             delete_amkr_provider_key,
-            create_amkr_pool,
-            update_amkr_pool,
-            delete_amkr_pool,
             create_amkr_route,
             update_amkr_route,
             delete_amkr_route,
@@ -789,7 +731,7 @@ fn main() {
             install_amkr_tool,
             update_amkr_tool,
             probe_amkr_keys,
-            probe_amkr_pools,
+            probe_amkr_key,
             get_amkr_probe,
             cancel_amkr_probe,
             start_amkr,
