@@ -4,8 +4,10 @@ import {
   createAmkrProviderKey,
   deleteAmkrProvider,
   deleteAmkrProviderKey,
+  getAmkrKeyModels,
   getAmkrProviders,
   probeAmkrKey,
+  updateAmkrKeyModels,
   updateAmkrProvider,
   updateAmkrProviderKey,
   type AmkrProvider,
@@ -29,7 +31,114 @@ const providerRouteModes = [
 type KeyProbeState = "idle" | "pending" | "success" | "error";
 
 const normalizeModels = (models: string[]) => Array.from(new Set(models.map((model) => model.trim()).filter(Boolean))).sort();
+const csv = (value: string) => value.split(",").map((item) => item.trim()).filter(Boolean);
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
+type KeyModelsEditorProps = {
+  configPath: string | null;
+  providerId: string;
+  keyName: string;
+  discoveredModels: string[];
+  revision: string;
+  refresh: () => Promise<AmkrProvidersResponse | null>;
+  onSaved: () => void;
+  onClose: () => void;
+};
+
+function KeyModelsEditor({ configPath, providerId, keyName, discoveredModels, revision, refresh, onSaved, onClose }: KeyModelsEditorProps) {
+  const [boundModels, setBoundModels] = useState<string[] | null>(null);
+  const [selectedText, setSelectedText] = useState("");
+  const [customModels, setCustomModels] = useState<string[]>([]);
+  const [addingCustomModel, setAddingCustomModel] = useState(false);
+  const [customModelName, setCustomModelName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const { showCopyToast } = useCopyToast();
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoadError(null);
+    getAmkrKeyModels(providerId, keyName, configPath)
+      .then((response) => {
+        if (cancelled) return;
+        const bound = normalizeModels(response.models);
+        setBoundModels(bound);
+        setSelectedText(bound.join(", "));
+      })
+      .catch((reason) => {
+        if (cancelled) return;
+        setLoadError(reason instanceof Error ? reason.message : String(reason));
+        setBoundModels([]);
+      });
+    return () => { cancelled = true; };
+  }, [configPath, providerId, keyName]);
+
+  const selected = csv(selectedText);
+  const probeBusy = false;
+  const toggleModel = (model: string) => {
+    setSelectedText((current) => {
+      const currentSelected = csv(current);
+      return currentSelected.includes(model)
+        ? currentSelected.filter((item) => item !== model).join(", ")
+        : Array.from(new Set([...currentSelected, model])).join(", ");
+    });
+  };
+  const addCustomModel = () => {
+    const model = customModelName.trim();
+    if (!model) return;
+    setCustomModels((current) => Array.from(new Set([...current, model])));
+    setSelectedText((current) => Array.from(new Set([...csv(current), model])).join(", "));
+    setCustomModelName("");
+    setAddingCustomModel(false);
+  };
+  const deleteCustomModel = (model: string) => {
+    setCustomModels((current) => current.filter((item) => item !== model));
+    setSelectedText((current) => csv(current).filter((item) => item !== model).join(", "));
+  };
+  const modelCards = Array.from(new Set([...(customModels), ...discoveredModels, ...(boundModels ?? []), ...selected])).filter(Boolean);
+  const isMissingFromProbe = (model: string) => Boolean(boundModels) && selected.includes(model) && !customModels.includes(model) && !discoveredModels.includes(model);
+
+  const save = async () => {
+    if (saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await updateAmkrKeyModels(revision, providerId, keyName, selected, configPath);
+      showCopyToast(`Key ${keyName} 已保存 ${selected.length} 个模型。`);
+      onSaved();
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : String(reason);
+      if (message.includes("HTTP 409")) await refresh();
+      setError(message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return <form className="inline-form editor-form resource-form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
+    <div className="pool-model-section-label">启用模型（该 Key 服务这些模型）</div>
+    {loadError ? <p className="service-action-error" role="alert">读取 Key 绑定失败: {loadError}</p> : null}
+    <div aria-label={`Key ${keyName} 模型`} className="pool-model-grid">
+      {modelCards.map((model) => {
+        const isSelected = selected.includes(model);
+        const custom = customModels.includes(model);
+        return <div className="pool-model-card-shell" key={model}>
+          <button aria-label={`${isSelected ? "关闭" : "打开"}模型 ${model}`} aria-pressed={isSelected} className={`pool-model-card${isSelected ? " is-selected" : ""}${isMissingFromProbe(model) ? " is-probe-missing" : ""}`} type="button" onClick={() => toggleModel(model)}>{model}</button>
+          {custom ? <button aria-label={`删除自定义模型 ${model}`} className="pool-model-remove" type="button" onClick={() => deleteCustomModel(model)}>×</button> : null}
+        </div>;
+      })}
+      {probeBusy ? <div aria-label="正在探测模型" className="pool-model-card pool-model-probe-indicator" role="status"><span /><span /><span /></div> : null}
+      {addingCustomModel ? <div className="pool-model-card custom-model-card">
+        <input aria-label="自定义模型名称" autoFocus value={customModelName} onChange={(event) => setCustomModelName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addCustomModel(); } else if (event.key === "Escape") { setAddingCustomModel(false); setCustomModelName(""); } }} />
+        <button aria-label="确认添加自定义模型" type="button" onClick={() => addCustomModel()}>+</button>
+      </div> : <button aria-label="添加自定义模型" className="pool-model-card pool-model-add" type="button" onClick={() => setAddingCustomModel(true)}>+</button>}
+    </div>
+    <p className="editor-help">黄色卡片表示已启用但当前探测未发现（可能暂时不可用或未探测）；可在上方「探测」刷新后重新勾选。</p>
+    {error ? <p className="service-action-error" role="alert">{error}</p> : null}
+    <div className="form-actions"><button disabled={saving} type="submit">{saving ? "保存中…" : "保存模型"}</button><button className="secondary-button" disabled={saving} type="button" onClick={onClose}>取消</button></div>
+  </form>;
+}
 
 type ProviderCardProps = {
   configPath: string | null;
@@ -45,6 +154,7 @@ function ProviderCard({ configPath, provider, revision, refresh, onProviderIdCha
   const [providerUrl, setProviderUrl] = useState(provider.base_url);
   const [providerRoutes, setProviderRoutes] = useState<Record<string, string>>(provider.routes ?? {});
   const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [editingModelsKey, setEditingModelsKey] = useState<string | null>(null);
   const [keyEditName, setKeyEditName] = useState("");
   const [keyEditSecret, setKeyEditSecret] = useState("");
   const [addingKey, setAddingKey] = useState(false);
@@ -122,6 +232,8 @@ function ProviderCard({ configPath, provider, revision, refresh, onProviderIdCha
       await wait(450);
       setAddingKey(false);
       setKeyCreateStep("idle");
+      setEditingModelsKey(name);
+      setEditingKey(null);
     } catch (reason) {
       setKeyCreateStep("error");
       setError(`Key 已保存，但自动探测失败: ${errorMessage(reason)}`);
@@ -205,6 +317,7 @@ function ProviderCard({ configPath, provider, revision, refresh, onProviderIdCha
           </div>
           <div className="row-actions">
             <button aria-label={`探测 Key ${key.name}`} className={`secondary-button key-probe-button${keyProbeStates[key.name] === "success" ? " is-success" : ""}`} disabled={keyProbeStates[key.name] === "pending" || keyProbeStates[key.name] === "success"} type="button" onClick={() => void probeKey(key.name)}>{keyProbeStates[key.name] === "pending" ? "探测中" : keyProbeStates[key.name] === "success" ? "已探测" : "探测"}</button>
+            <button aria-expanded={editingModelsKey === key.name} aria-label={`${editingModelsKey === key.name ? "收起" : "管理"} Key ${key.name} 的模型`} className="secondary-button" type="button" onClick={() => { setEditingModelsKey((current) => current === key.name ? null : key.name); setEditingKey(null); }}>{editingModelsKey === key.name ? "收起" : "管理模型"}</button>
             <button aria-expanded={editingKey === key.name} aria-label={`${editingKey === key.name ? "收起" : "编辑"} Key ${key.name}`} className="secondary-button" type="button" onClick={() => beginKeyEdit(key)}>{editingKey === key.name ? "收起" : "编辑"}</button>
             <button aria-label={`删除 Key ${key.name}`} className="danger-button" type="button" onClick={() => void removeKey(key.name)}>删除</button>
           </div>
@@ -213,6 +326,16 @@ function ProviderCard({ configPath, provider, revision, refresh, onProviderIdCha
             <label>替换 API Key<input type="password" value={keyEditSecret} onChange={(event) => setKeyEditSecret(event.target.value)} /></label>
             <div className="form-actions"><button type="submit">保存 Key</button><button className="secondary-button" type="button" onClick={() => setEditingKey(null)}>取消</button></div>
           </form> : null}
+          {editingModelsKey === key.name ? <KeyModelsEditor
+            configPath={configPath}
+            providerId={provider.id}
+            keyName={key.name}
+            discoveredModels={modelList}
+            revision={revision}
+            refresh={refresh}
+            onSaved={() => { setEditingModelsKey(null); void refresh(); }}
+            onClose={() => setEditingModelsKey(null)}
+          /> : null}
         </li>;
         })}</ul> : <p>尚无 Key。</p>}
       </section>

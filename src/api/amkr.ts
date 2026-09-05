@@ -386,6 +386,21 @@ export function deleteAmkrProviderKey(configRevision: string, providerId: string
   return invoke("delete_amkr_provider_key", { configPath, configRevision, providerId, keyName });
 }
 
+export type AmkrKeyModelsResponse = {
+  config_revision: string;
+  provider_id: string;
+  key: string;
+  models: string[];
+};
+
+export function getAmkrKeyModels(providerId: string, keyName: string, configPath: string | null = null) {
+  return invoke<AmkrKeyModelsResponse>("get_amkr_key_models", { configPath, providerId, keyName });
+}
+
+export function updateAmkrKeyModels(configRevision: string, providerId: string, keyName: string, models: string[], configPath: string | null = null) {
+  return invoke<AmkrKeyModelsResponse>("update_amkr_key_models", { configPath, configRevision, providerId, keyName, models });
+}
+
 export function createAmkrRoute(
   configRevision: string,
   id: string,

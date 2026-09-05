@@ -335,6 +335,32 @@ pub fn delete_amkr_provider_key(
     amkr::client::delete_provider_key(&instance.connection, config_revision, provider_id, key_name)
 }
 
+pub fn get_amkr_key_models(
+    selected_path: Option<&Path>,
+    provider_id: &str,
+    key_name: &str,
+) -> Result<amkr::client::AmkrKeyModelsResponse, String> {
+    let instance = discover_local_instance(selected_path)?;
+    amkr::client::get_provider_key_models(&instance.connection, provider_id, key_name)
+}
+
+pub fn update_amkr_key_models(
+    selected_path: Option<&Path>,
+    config_revision: &str,
+    provider_id: &str,
+    key_name: &str,
+    models: Vec<String>,
+) -> Result<amkr::client::AmkrKeyModelsResponse, String> {
+    let instance = discover_local_instance(selected_path)?;
+    amkr::client::update_provider_key_models(
+        &instance.connection,
+        config_revision,
+        provider_id,
+        key_name,
+        &models,
+    )
+}
+
 pub fn create_amkr_route(
     selected_path: Option<&Path>,
     config_revision: &str,

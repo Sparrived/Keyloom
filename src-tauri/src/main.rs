@@ -329,6 +329,36 @@ fn delete_amkr_provider_key(
 }
 
 #[tauri::command]
+fn get_amkr_key_models(
+    config_path: Option<String>,
+    provider_id: String,
+    key_name: String,
+) -> Result<keyloom_core::amkr::client::AmkrKeyModelsResponse, String> {
+    keyloom_core::get_amkr_key_models(
+        config_path.as_deref().map(Path::new),
+        &provider_id,
+        &key_name,
+    )
+}
+
+#[tauri::command]
+fn update_amkr_key_models(
+    config_path: Option<String>,
+    config_revision: String,
+    provider_id: String,
+    key_name: String,
+    models: Vec<String>,
+) -> Result<keyloom_core::amkr::client::AmkrKeyModelsResponse, String> {
+    keyloom_core::update_amkr_key_models(
+        config_path.as_deref().map(Path::new),
+        &config_revision,
+        &provider_id,
+        &key_name,
+        models,
+    )
+}
+
+#[tauri::command]
 fn create_amkr_route(
     config_path: Option<String>,
     config_revision: String,
@@ -719,6 +749,8 @@ fn main() {
             create_amkr_provider_key,
             update_amkr_provider_key,
             delete_amkr_provider_key,
+            get_amkr_key_models,
+            update_amkr_key_models,
             create_amkr_route,
             update_amkr_route,
             delete_amkr_route,

@@ -220,7 +220,8 @@ describe("ProvidersPage", () => {
     const keyRow = await screen.findByText("key-b").then((element) => element.closest("li"));
     expect(keyRow).not.toBeNull();
     expect(within(keyRow as HTMLElement).getByText("1 个模型")).toBeInTheDocument();
-    expect(within(keyRow as HTMLElement).getByText("model-b")).toBeInTheDocument();
+    expect(within(keyRow as HTMLElement).getAllByText("model-b").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByRole("button", { name: "收起 Key key-b 的模型" })).toBeInTheDocument();
   });
 
   it("adds a key and reports a probe failure without losing the key", async () => {
@@ -312,5 +313,63 @@ describe("ProvidersPage", () => {
 
     await waitFor(() => expect(screen.queryByText("探测成功")).not.toBeInTheDocument(), { timeout: 3000 });
     expect(screen.getByRole("button", { name: "探测 Key key-a" })).toHaveTextContent("探测");
+  });
+
+  it("manages which models a key serves through the card picker", async () => {
+    let revision = "revision-a";
+    invokeMock.mockImplementation(async (command) => {
+      if (command === "get_amkr_providers") return { ...response, config_revision: revision };
+      if (command === "get_amkr_key_models") return { config_revision: revision, provider_id: "a.example.test", key: "key-a", models: ["model-a"] };
+      if (command === "update_amkr_key_models") {
+        const payload = invokeMock.mock.calls.at(-1)?.[1] as { models?: string[] };
+        revision = "revision-b";
+        return { config_revision: "revision-b", provider_id: "a.example.test", key: "key-a", models: payload?.models ?? [] };
+      }
+      return response;
+    });
+
+    render(<ProvidersPage configPath={null} />);
+    await screen.findByText("key-a");
+
+    fireEvent.click(screen.getByRole("button", { name: "管理 Key key-a 的模型" }));
+    expect(await screen.findByLabelText("Key key-a 模型")).toBeInTheDocument();
+
+    const modelGrid = screen.getByLabelText("Key key-a 模型");
+    expect(within(modelGrid).getByRole("button", { name: /模型 model-a/ })).toHaveAttribute("aria-pressed", "true");
+    expect(within(modelGrid).queryByRole("button", { name: /模型 model-b/ })).not.toBeInTheDocument();
+
+    fireEvent.click(within(modelGrid).getByRole("button", { name: "添加自定义模型" }));
+    const input = screen.getByLabelText("自定义模型名称");
+    fireEvent.change(input, { target: { value: "model-custom" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(await within(modelGrid).findByRole("button", { name: "关闭模型 model-custom" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "保存模型" }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_amkr_key_models", expect.objectContaining({ providerId: "a.example.test", keyName: "key-a", models: ["model-a", "model-custom"] })));
+  });
+
+  it("unchecks a discovered model and saves the reduced set", async () => {
+    let revision = "revision-a";
+    invokeMock.mockImplementation(async (command) => {
+      if (command === "get_amkr_providers") return { ...response, config_revision: revision };
+      if (command === "get_amkr_key_models") return { config_revision: revision, provider_id: "a.example.test", key: "key-a", models: ["model-a", "model-a-extra"] };
+      if (command === "update_amkr_key_models") {
+        const payload = invokeMock.mock.calls.at(-1)?.[1] as { models?: string[] };
+        revision = "revision-b";
+        return { config_revision: "revision-b", provider_id: "a.example.test", key: "key-a", models: payload?.models ?? [] };
+      }
+      return response;
+    });
+
+    render(<ProvidersPage configPath={null} />);
+    await screen.findByText("key-a");
+    fireEvent.click(screen.getByRole("button", { name: "管理 Key key-a 的模型" }));
+
+    const modelGrid = await screen.findByLabelText("Key key-a 模型");
+    const extraCard = within(modelGrid).getByRole("button", { name: "关闭模型 model-a-extra" });
+    fireEvent.click(extraCard);
+
+    fireEvent.click(screen.getByRole("button", { name: "保存模型" }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("update_amkr_key_models", expect.objectContaining({ models: ["model-a"] })));
   });
 });

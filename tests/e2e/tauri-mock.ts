@@ -122,6 +122,19 @@ export async function installTauriMock(page: Page, scenario: "existing" | "fresh
               providerRevision = "revision-b";
               return { config_revision: providerRevision, provider };
             }
+            case "get_amkr_key_models": {
+              const provider = providers.find((item) => item.id === args.providerId);
+              const key = provider?.keys.find((item) => item.name === args.keyName);
+              if (!provider || !key) throw new Error("AMKR key not found");
+              return { config_revision: providerRevision, provider_id: provider.id, key: key.name, models: [] };
+            }
+            case "update_amkr_key_models": {
+              const provider = providers.find((item) => item.id === args.providerId);
+              const key = provider?.keys.find((item) => item.name === args.keyName);
+              if (!provider || !key) throw new Error("AMKR key not found");
+              providerRevision = "revision-c";
+              return { config_revision: providerRevision, provider_id: provider.id, key: key.name, models: Array.isArray(args.models) ? args.models.map(String) : [] };
+            }
             case "update_amkr_provider":
               providers = providers.map((provider) => provider.id === args.providerId ? { ...provider, id: String(args.id), base_url: String(args.baseUrl), routes: args.routes as Record<string, string> } : provider);
               providerRevision = "revision-b";

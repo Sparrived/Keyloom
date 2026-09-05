@@ -209,6 +209,15 @@ pub struct AmkrProviderResponse {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+pub struct AmkrKeyModelsResponse {
+    pub config_revision: String,
+    pub provider_id: String,
+    pub key: String,
+    #[serde(default)]
+    pub models: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
 pub struct AmkrRouteTarget {
     pub provider: String,
     pub key: String,
@@ -731,6 +740,49 @@ pub fn delete_provider_key(
         "删除 Key",
         serde_json::json!({ "config_revision": config_revision }),
         &[204],
+    )
+}
+
+pub fn get_provider_key_models(
+    connection: &AmkrConnection,
+    provider_id: &str,
+    key_name: &str,
+) -> Result<AmkrKeyModelsResponse, String> {
+    request_json(
+        connection,
+        "GET",
+        &format!(
+            "/api/providers/{}/keys/{}/models",
+            encode_path_segment(provider_id),
+            encode_path_segment(key_name)
+        ),
+        "读取 Key 服务模型",
+        None,
+        &[200],
+    )
+}
+
+pub fn update_provider_key_models(
+    connection: &AmkrConnection,
+    config_revision: &str,
+    provider_id: &str,
+    key_name: &str,
+    models: &[String],
+) -> Result<AmkrKeyModelsResponse, String> {
+    request_json(
+        connection,
+        "PUT",
+        &format!(
+            "/api/providers/{}/keys/{}/models",
+            encode_path_segment(provider_id),
+            encode_path_segment(key_name)
+        ),
+        "保存 Key 服务模型",
+        Some(serde_json::json!({
+            "config_revision": config_revision,
+            "models": models,
+        })),
+        &[200],
     )
 }
 
