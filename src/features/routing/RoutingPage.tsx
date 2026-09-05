@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { getAmkrRoutes, updateAmkrRoute, type AmkrRoute, type AmkrRouteTarget, type AmkrRoutesResponse } from "../../api/amkr";
+import { getAmkrProviders, getAmkrRoutes, updateAmkrRoute, type AmkrProvider, type AmkrRoute, type AmkrRouteTarget, type AmkrRoutesResponse } from "../../api/amkr";
 import { useCopyToast } from "../../components/CopyToast";
 
 const csv = (value: string) => value.split(",").map((item) => item.trim()).filter(Boolean);
@@ -29,6 +29,7 @@ type RoutingPageProps = {
 
 export function RoutingPage({ configPath }: RoutingPageProps) {
   const [data, setData] = useState<AmkrRoutesResponse | null>(null);
+  const [providers, setProviders] = useState<AmkrProvider[]>([]);
   const [editing, setEditing] = useState<RouteDraft | null>(null);
   const [draggingTarget, setDraggingTarget] = useState<DragTarget | null>(null);
   const draggingTargetRef = useRef<DragTarget | null>(null);
@@ -46,8 +47,9 @@ export function RoutingPage({ configPath }: RoutingPageProps) {
   const refresh = async () => {
     setLoading(true);
     try {
-      const next = await getAmkrRoutes(configPath);
+      const [next, providerData] = await Promise.all([getAmkrRoutes(configPath), getAmkrProviders(configPath)]);
       setData(next);
+      setProviders(providerData?.providers ?? []);
       setActiveRouteId((current) => next.routes.some((route) => route.id === current) ? current : next.routes[0]?.id ?? "");
       setError(null);
     }
@@ -68,6 +70,29 @@ export function RoutingPage({ configPath }: RoutingPageProps) {
       if (isConflict(message)) await refresh();
       setError(message);
     }
+  };
+
+  const candidateTargets = (route: AmkrRoute) => {
+    const existing = new Set(route.targets.map((target) => `${target.provider}\u0000${target.key}`));
+    const candidates: AmkrRouteTarget[] = [];
+    for (const provider of providers) {
+      for (const key of provider.keys) {
+        if (key.capabilities?.models?.includes(route.id) && !existing.has(`${provider.id}\u0000${key.name}`)) {
+          candidates.push({ provider: provider.id, key: key.name, upstream_model: route.id });
+        }
+      }
+    }
+    return candidates;
+  };
+
+  const toggleTarget = (route: AmkrRoute, target: AmkrRouteTarget) => {
+    if (!editing || editing.originalId !== route.id) return;
+    const identity = `${target.provider}\u0000${target.key}`;
+    const index = editing.targets.findIndex((item) => `${item.provider}\u0000${item.key}` === identity);
+    const targets = index >= 0
+      ? editing.targets.filter((_, targetIndex) => targetIndex !== index)
+      : [...editing.targets, target];
+    setEditing({ ...editing, targets });
   };
 
   const moveTargets = (targets: AmkrRouteTarget[], sourceIndex: number, targetIndex: number) => {
@@ -240,6 +265,16 @@ export function RoutingPage({ configPath }: RoutingPageProps) {
       </ul>
       {editing?.originalId === route.id ? <form className="inline-form editor-form" onSubmit={(event) => { event.preventDefault(); void save(); }}>
         <label>编辑别名<input value={editing.aliases} onChange={(event) => setEditing({ ...editing, aliases: event.target.value })} /></label>
+        <fieldset className="route-key-picker">
+          <legend>绑定目标 Key</legend>
+          <p className="editor-help">仅显示探测到模型 {route.id} 的 Key；取消勾选即可停用该 Key。</p>
+          <div className="route-key-options">
+            {[...editing.targets, ...candidateTargets(route)].map((target) => {
+              const checked = editing.targets.some((item) => `${item.provider}\u0000${item.key}` === `${target.provider}\u0000${target.key}`);
+              return <label className="route-key-option" key={`${target.provider}\u0000${target.key}`}><input type="checkbox" checked={checked} onChange={() => toggleTarget(route, target)} />{target.provider} / {target.key}<span>{target.upstream_model}</span></label>;
+            })}
+          </div>
+        </fieldset>
         <label>编辑模式<select value={editing.mode} onChange={(event) => setEditing({ ...editing, mode: event.target.value })}><option value="round_robin">轮询</option><option value="priority">优先级</option><option value="only_first">首 Key</option></select></label>
         <div className="form-actions">
           <button className="secondary-button" type="button" onClick={() => setEditing(null)}>取消</button>
