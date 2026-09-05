@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { getAmkrProviders, getAmkrRoutes, updateAmkrRoute, type AmkrProvider, type AmkrRoute, type AmkrRouteTarget, type AmkrRoutesResponse } from "../../api/amkr";
+import { getAmkrProviders, getAmkrRoutes, probeAmkrKey, updateAmkrRoute, type AmkrProvider, type AmkrRoute, type AmkrRouteTarget, type AmkrRoutesResponse } from "../../api/amkr";
 import { useCopyToast } from "../../components/CopyToast";
 
 const csv = (value: string) => value.split(",").map((item) => item.trim()).filter(Boolean);
@@ -30,6 +30,7 @@ type RoutingPageProps = {
 export function RoutingPage({ configPath }: RoutingPageProps) {
   const [data, setData] = useState<AmkrRoutesResponse | null>(null);
   const [providers, setProviders] = useState<AmkrProvider[]>([]);
+  const [probingKeys, setProbingKeys] = useState<string[]>([]);
   const [editing, setEditing] = useState<RouteDraft | null>(null);
   const [draggingTarget, setDraggingTarget] = useState<DragTarget | null>(null);
   const draggingTargetRef = useRef<DragTarget | null>(null);
@@ -49,7 +50,25 @@ export function RoutingPage({ configPath }: RoutingPageProps) {
     try {
       const [next, providerData] = await Promise.all([getAmkrRoutes(configPath), getAmkrProviders(configPath)]);
       setData(next);
-      setProviders(providerData?.providers ?? []);
+      const loadedProviders = providerData?.providers ?? [];
+      setProviders(loadedProviders);
+      const missingKeys = loadedProviders.flatMap((provider) => provider.keys.filter((key) => !key.capabilities).map((key) => `${provider.id}\u0000${key.name}`));
+      if (missingKeys.length) {
+        setProbingKeys(missingKeys);
+        let revision = providerData.config_revision;
+        for (const identity of missingKeys) {
+          const [providerId, keyName] = identity.split("\u0000");
+          try {
+            const result = await probeAmkrKey(revision, providerId, keyName, configPath);
+            revision = result.config_revision;
+          } catch {
+            // Keep the key visible; the provider page exposes the detailed error.
+          }
+        }
+        setProbingKeys([]);
+        const refreshed = await getAmkrProviders(configPath);
+        setProviders(refreshed.providers);
+      }
       setActiveRouteId((current) => next.routes.some((route) => route.id === current) ? current : next.routes[0]?.id ?? "");
       setError(null);
     }
@@ -186,7 +205,7 @@ export function RoutingPage({ configPath }: RoutingPageProps) {
     <header className="page-header"><div><h2 id="routes-heading">模型路由</h2><p>管理路由别名和路由模式；模型的目标 Key 在下方按顺序排列。</p></div>{data ? <span className="config-revision">版本 {data.config_revision.slice(0, 12)}</span> : null}</header>
     <section className="route-rules" aria-labelledby="route-rules-heading">
       <header className="route-rules-heading">
-        <div><h3 id="route-rules-heading">路由规则</h3><p>路由来自模型配置；此处管理别名、策略和回退顺序。</p></div>
+        <div><h3 id="route-rules-heading">路由规则</h3><p>路由来自模型配置；此处管理别名、策略和回退顺序。</p>{probingKeys.length ? <p className="editor-help" role="status">正在自动探测 {probingKeys.length} 个 Key…</p> : null}</div>
       </header>
     {loading ? <p className="empty-state">正在读取模型路由。</p> : null}
     {error ? <p className="service-action-error">无法读取或写入模型路由: {error}</p> : null}
